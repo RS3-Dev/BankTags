@@ -152,6 +152,13 @@
       "sha256": "df245416cab4ebc9cf19eba0a5cf903c6182033f4fc9625d2243a4211ac032e5"
     },
     {
+      "path": "lib/features/settings/debug_console.lua",
+      "source_path": "lib/features/settings/debug_console.lua",
+      "role": "integration_window_helper",
+      "bytes": 1132,
+      "sha256": "538268cc5ae3bde11acee1b8a4b0027b4cff5fcb56aeae7fad8329b81baf7b21"
+    },
+    {
       "path": "lib/features/storage_keys.lua",
       "source_path": "lib/features/storage_keys.lua",
       "role": "shared_dependency",
@@ -346,6 +353,13 @@
       "role": "shared_dependency",
       "bytes": 7413,
       "sha256": "b9a212ea76d76cdc00c432a15609baad546d95816101ebd78b5beeadb21f818d"
+    },
+    {
+      "path": "lib/ui/text_prompt.lua",
+      "source_path": "lib/ui/text_prompt.lua",
+      "role": "integration_window_helper",
+      "bytes": 4286,
+      "sha256": "bfb4d68572cbcfbf9762b83c5631994ab9fb08b07149e3d1e3ba0bac8eec3055"
     },
     {
       "path": "lib/ui/theme.lua",
