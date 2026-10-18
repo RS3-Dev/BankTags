@@ -107,6 +107,8 @@ function LayoutEditorWindow.new(parent, options)
             self.onChanged = nil
             self.onPromptLabel = nil
             self.overlayWindow = nil
+            -- PrettyUI destroys the window after this returns
+            self.window = nil
             if onClose ~= nil then onClose(self) end
         end,
     })

@@ -200,4 +200,25 @@ session, layout = h:OpenBank()
 h:Tick(2)
 assert(tab.controls ~= nil and tab.controls.list.search.text == "pot")
 
+-- The plugin panel saves Bank Tags' preferences under its own key and applies them at once
+assert(app.store:CreateTag("iconic", 385))
+local panel = h:OpenContentPanel()
+assert(app.panel ~= nil and Harness.Find(panel, "Bank Tags needs Bank Core. Enable Bank Core to use tags in your bank.") == nil)
+local function iconRows()
+    local count = 0
+    for _, row in ipairs(tab.controls.list.list.rows) do
+        for _, child in ipairs(row.root.children) do
+            if child.associatedObjectID ~= nil then count = count + 1 end
+        end
+    end
+    return count
+end
+tab.controls.list.search.root.hooks.contentchanged(nil, "change", "iconic")
+assert(iconRows() == 1)
+app.panel.controls.showTagSprites:SetSelected("showTagSprites", false, true)
+assert(app.settings.showTagSprites == false and iconRows() == 0)
+assert(h.databases.banktags["banktags:settings:v1"].showTagSprites == false)
+app.panel.placement:Select("fill", true)
+assert(app.settings.preserveTagLayout == false and app.store.preserveTagLayout == false)
+
 print("tag_tab_test: ok")

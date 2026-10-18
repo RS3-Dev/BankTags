@@ -66,6 +66,13 @@ function Harness.new(name, options)
         function grid:Destroy() self.destroyed = true end
         return grid
     end }
+    -- PrettyUI's item slot takes a tooltip; the stand-in records it
+    local newSlot = prettyui.ItemSlot.new
+    prettyui.ItemSlot.new = function(...)
+        local slot = newSlot(...)
+        function slot:SetTooltip(text) self.tooltipText = text end
+        return slot
+    end
     ui.ObjectQuantityDisplayMode.MULTIPLE = 1
     local contentSubscriptions = {}
     for _, event in ipairs({ "GameStateChanged", "MiniMenuReady", "MiniMenuEntrySelected",

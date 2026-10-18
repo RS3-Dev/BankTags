@@ -22,6 +22,11 @@ assert(type(api.RegisterExtension) == "function" and api.GetState().running)
 assert(rawget(tags.env._G, "__banktags_api") == api)
 local panel = h:OpenContentPanel()
 assert(Harness.Find(panel, "Bank Tags needs Bank Core. Enable Bank Core to use tags in your bank.") ~= nil)
+-- Another plugin can add an import source without Bank Core; the window lists it
+local importer = assert(api.RegisterExtension("example.guides", "Guides"))
+assert(importer:RegisterImportProvider("guide", { label = "Guide", input = "text",
+    request = function() end }))
+assert(table.concat(importer:GetState().providers, ",") == "guide")
 -- No Core module was loaded into Bank Tags' cache
 for moduleName in pairs(tags.env.package.loaded) do
     assert(string.sub(moduleName, 1, 9) == "banktags/", moduleName .. " is not a Bank Tags module")
@@ -80,6 +85,11 @@ tabParent = h:TabParent()
 h.host:Reload("banktags", { freshEnvironment = true })
 local reloaded = h:App()
 assert(reloaded ~= app and app.shutDown and reloaded:IsConnected())
+-- The old copy's import API closed with it; plugins register again with the new one
+assert(not importer:GetState().live and not api.GetState().running)
+assert(select(2, importer:RegisterImportProvider("again", { label = "Guide", input = "text",
+    request = function() end })) == "stale_handle")
+assert(h.tags.result.GetState().running and h.tags.result ~= api)
 assert(reloaded.store.data.tags.melee ~= nil)
 assert(tabParent.destroyed)
 h:Tick(2)
