@@ -148,9 +148,15 @@ function App:Disconnect()
     self:UpdatePanelNotice()
 end
 
--- Follow Bank Core's readiness and bank geometry; a closed bank closes the bank's windows
+-- Follow Bank Core's readiness and bank geometry; a closed bank closes the bank's windows.
+-- Outside All Items, Bank Core delivers no drops, so the tab says why
 function App:OnState(state)
     self.state = state
+    if state.reason == "not_all_items" then
+        self:ShowStatus(NEEDS_ALL_ITEMS)
+    elseif self.status == NEEDS_ALL_ITEMS then
+        self:ShowStatus(nil)
+    end
     if not state.running or state.reason == "bank_closed" or state.reason == "not_ready" then
         self.windows:CloseBankWindows()
         return
