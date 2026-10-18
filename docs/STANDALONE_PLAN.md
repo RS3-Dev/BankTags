@@ -56,11 +56,18 @@ All six stages are implemented on `feature/standalone-banktags`, each in its own
 | --- | ---: | ---: | ---: |
 | Preserved `lib/` at `3c3771b` (not runnable; its app, entry, and windows lived in `reference/`) | 47 | 8,435 | 319,584 |
 | Built `dist/banktags` (entry and 44 modules, plus `plugin.json`) | 45 | 7,819 | 298,921 |
+| Built `dist/banktags` after the portable export and RuneQL fixes | 45 | 7,834 | 299,668 |
 
-Tests: `plugin_reload_test` (packaged load orders, cloned exports, reloads in shared, separate, and cached states, RuneQL), `tag_page_test` (conversion and budget against Bank Core), `tag_tab_test` (the tab, menus, folder chooser, panel), `tag_actions_test` (item menus, ghosts, drops, select mode, snapshots), `layout_editor_test` (geometry, columns, buttons, windows), `import_providers_test` (ported), and the preserved `tag_store_test`, `tag_rules_test`, and `tag_layouts_test`.
+Tests: `plugin_reload_test` (packaged load orders, cloned exports, reloads in shared, separate, and cached states, RuneQL), `cloned_exports_test` (Bank Core's and Bank Tags' exports reached only through ordinary clones), `tag_page_test` (conversion and budget against Bank Core), `tag_tab_test` (the tab, menus, folder chooser, panel), `tag_actions_test` (item menus, ghosts, drops, select mode, snapshots), `layout_editor_test` (geometry, columns, buttons, windows), `import_providers_test` (ported), and the preserved `tag_store_test`, `tag_rules_test`, and `tag_layouts_test`.
 
 Found during implementation and left for review:
 
 - Bank Core delivers no drop outside All Items, so the old plugin's drops on native category tabs are gone; the Tags tab says to select All Items while Core reports that reason.
-- Bank Core's `examples/page-demo` finds Bank Core with `ipairs({ bankcore, rawget(_G, "__bankcore_api") })`, which stops at a missing injected global and never reaches the published copy. Bank Tags checks both by position.
-- Bank Core's stand-in loader shares exported tables instead of cloning them, and Bank Core's API root is a read-only proxy whose fields `pairs` cannot see. How the live host clones it is unverified; Bank Tags' test covers a clone that copies the documented fields.
+- Bank Core's `examples/page-demo` found Bank Core with `ipairs({ bankcore, rawget(_G, "__bankcore_api") })`, which stops at a missing injected global and never reaches the published copy. Bank Tags checks both by position; Bank Core fixed its example in `fb4e00d`.
+- Bank Core's API root was a read-only proxy whose fields `pairs` cannot see, so a host that clones exports would have passed on an empty table, and Bank Tags' own root was built the same way. See the portable export below.
+
+## Portable export
+
+The local API documentation (`structure.html`, Dependencies) says the host clones a loaded dependency's result before injecting it. Bank Core (`fb4e00d`) and Bank Tags now export a plain table of `RegisterExtension`, `GetState`, and a plain copy of `LIMITS`; owner handles, which calls return rather than the host injecting, stay read-only. No storage key, data, or API name changed. Bank Core's stand-in loader can now inject an ordinary clone (`cloneExports`), and `cloned_exports_test` loads Bank Core, Bank Tags, and a small import-source plugin that way with separate globals, so each has only its clone: Bank Tags shows a tag, the source appears in the Import window, a replaced handle refuses calls, changing a clone's `LIMITS` changes nothing enforced, and Bank Core's and Bank Tags' reloads inject fresh clones that work. The tests now refuse a Bank Core checkout whose contract does not describe the plain root. The hand-written `Harness.CloneAPI`, which copied named fields, is gone. How the client itself clones is still unverified.
+
+RuneQL: the host may leave an unloaded plugin's injected global in place, and RuneQL's published `__runeql_api` may outlive it too, so a search could have called an unloaded RuneQL. The entry now passes the host's RuneQL reports to the catalog, which reads neither global after RuneQL is reported unloaded and reads them again once it is reported loaded. `plugin_reload_test` covers both.

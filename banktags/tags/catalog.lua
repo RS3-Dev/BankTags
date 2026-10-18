@@ -10,8 +10,18 @@ local Catalog = {}
 -- Shown beside results when only the bank and exact lookups were searched
 Catalog.LIMITED_HINT = "Without RuneQL, search finds items in your bank, an item ID, or a config name."
 
+-- Whether the host last reported RuneQL enabled. An unloaded RuneQL's injected global and
+-- published copy can outlive it, so neither is read once the host reports it disabled
+local runeqlEnabled = true
+
+-- Follow the host's report that RuneQL loaded or unloaded
+function Catalog.SetRuneQLEnabled(enabled)
+    runeqlEnabled = enabled == true
+end
+
 -- Find RuneQL's catalog search when the optional plugin is loaded
 local function runeqlFind()
+    if not runeqlEnabled then return nil end
     -- Either may be missing, so both are checked by position rather than with ipairs
     local candidates = { runeql, rawget(_G, Config.RUNEQL_API_KEY) }
     for index = 1, 2 do

@@ -32,7 +32,8 @@ function Harness.CoreRoot()
         error("Bank Core was not found at " .. root .. "; set BANKCORE_ROOT to a bank-utilities checkout", 0)
     end
     local contract = readText(root .. "/HOST_CONTRACT.md") or ""
-    for _, needed in ipairs({ "PluginDependencyUpdate(event)", "SetItemMenu", "BeginItemPick", "`columns`" }) do
+    for _, needed in ipairs({ "PluginDependencyUpdate(event)", "SetItemMenu", "BeginItemPick", "`columns`",
+        "the root is a plain table" }) do
         if not string.find(contract, needed, 1, true) then
             error("Bank Core at " .. root .. " lacks " .. needed .. " in its contract; set BANKCORE_ROOT "
                 .. "to a checkout with the extension API Bank Tags uses", 0)
@@ -67,7 +68,8 @@ local function placeListRows()
 end
 
 -- Install the stand-in host and widgets, build Bank Tags into dist/test/<name>, and create a
--- loader. options.separateGlobals gives each plugin its own _G
+-- loader. options.separateGlobals gives each plugin its own _G; options.cloneExports injects
+-- an ordinary data clone of each export, as a host that clones exports would
 function Harness.new(name, options)
     options = options or {}
     local coreRoot = Harness.CoreRoot()
@@ -110,13 +112,15 @@ function Harness.new(name, options)
         log = function() end }
     local databases = {}
     local host = Loader.new(globals, { exports = { prettyui = prettyui }, databases = databases,
-        separateGlobals = options.separateGlobals, recordEvents = true })
+        separateGlobals = options.separateGlobals, cloneExports = options.cloneExports,
+        recordEvents = true })
     return setmetatable({
         bankHost = bankHost,
         host = host,
         databases = databases,
         contentSubscriptions = contentSubscriptions,
         coreRoot = coreRoot,
+        out = out,
         coreFolder = coreRoot .. "/plugins/bankcore",
         tagsFolder = built.folder,
         built = built,
@@ -148,13 +152,6 @@ end
 -- Return the running Bank Core session
 function Harness:Session()
     return rawget(self.core.env._G, "__bankcore_session")
-end
-
--- Copy the documented fields of an API table, as a host that clones exports might
-function Harness.CloneAPI(api)
-    local copy = {}
-    for _, key in ipairs({ "RegisterExtension", "GetState", "LIMITS" }) do copy[key] = api[key] end
-    return copy
 end
 
 -- Mount a bank window and open the bank for the running Core session in View All

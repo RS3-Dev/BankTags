@@ -82,16 +82,18 @@ function ImportAPI:Handle(owner)
     })
 end
 
--- Build the root table other plugins receive as the banktags dependency
+-- Build the root table other plugins receive as the banktags dependency. The host clones a
+-- dependency's export before injecting it, so this is a plain table of functions and a copy
+-- of the limits: a clone keeps every field, and changing one reaches no registry state
 function ImportAPI:Root()
     local limits = {}
     for key, value in pairs(LIMITS) do limits[key] = value end
     for key, value in pairs(ImportProviders.LIMITS) do limits[key] = value end
-    return PlainData.ReadOnly({
-        LIMITS = PlainData.ReadOnly(limits),
+    return {
+        LIMITS = limits,
         RegisterExtension = function(ownerID, label) return self:Register(ownerID, label) end,
         GetState = function() return { running = not self.closed } end,
-    })
+    }
 end
 
 -- Drop every owner and source and refuse all later calls

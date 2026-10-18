@@ -62,7 +62,7 @@ assert(tabParent ~= nil and not tabParent.destroyed and Harness.Find(tabParent, 
 
 -- A host that clones exports hands Bank Tags a copy of Core's API; a reload still connects
 h.host:Reload("bankcore", { shutdown = true })
-h.host.exports.bankcore = Harness.CloneAPI(core.result)
+h.host.exports.bankcore = require("tools/test_support/fake_plugin_host").Clone(core.result)
 h.host:Notify("bankcore", true, true)
 assert(app:IsConnected() and app.bank == h.host.exports.bankcore)
 session, layout = h:OpenBank()
@@ -156,5 +156,13 @@ split.host:Notify("runeql", true, true)
 assert(Catalog.IsFull())
 results, _, limited = Catalog.Find("eg", 10, {})
 assert(not limited and found == 1 and results[1].objectId == 1944 and results[1].displayName == "Egg (eg)")
+
+-- RuneQL unloads; the host leaves its injected global, but Bank Tags stops reading it
+split.host:Notify("runeql", false, false)
+assert(rawget(first.env, "runeql") == runeqlCatalog and not Catalog.IsFull())
+results, _, limited = Catalog.Find("Egg", 10, { { objectID = 1944 } })
+assert(limited and found == 1 and #results == 1)
+split.host:Notify("runeql", true, true)
+assert(Catalog.IsFull())
 
 print("plugin_reload_test: ok")

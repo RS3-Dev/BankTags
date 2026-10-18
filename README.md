@@ -19,7 +19,7 @@ Everything here is checked against Bank Core's stand-in host only. Nothing in th
 
 - **PrettyUI** is a required dependency.
 - **Bank Core** (`bankcore`) is needed for anything in the bank. It is declared as an optional dependency only because the host reports changes for optional dependencies; required dependencies get no change notification. Without Bank Core, Bank Tags loads, keeps its tags, offers Import/Share from its plugin panel, and the panel says Bank Core is needed.
-- **RuneQL** (`runeql`) is optional. With it, the sprite picker and the editor's item search cover every item. Without it they find items in the bank by name, an exact item ID, or an exact config name, and say so.
+- **RuneQL** (`runeql`) is optional. With it, the sprite picker and the editor's item search cover every item. Without it they find items in the bank by name, an exact item ID, or an exact config name, and say so. Once the host reports RuneQL unloaded, search stops reading it, even if its global remains, until the host reports it loaded again.
 
 Any load order works: Bank Tags connects when Bank Core loads, reconnects when Bank Core reloads, and lets go when Bank Core unloads, through the host's `PluginDependencyUpdate`. Reloading Bank Tags shuts down the previous copy in the same Lua state first; a copy whose owner ID a newer load took stays idle. A typical development reload is Bank Core first, then Bank Tags, but either can reload alone.
 
@@ -62,7 +62,7 @@ The toolchain used locally is a Lua 5.4 interpreter with `luac54` beside it, whi
 
 - Keyboard focus in the Tags tab's search field inside Bank Core's mounted column, and tooltips drawn through the mount's overlay.
 - How the host positions PrettyUI list rows and scrolls them; drops and right-clicks find rows by where they are drawn, which the stand-in host models.
-- Whether the host clones Bank Core's exported API in a way that keeps its functions; Bank Tags falls back to `__bankcore_api` when the shared Lua state has it, and never reads `LIMITS`.
+- How the host clones exports. Bank Core's and Bank Tags' roots are plain tables, and the tests inject an ordinary field-by-field clone of each, but the client's own copy, and whether functions it copies can be called across plugins, are unverified. Bank Tags also falls back to `__bankcore_api` when the shared Lua state has it, and never reads `LIMITS`.
 - When the host calls `PluginDependencyUpdate` on reloads, whether it re-injects the global, and whether module caches are scoped per plugin.
 - The drop hook's return value and naming, which Bank Core owns.
 - Bank Core's bank bounds as screen coordinates for placing the layout editor, and how 80-character names fit the bank header.

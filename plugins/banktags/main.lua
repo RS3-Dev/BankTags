@@ -31,6 +31,7 @@ if package ~= nil and package.loaded ~= nil then
 end
 
 local App = require("banktags/app")
+local Catalog = require("banktags/tags/catalog")
 local app = App.new()
 _G[SESSION_KEY] = app
 app:Start()
@@ -39,8 +40,10 @@ app:Start()
 local api = app.publicAPI
 _G[API_KEY] = api
 
--- Connect when Bank Core loads and let go when it unloads; RuneQL is read when searching
+-- Connect when Bank Core loads and let go when it unloads; RuneQL is read when searching,
+-- and only while the host last reported it enabled
 function PluginDependencyUpdate(event)
+    if event.pluginIdentifier == "runeql" then Catalog.SetRuneQLEnabled(event.enabled) end
     if event.pluginIdentifier ~= "bankcore" then return end
     if event.enabled then app:Connect() else app:Disconnect() end
 end
