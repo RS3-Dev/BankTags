@@ -127,21 +127,20 @@ assert(app.store:HasTag("placeholder 1", key(385, 1)))
 assert(app.windows.tagSettingsEditor ~= nil and app.windows.tagSettingsEditor.originalTag == "placeholder 1")
 app.windows:Close("tagSettingsEditor")
 
--- Outside All Items, Bank Core delivers no drop, since no copy is known; the tab says why
+-- Browsing a numbered tab is not an error, so the tab shows no warning
 layout.nativeViewAll = false
 local detect = layout.DetectNativeViewAll
 layout.DetectNativeViewAll = function() return false end
 h:Session().extensionPages:Notify()
 h:Tick(2)
-assert(app.status == 'Select "All Items" before adding items to tags.')
-assert(Harness.Find(h:TabParent(), app.status) ~= nil)
-pointAtRow("ranged")
-host.items[1].hooks.dragcomplete()
+assert(app.status == nil, tostring(app.status))
+layout:SetNativeViewAll(false)
 h:Tick(2)
-assert(not app.store:HasTag("ranged", key(4151, 1)))
+assert(app.status == nil, tostring(app.status))
 -- A copy Bank Core could not number is never guessed, should one reach Bank Tags
 assert(not app:AddItemToTag("ranged", 4151, nil) and not app.store:HasTag("ranged", key(4151, 1)))
 layout.nativeViewAll, layout.DetectNativeViewAll = true, detect
+app:ShowStatus(nil)
 h:Session().extensionPages:Notify()
 h:Tick(2)
 assert(app.status == nil)
