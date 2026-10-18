@@ -198,34 +198,52 @@ function Harness.Find(parent, text)
     return nil
 end
 
--- Open a native or page item's menu as the host would, lowest priority first
-function Harness:MenuFor(component)
-    local menu = { entries = { { verbText = "Cancel", actionType = MiniMenuActionType.CANCEL },
-        { verbText = "Withdraw-1", actionType = 57, componentData = {
-            objConfig = { id = component.associatedObjectID, name = "Item" }, component = component } } } }
+-- Build a menu from its native entries and let Bank Core answer it, lowest priority first.
+-- A plugin's entry goes just above Cancel, where live clients put it, not at the
+-- highest-priority end the API documents, and it shows its label as overrideText
+local function hostMenu(session, natives)
+    local menu = { entries = { { verbText = "Cancel", actionType = MiniMenuActionType.CANCEL } } }
+    for _, native in ipairs(natives) do menu.entries[#menu.entries + 1] = native end
     setmetatable(menu, { __index = function(values, key)
         if key == "entryCount" then return #values.entries end
     end })
     function menu:Add(label, action, ...)
-        self.entries[#self.entries + 1] = { verbText = label, action = action, arguments = { ... } }
+        local entry = { verbText = label, overrideText = label, action = action, arguments = { ... } }
+        for index, existing in ipairs(self.entries) do
+            if existing.actionType == MiniMenuActionType.CANCEL then
+                table.insert(self.entries, index + 1, entry)
+                return
+            end
+        end
+        table.insert(self.entries, 1, entry)
     end
     function menu:Swap(a, b) self.entries[a], self.entries[b] = self.entries[b], self.entries[a] end
-    self:Session().menuRouter:HandleMenu({ miniMenu = menu })
+    session.menuRouter:HandleMenu({ miniMenu = menu })
     return menu
+end
+
+-- Open a native or page item's menu as the host would: Examine, then Withdraw-1 as the
+-- native default
+function Harness:MenuFor(component)
+    local natives = {}
+    for index, verb in ipairs({ "Examine", "Withdraw-1" }) do
+        natives[index] = { verbText = verb, actionType = index == 1 and 1007 or 57, componentData = {
+            objConfig = { id = component.associatedObjectID, name = "Item" }, component = component } }
+    end
+    return hostMenu(self:Session(), natives)
 end
 
 -- Open a menu over mounted content with no item under the pointer
 function Harness:ContentMenu()
-    local menu = { entries = { { verbText = "Cancel", actionType = MiniMenuActionType.CANCEL } } }
-    setmetatable(menu, { __index = function(values, key)
-        if key == "entryCount" then return #values.entries end
-    end })
-    function menu:Add(label, action, ...)
-        self.entries[#self.entries + 1] = { verbText = label, action = action, arguments = { ... } }
-    end
-    function menu:Swap(a, b) self.entries[a], self.entries[b] = self.entries[b], self.entries[a] end
-    self:Session().menuRouter:HandleMenu({ miniMenu = menu })
-    return menu
+    return hostMenu(self:Session(), {})
+end
+
+-- Left-click as the host does: run the highest-priority entry, and return its label. A
+-- native default only names itself, so a test can see that it would have run
+function Harness.LeftClick(menu)
+    local entry = menu.entries[menu.entryCount]
+    if entry.action ~= nil then entry.action(table.unpack(entry.arguments or {})) end
+    return entry.verbText
 end
 
 -- List a menu's entry labels in order
