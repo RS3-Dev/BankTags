@@ -1,6 +1,7 @@
 -- Compose Bank Tags: the tag store, preferences, windows, plugin panel, and import sources,
 -- and the connection to Bank Core's public API. Through that API Bank Tags registers its
--- Tags tab, the one page that shows a tag, an item menu, and a listener; it reads the bank
+-- Tags tab, the one page that shows a tag, an item menu, a listener, and its section of the
+-- bank settings window; it reads the bank
 -- only through Bank Core's state and item snapshots
 
 local Config = require("banktags/core/config")
@@ -10,6 +11,7 @@ local ItemIdentity = require("banktags/tags/item_identity")
 local PluginPanel = require("banktags/windows/plugin_panel")
 local SelectMode = require("banktags/sidebar/select_mode")
 local Settings = require("banktags/core/settings")
+local SettingsSection = require("banktags/windows/settings_section")
 local TagDraft = require("banktags/imports/tag_draft")
 local TagMenus = require("banktags/sidebar/tag_menus")
 local TagPage = require("banktags/tags/tag_page")
@@ -25,6 +27,8 @@ local CONTENT_EVENT = Config.PLUGIN_REF .. "_content"
 local TAB_ID = "tags"
 local NOT_CONNECTED = "Bank Tags needs Bank Core. Enable Bank Core to use tags in your bank."
 local REPLACED = "A newer copy of Bank Tags took over; this copy is idle."
+local SETTINGS_IN_BANK = "Bank Tags' settings are in the bank: open your bank and select the gear "
+    .. "at the bottom of the sidebar."
 local NEEDS_ALL_ITEMS = 'Select "All Items" before adding items to tags.'
 
 -- Find a running Bank Core API: the injected dependency first, the published copy second
@@ -62,6 +66,8 @@ function App.new()
         -- A notice the Tags tab shows, such as why an item could not be added
         status = nil,
         panel = nil,
+        -- The preferences shown in Bank Core's settings window while that section is open
+        settingsSection = nil,
         retired = false,
         started = false,
         shutDown = false,
@@ -76,6 +82,11 @@ function App.new()
     app.tab = TagTab.new(app)
     -- Draws the explanation on a tag too large for Bank Core to show
     app.noticeMount = { mount = function(ctx) app:DrawNotice(ctx) end }
+    -- Bank Tags' section of Bank Core's settings window
+    app.settingsMount = {
+        mount = function(ctx) app:MountSettings(ctx.parent) end,
+        unmount = function() app:DestroySettings() end,
+    }
     if store.loadError ~= nil then app.status = store.loadError end
     return app
 end
@@ -95,7 +106,7 @@ function App:IsConnected()
     return self.handle ~= nil and self.handle:GetState().live == true
 end
 
--- Register the Tags tab, item menu, and listener with the running Bank Core
+-- Register the Tags tab, item menu, listener, and settings section with the running Bank Core
 function App:Connect()
     if self.shutDown then return false, "stopped" end
     if self:IsConnected() then return true end
@@ -127,6 +138,7 @@ function App:Connect()
             onBankItems = function() self:OnBankItems() end,
         })
     end
+    if ok then ok, failure = handle:SetSettings({ mount = self.settingsMount }) end
     if not ok then
         debugLog("Bank Tags could not register its tab: ", tostring(failure))
         self:Disconnect()
@@ -382,9 +394,9 @@ function App:SetSetting(key, value)
     return true
 end
 
--- Explain on the plugin panel why tags are missing from the bank, or nothing while connected
+-- Say on the plugin panel where the settings are, or why tags are missing from the bank
 function App:PanelNotice()
-    if self:IsConnected() then return nil end
+    if self:IsConnected() then return SETTINGS_IN_BANK end
     return self.retired and REPLACED or NOT_CONNECTED
 end
 
@@ -393,17 +405,31 @@ function App:UpdatePanelNotice()
     if self.panel ~= nil then self.panel:ShowNotice(self:PanelNotice()) end
 end
 
--- Mount the preferences on this plugin's own panel, connecting first if Bank Core started
+-- Mount the notice and Import/Share on this plugin's own panel, connecting first if Bank
+-- Core started
 function App:CreatePanel(parent)
     if self.shutDown then return end
     self:Connect()
     if self.panel ~= nil then self.panel:Destroy() end
     self.panel = PluginPanel.new(parent, {
-        settings = self.settings,
         notice = self:PanelNotice(),
-        onChange = function(key, value) return self:SetSetting(key, value) end,
         onOpenImport = function() self.windows:OpenImportShare() end,
     })
+end
+
+-- Draw the preferences in Bank Tags' section of Bank Core's settings window
+function App:MountSettings(parent)
+    self:DestroySettings()
+    self.settingsSection = SettingsSection.new(parent, {
+        settings = self.settings,
+        onChange = function(key, value) return self:SetSetting(key, value) end,
+    })
+end
+
+-- Release the settings section's controls when Bank Core closes it
+function App:DestroySettings()
+    if self.settingsSection ~= nil then self.settingsSection:Destroy() end
+    self.settingsSection = nil
 end
 
 -- Stop Bank Tags: release its panel, windows, select mode, Bank Core registration, and

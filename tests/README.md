@@ -13,6 +13,6 @@ set BANKCORE_ROOT=C:\path\to\bank-utilities
 lua54 tools/check.lua
 ```
 
-The check prints which Bank Core checkout and commit the tests loaded. A checkout whose `HOST_CONTRACT.md` lacks the API Bank Tags uses (`PluginDependencyUpdate(event)`, `SetItemMenu`, `BeginItemPick`, the reported `columns`, and a plain, clonable root) is refused with a message rather than tested against, so an older sibling checkout cannot fail or pass the tests for the wrong reason.
+The check prints which Bank Core checkout and commit the tests loaded. A checkout whose `HOST_CONTRACT.md` lacks the API Bank Tags uses (`PluginDependencyUpdate(event)`, `SetItemMenu`, `BeginItemPick`, the reported `columns`, a plain, clonable root, and `SetSettings`) is refused with a message rather than tested against, so an older sibling checkout cannot fail or pass the tests for the wrong reason.
 
 The stand-in host is not the game client: these tests show Bank Tags' behavior against Bank Core's public API under that model, not how the live client draws, scrolls, or delivers input.

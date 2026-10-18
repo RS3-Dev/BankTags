@@ -58,7 +58,7 @@ All six stages are implemented on `feature/standalone-banktags`, each in its own
 | Built `dist/banktags` (entry and 44 modules, plus `plugin.json`) | 45 | 7,819 | 298,921 |
 | Built `dist/banktags` after the portable export and RuneQL fixes | 45 | 7,834 | 299,668 |
 
-Tests: `plugin_reload_test` (packaged load orders, cloned exports, reloads in shared, separate, and cached states, RuneQL), `cloned_exports_test` (Bank Core's and Bank Tags' exports reached only through ordinary clones), `tag_page_test` (conversion and budget against Bank Core), `tag_tab_test` (the tab, menus, folder chooser, panel), `tag_actions_test` (item menus, ghosts, drops, select mode, snapshots), `layout_editor_test` (geometry, columns, buttons, windows), `import_providers_test` (ported), and the preserved `tag_store_test`, `tag_rules_test`, and `tag_layouts_test`.
+Tests: `plugin_reload_test` (packaged load orders, cloned exports, reloads in shared, separate, and cached states, RuneQL), `cloned_exports_test` (Bank Core's and Bank Tags' exports reached only through ordinary clones), `tag_page_test` (conversion and budget against Bank Core), `tag_tab_test` (the tab, menus, folder chooser), `bank_settings_test` (Bank Tags' section of Bank Core's settings window, and the plugin panel), `tag_actions_test` (item menus, ghosts, drops, select mode, snapshots), `layout_editor_test` (geometry, columns, buttons, windows), `import_providers_test` (ported), and the preserved `tag_store_test`, `tag_rules_test`, and `tag_layouts_test`.
 
 Found during implementation and left for review:
 

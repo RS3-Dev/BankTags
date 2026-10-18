@@ -10,7 +10,7 @@ local Config = {
     -- The tag save, written as chunked share-code text
     TAGS_TEXT_MANIFEST_KEY = "banktags:tags:v3:manifest",
     TAGS_TEXT_CHUNK_PREFIX = "banktags:tags:v3:",
-    -- The plugin-panel preferences
+    -- The preferences shown in Bank Core's settings window
     SETTINGS_KEY = "banktags:settings:v1",
     -- The longest text a share-code field accepts
     LONG_INPUT_LIMIT = 9999,

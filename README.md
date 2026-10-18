@@ -13,7 +13,8 @@ Everything here is checked against Bank Core's stand-in host only. Nothing in th
 - **Select mode.** Select items makes "Add to <tag>" the left click on bank items and outlines the tag's members in gold. The Tags tab shows the tag being filled, pulses its row, and offers Done.
 - **Layout editor.** A window over the bank, sized and placed from Bank Core's bank bounds, laid out at Bank Core's grid columns so it matches the page. Drag items and labels, add catalog items, Create Copy, Remove, and Move to Unsorted.
 - **Import/Share.** Share codes per tag, import with a preview, renaming, a sprite, and a folder, and import sources other plugins register.
-- **Plugin panel.** Show tag sprites, where new items go (Unsorted or the first empty slot), Import/Share, and debug logging. It says when Bank Core is missing.
+- **Bank settings.** Show tag sprites, where new items go (Unsorted or the first empty slot), and debug logging, in Bank Tags' section of Bank Core's settings window (the gear at the bottom of the bank sidebar). Bank Tags registers the section with `owner:SetSettings` and saves the values itself.
+- **Plugin panel.** Import/Share, and a note saying where the settings are, or that Bank Core is missing.
 
 ## Requirements and load order
 
