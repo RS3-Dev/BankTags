@@ -1,0 +1,143 @@
+-- Search the item catalog and add results to the layout editor's tag
+
+local CatalogObjects = require("lib/features/search/catalog_objects")
+local BankItemIdentity = require("lib/bank/bank_item_identity")
+local debugLog = require("lib/core/debug_log").Write
+local Text = require("lib/core/text")
+local Theme = require("lib/ui/theme")
+local Parts = require("lib/features/tags/layout_editor_parts")
+local Size = Parts.size
+local objectFromID = Parts.objectFromID
+local trim = Text.trim
+
+local SEARCH_HINT = Parts.SEARCH_HINT
+local SEARCH_RESULT_LIMIT = 100
+local SEARCH_ICON_SIZE = 24
+local ROW_ODD = Theme.ROW_ODD
+local ROW_EVEN = Theme.ROW_EVEN
+local ROW_HOVER = Theme.ROW_HOVER
+local ROW_SELECTED = Theme.ROW_SELECTED
+local TEXT = Theme.TEXT
+
+local LayoutEditorSearch = {}
+
+-- Remove previous search hit targets and decorative result sprites
+function LayoutEditorSearch:ClearSearchInteractions()
+    self.searchResults = {}
+    if self.searchList ~= nil then self.searchList:SetEntries({}) end
+end
+
+-- Show guidance in the empty search panel, or hide it when message is nil
+function LayoutEditorSearch:SetSearchHint(message)
+    if self.searchHint == nil then return end
+    self.searchHint.content = tostring(message or "")
+    self.searchHint.hidden = message == nil
+end
+
+-- Search the local RuneQL catalog and show matches or an error
+function LayoutEditorSearch:RunSearch(value)
+    local query = trim(value)
+    if query == "" then
+        self:ClearSearchInteractions()
+        self:SetSearchHint(SEARCH_HINT)
+        return
+    end
+    local ok, results, total = pcall(
+        CatalogObjects.Find, query, SEARCH_RESULT_LIMIT
+    )
+    if not ok then
+        self:ClearSearchInteractions()
+        self:SetSearchHint("Item search is unavailable right now.")
+        debugLog("Bank Utilities could not search the local item catalog: ", results)
+        return
+    end
+    self:ShowSearchResults(results, total)
+end
+
+-- Build catalog result rows and their item sprites for the search panel
+function LayoutEditorSearch:ShowSearchResults(results)
+    local entries, visible = {}, {}
+    for _, result in ipairs(results or {}) do
+        local object = objectFromID(result.objectId)
+        if object ~= nil then
+            visible[#visible + 1] = result
+            local row = #visible
+            local key = tostring(result.objectId) .. ":" .. tostring(row)
+            entries[#entries + 1] = {
+                id = key,
+                label = tostring(result.displayName or object.name
+                    or ("Item " .. tostring(result.objectId))),
+                enabled = true,
+                backgroundColour = row % 2 == 1 and ROW_ODD or ROW_EVEN,
+                hoverColour = ROW_HOVER,
+                selectedColour = ROW_SELECTED,
+                textColour = TEXT,
+            }
+        end
+        if #visible >= SEARCH_RESULT_LIMIT then break end
+    end
+    self.searchResults = visible
+    self.searchList:SetEntries(entries)
+    self:SetSearchHint(#entries == 0 and "No items match that search." or nil)
+    for index, rowValue in ipairs(self.searchList.rows or {}) do
+        local result = visible[index]
+        if result ~= nil then
+            local icon = ui.Sprite.new(rowValue.root)
+            icon:SetPos(7, math.floor((32 - SEARCH_ICON_SIZE) / 2))
+            icon:SetSize(SEARCH_ICON_SIZE, SEARCH_ICON_SIZE)
+            icon:SetAssociatedObject(math.tointeger(tonumber(result.objectId)))
+            icon.associatedObjectQuantityMode = ui.ObjectQuantityDisplayMode.NEVER
+            icon.clickthrough = true
+            rowValue.label:SetPos(38, 0)
+            rowValue.label:SetSize(-44, 32, 1.0, 0)
+            rowValue.label:MoveToFront()
+        end
+    end
+    if self.searchDragSurface ~= nil then self.searchDragSurface:MoveToFront() end
+    if self.labelDragSurface ~= nil then self.labelDragSurface:MoveToFront() end
+end
+
+-- Save membership and requested placement, reporting partial success if positioning fails
+function LayoutEditorSearch:AddCatalogResult(result, destination)
+    local objectID = math.tointeger(tonumber(result and result.objectId))
+    if self.selectedTag == nil or objectID == nil then return false end
+    local source = nil
+    for _, item in ipairs(self.store:GetTaggedItems(self.selectedTag)) do
+        if item.objectID == objectID then source = source or item end
+    end
+    -- An item already in the tag gets a ghost copy instead
+    local saved, layoutKey, reason
+    if source == nil then
+        layoutKey = BankItemIdentity.LayoutKey(objectID, 1)
+        saved, reason = self.store:AddTag(self.selectedTag, objectID, layoutKey)
+    else
+        saved, layoutKey, reason = self.store:DuplicateLayoutItem(self.selectedTag, source.layoutKey)
+    end
+    if not saved then
+        self:ShowError(reason or "Could not add the item to this tag.")
+        return false
+    end
+    local positioned, positionReason = self.store:MoveLayoutItem(
+        self.selectedTag, layoutKey, destination, Size.CENTER_COLUMNS, true)
+    self.selectedLayoutKey = layoutKey
+    self:RefreshCenter()
+    if not positioned then
+        if self.onChanged ~= nil then self.onChanged(self.selectedTag) end
+        self:ShowError(
+            "Item added to the tag, but its layout position was not saved: "
+                .. tostring(positionReason or "unknown persistence error")
+        )
+        return false
+    end
+    self:NotifyChanged()
+    return true
+end
+
+-- Attach these methods to LayoutEditorWindow
+function LayoutEditorSearch.install(target)
+    for name, method in pairs(LayoutEditorSearch) do
+        if name ~= "install" then target[name] = method end
+    end
+end
+
+return LayoutEditorSearch

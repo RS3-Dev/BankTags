@@ -1,0 +1,14 @@
+{
+  "name": "bankutils",
+  "version": "1.2.0",
+  "description": "Bank tags, layouts, cleanup views, and RuneQL-powered search. Requires Bank Core.",
+  "hasRibbonIcon": true,
+  "dependencies": {
+    "bankcore": "bankcore",
+    "prettyui": 6398181,
+    "runeql": "runeql",
+    "geprices": "geprices"
+  },
+  "requiredPermissions": [],
+  "optionalPermissions": []
+}
