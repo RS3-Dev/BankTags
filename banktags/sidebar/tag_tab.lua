@@ -226,16 +226,20 @@ function TagTab:OnNewTag(x, y)
 end
 
 -- Add a native item dropped on a tag row to that tag, or start a new tag with it when it
--- lands on New Tag
+-- lands on New Tag. A drop from All Items tags the copy dragged; a numbered tab's order is
+-- its own, so Bank Core names no copy and the drop tags the object's first copy
 function TagTab:Drop(item, x, y)
-    if self.controls == nil then return end
+    if self.controls == nil or item.view ~= "native" then return end
+    local objectID = type(item.objectID) == "number" and math.tointeger(item.objectID) or nil
+    if objectID == nil or objectID <= 0 then return end
+    local copy = item.copy or 1
     if self:OnNewTag(x, y) then
-        self.app:CreateTagWithItem(item.objectID, item.copy)
+        self.app:CreateTagWithItem(objectID, copy)
         return
     end
     local entry = self.controls.list:EntryAt(x, y)
     if entry ~= nil and entry.kind == "tag" then
-        self.app:AddItemToTag(entry.tag, item.objectID, item.copy)
+        self.app:AddItemToTag(entry.tag, objectID, copy)
     end
 end
 

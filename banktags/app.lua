@@ -278,8 +278,8 @@ function App:Renamed(oldTag, newTag)
     self:Changed()
 end
 
--- Add one bank copy to a tag. A copy is known only in the bank's All Items view, so an
--- item from another view is refused rather than guessed
+-- Add one bank copy to a tag. An item with no copy is refused rather than guessed; a drop
+-- names the copy it tags before calling
 function App:AddItemToTag(tag, objectID, copy)
     if copy == nil then
         self:ShowStatus(NEEDS_ALL_ITEMS)

@@ -2,8 +2,9 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 
 -- Drive Bank Tags' actions through Bank Core: Remove from the shown tag over a stack, a
 -- ghost, and a slot with no stack; entries dropped when the page changed; no entries on
--- native items outside select mode; drops onto tag rows and New Tag; select mode from start
--- to every way it ends; and bank snapshots held while Core is still reading the bank
+-- native items outside select mode; drops onto tag rows and New Tag from any native tab;
+-- select mode from start to every way it ends; and bank snapshots held while Core is
+-- still reading the bank
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -137,7 +138,43 @@ assert(app.status == nil, tostring(app.status))
 layout:SetNativeViewAll(false)
 h:Tick(2)
 assert(app.status == nil, tostring(app.status))
--- A copy Bank Core could not number is never guessed, should one reach Bank Tags
+-- A drop from a numbered tab carries no copy, since that tab's order is its own, so it
+-- tags the object's first copy: the second whip joins as copy 1
+assert(app.store:CreateTag("tabbed"))
+app:Changed()
+pointAtRow("tabbed")
+host.items[2].hooks.dragcomplete()
+h:Tick(2)
+assert(app.store:HasTag("tabbed", key(4151, 1)) and not app.store:HasTag("tabbed", key(4151, 2)))
+assert(app.status == nil)
+-- New Tag takes a numbered tab's drop the same way
+newTag = Harness.Find(h:TabParent(), "New Tag")
+left, top = Geometry.absolutePosition(newTag)
+host.mouse = { x = left + 10, y = top + 10 }
+host.items[3].hooks.dragcomplete()
+h:Tick(2)
+assert(app.store:HasTag("placeholder 2", key(385, 1)))
+app.windows:Close("tagSettingsEditor")
+-- A drop queued before another numbered tab is chosen is refused
+pointAtRow("tabbed")
+host.items[3].hooks.dragcomplete()
+layout:SetNativeViewAll(false)
+h:Tick(2)
+assert(not app.store:HasTag("tabbed", key(385, 1)))
+-- A drop queued before the bank closes is refused
+host.items[3].hooks.dragcomplete()
+local dropHook = host.items[3].hooks.dragcomplete
+session:CloseBank()
+h:Tick(2)
+assert(not app.store:HasTag("tabbed", key(385, 1)))
+session, layout = h:OpenBank()
+h:Tick(2)
+dropHook()
+h:Tick(2)
+assert(not app.store:HasTag("tabbed", key(385, 1)))
+assert(app.store:DeleteTag("tabbed") and app.store:DeleteTag("placeholder 2"))
+app:Changed()
+-- A copy Bank Core could not number is never guessed by anything but a drop
 assert(not app:AddItemToTag("ranged", 4151, nil) and not app.store:HasTag("ranged", key(4151, 1)))
 layout.nativeViewAll, layout.DetectNativeViewAll = true, detect
 app:ShowStatus(nil)

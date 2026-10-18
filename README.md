@@ -33,7 +33,8 @@ Any load order works: Bank Tags connects when Bank Core loads, reconnects when B
 
 ## Changes from the old integrated plugin
 
-- Select mode and drops work in the bank's All Items view only, where copy numbers are known. On another native tab the Tags tab says to select All Items.
+- Drops onto a tag row or New Tag work from any native bank tab. From All Items a drop tags the exact copy dragged; a numbered tab's order is its own, so Bank Core names no copy and the drop tags the object's first copy (with duplicate stacks, that may not be the stack dragged).
+- Select mode works in the bank's All Items view only, where copy numbers are known, and ends on another native tab.
 - Select mode outlines members in gold, Bank Core's highlight, not white. Its status and Done button are in the Tags tab, not a panel over the bank's right column. The left-click entry reads "Add to <tag>" followed by the item's name.
 - Moving a tag to a folder opens a folder chooser instead of a submenu; Bank Core's menus have no submenus.
 - The layout editor's item actions are buttons (Create Copy, Remove, Move to Unsorted), not a right-click menu. Its tag column has no tab rail, and its item icons use the client's default look because Bank Core does not report a stack's outline or shadow.

@@ -23,7 +23,7 @@ This records the signed-off plan for making Bank Tags a standalone plugin on Ban
 5. **Entry budget.** Bank Core accepts 10,000 page entries; showing Unsorted adds two. Edits and imports keep each tag within 9,998 entries. A saved tag over that still loads, saves, and can shrink without any data cut; while it is too large to draw, its page explains how many entries it has instead of showing items.
 6. **Tags tab.** Bank Tags draws its own column in Bank Core's mounted tab: search, sorting, folders, tag icons, a status line, the select-mode panel, and the footer (Import/Share, New Tag, layout editor). Searching filters only this list. More tags and rows than Core's own row limits are fine, because the list is Bank Tags' own.
 7. **Menus.** Bank Tags subscribes to `MiniMenuReady` itself, finds rows by its own hit test, and asks Bank Core's `GetMenuItem` for the bank item beneath the pointer; select mode is its own state over Bank Core's `SetItemHighlight` (see Bank Core's `docs/EXTENSION_API_PLAN.md`, Menu and select ownership reduction). Folder moves use a "Move to folder..." entry that opens a folder chooser, since Bank Core's menus have no submenus and a few entries each.
-8. **Drops and select mode.** Drops onto tag rows and New Tag arrive through `onItemDrop`. Select mode is Bank Core's pick session: "Add to <tag>" becomes the left click on native items and members are outlined in gold. Both need the bank's All Items view, where copy numbers are known; elsewhere Bank Tags explains instead of guessing a copy.
+8. **Drops and select mode.** Drops onto tag rows and New Tag arrive through `onItemDrop`. Select mode is Bank Core's pick session: "Add to <tag>" becomes the left click on native items and members are outlined in gold. Select mode needs the bank's All Items view, where copy numbers are known. Drops work from any native tab: from All Items they tag the copy dragged, and from a numbered tab, where Bank Core names no copy, the object's first copy.
 9. **Windows.** The layout editor, tag settings, delete confirmation, sprite picker, text prompts, folder chooser, and Import/Share are Bank Tags' own windows. The layout editor takes its size, position, and columns from Bank Core's state and its quantities from Bank Core's item snapshots; it replaces its old bank right-click menu with Create Copy, Remove, and Move to Unsorted buttons. Bank windows close when the bank closes, Bank Core goes, or Bank Tags stops; Import/Share can stay open.
 10. **Import providers.** Import/Share and its provider registration belong to Bank Tags. Other plugins register through the `banktags` API (`RegisterExtension`, then `RegisterImportProvider`, `UpdateImportProvider`, `RemoveImportProvider`, and `Dispose` on the handle). Drafts are validated in full before anything is saved; one import commits once or not at all.
 11. **Catalog.** With RuneQL loaded, item search uses `runeql.Catalog.Find`. Without it, search finds bank items by name, an exact item ID, or an exact config name, and says so. It never scans config IDs.
@@ -42,7 +42,7 @@ This records the signed-off plan for making Bank Tags a standalone plugin on Ban
 
 ## Host limits accepted for this plugin
 
-- Select mode and drops work in the bank's All Items view only; Bank Core's pick session ends on another native tab.
+- Select mode works in the bank's All Items view only; Bank Core's pick session ends on another native tab. Drops work from any native tab.
 - Bank Core outlines select-mode members in gold, where the old plugin used white.
 - Folder moves use a chooser window instead of a submenu.
 - The layout editor's item actions are buttons, not a bank right-click menu, and its icons use the client's default look because Bank Core does not report a stack's outline or shadow.
@@ -62,7 +62,7 @@ Tests: `plugin_reload_test` (packaged load orders, cloned exports, reloads in sh
 
 Found during implementation and left for review:
 
-- Bank Core delivers no drop outside All Items, so the old plugin's drops on native category tabs are gone; the Tags tab says to select All Items while Core reports that reason.
+- A drop from a numbered native tab tags the object's first copy, since Bank Core names no copy there; with duplicate stacks that may not be the stack dragged.
 - Bank Core's `examples/page-demo` found Bank Core with `ipairs({ bankcore, rawget(_G, "__bankcore_api") })`, which stops at a missing injected global and never reaches the published copy. Bank Tags checks both by position; Bank Core fixed its example in `fb4e00d`.
 - Bank Core's API root was a read-only proxy whose fields `pairs` cannot see, so a host that clones exports would have passed on an empty table, and Bank Tags' own root was built the same way. See the portable export below.
 
