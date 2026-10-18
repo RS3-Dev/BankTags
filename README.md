@@ -1,6 +1,6 @@
 # Bank Tags
 
-Bank Tags (`banktags`) is a standalone plugin for tags, folders, saved layouts, select mode, and Import/Share in the bank. It runs on [Bank Utilities Core](https://github.com/RS3-Dev/bank-utilities) (`bankcore`) and reaches the bank only through Bank Core's public extension API: no private Core module, native bank component, or bank menu event is used. The full contract, including the API other plugins use to add import sources, is in [CONTRACT.md](CONTRACT.md). The staged plan it was built from is in [docs/STANDALONE_PLAN.md](docs/STANDALONE_PLAN.md).
+Bank Tags (`banktags`) is a standalone plugin for tags, folders, saved layouts, select mode, and Import/Share in the bank. It runs on [Bank Utilities Core](https://github.com/RS3-Dev/bank-utilities) (`bankcore`) and reaches the bank only through Bank Core's public extension API: no private Core module or native bank component is used. It adds its own right-click entries from the client's menu event, asking Bank Core which bank item a menu belongs to. The full contract, including the API other plugins use to add import sources, is in [CONTRACT.md](CONTRACT.md). The staged plan it was built from is in [docs/STANDALONE_PLAN.md](docs/STANDALONE_PLAN.md).
 
 Everything here is checked against Bank Core's stand-in host only. Nothing in this repository has been verified in the live client yet; see [Not yet verified live](#not-yet-verified-live).
 
@@ -34,9 +34,9 @@ Any load order works: Bank Tags connects when Bank Core loads, reconnects when B
 ## Changes from the old integrated plugin
 
 - Select mode and drops work in the bank's All Items view only, where copy numbers are known. On another native tab the Tags tab says to select All Items.
-- Select mode outlines members in gold, Bank Core's highlight, not white. Its status and Done button are in the Tags tab, not a panel over the bank's right column. The pick entry reads "Add to <tag>" followed by the item's name.
+- Select mode outlines members in gold, Bank Core's highlight, not white. Its status and Done button are in the Tags tab, not a panel over the bank's right column. The left-click entry reads "Add to <tag>" followed by the item's name.
 - Moving a tag to a folder opens a folder chooser instead of a submenu; Bank Core's menus have no submenus.
-- The layout editor's item actions are buttons (Create Copy, Remove, Move to Unsorted), not a right-click menu, because only Bank Core may change bank menus. Its tag column has no tab rail, and its item icons use the client's default look because Bank Core does not report a stack's outline or shadow.
+- The layout editor's item actions are buttons (Create Copy, Remove, Move to Unsorted), not a right-click menu. Its tag column has no tab rail, and its item icons use the client's default look because Bank Core does not report a stack's outline or shadow.
 - Tag names may be up to 80 characters in the tag settings field, matching what saving always allowed.
 - Cleanup, RuneQL queries, and Advanced Bank Search are not part of Bank Tags.
 

@@ -32,7 +32,7 @@ function Harness.CoreRoot()
         error("Bank Core was not found at " .. root .. "; set BANKCORE_ROOT to a bank-utilities checkout", 0)
     end
     local contract = readText(root .. "/HOST_CONTRACT.md") or ""
-    for _, needed in ipairs({ "PluginDependencyUpdate(event)", "SetItemMenu", "BeginItemPick", "`columns`",
+    for _, needed in ipairs({ "PluginDependencyUpdate(event)", "GetMenuItem", "SetItemHighlight", "`columns`",
         "the root is a plain table", "SetSettings" }) do
         if not string.find(contract, needed, 1, true) then
             error("Bank Core at " .. root .. " lacks " .. needed .. " in its contract; set BANKCORE_ROOT "
@@ -94,10 +94,17 @@ function Harness.new(name, options)
     end
     ui.ObjectQuantityDisplayMode.MULTIPLE = 1
     local contentSubscriptions = {}
-    for _, event in ipairs({ "GameStateChanged", "MiniMenuReady", "MiniMenuEntrySelected",
+    for _, event in ipairs({ "GameStateChanged", "MiniMenuEntrySelected",
         "InventoryAdded", "InventoryRemoved", "InventoryUpdated" }) do
         Event[event] = { Subscribe = function() end, Unsubscribe = function() end }
     end
+    -- Each plugin's MiniMenuReady handler, by subscription ID; the host documents no order
+    -- across plugins, so tests choose one
+    local menuSubscriptions = {}
+    Event.MiniMenuReady = {
+        Subscribe = function(key, action) menuSubscriptions[key] = action end,
+        Unsubscribe = function(key) menuSubscriptions[key] = nil end,
+    }
     Event.ContentLayerReady = {
         Subscribe = function(key, action) contentSubscriptions[key] = action end,
         Unsubscribe = function(key) contentSubscriptions[key] = nil end,
@@ -119,6 +126,10 @@ function Harness.new(name, options)
         host = host,
         databases = databases,
         contentSubscriptions = contentSubscriptions,
+        menuSubscriptions = menuSubscriptions,
+        -- Where the host adds a plugin's menu entry, and which plugin hears a menu first
+        placement = "above_cancel",
+        menuOrder = "core_first",
         coreRoot = coreRoot,
         out = out,
         coreFolder = coreRoot .. "/plugins/bankcore",
@@ -198,44 +209,57 @@ function Harness.Find(parent, text)
     return nil
 end
 
--- Build a menu from its native entries and let Bank Core answer it, lowest priority first.
--- A plugin's entry goes just above Cancel, where live clients put it, not at the
--- highest-priority end the API documents, and it shows its label as overrideText
-local function hostMenu(session, natives)
+-- Where the host puts a plugin's entry: at the end as the API documents, just above
+-- Cancel, or just below the native default, as live clients have
+Harness.PLACEMENTS = {
+    documented = function(menu) return menu.entryCount + 1 end,
+    above_cancel = function(menu)
+        for index, entry in ipairs(menu.entries) do
+            if entry.actionType == MiniMenuActionType.CANCEL then return index + 1 end
+        end
+        return 1
+    end,
+    below_default = function(menu) return math.max(1, menu.entryCount) end,
+}
+
+-- Build a menu from its native entries, lowest priority first, and let every subscribed
+-- plugin answer it in the chosen order. A plugin's entry goes where the chosen placement
+-- puts it and shows its label as overrideText; silent entries report no text
+function Harness:HostMenu(natives, silent)
     local menu = { entries = { { verbText = "Cancel", actionType = MiniMenuActionType.CANCEL } } }
     for _, native in ipairs(natives) do menu.entries[#menu.entries + 1] = native end
     setmetatable(menu, { __index = function(values, key)
         if key == "entryCount" then return #values.entries end
     end })
+    local place = Harness.PLACEMENTS[self.placement]
     function menu:Add(label, action, ...)
-        local entry = { verbText = label, overrideText = label, action = action, arguments = { ... } }
-        for index, existing in ipairs(self.entries) do
-            if existing.actionType == MiniMenuActionType.CANCEL then
-                table.insert(self.entries, index + 1, entry)
-                return
-            end
-        end
-        table.insert(self.entries, 1, entry)
+        local entry = { verbText = not silent and label or "", overrideText = not silent and label or nil, action = action,
+            arguments = { ... } }
+        table.insert(self.entries, place(self), entry)
     end
     function menu:Swap(a, b) self.entries[a], self.entries[b] = self.entries[b], self.entries[a] end
-    session.menuRouter:HandleMenu({ miniMenu = menu })
+    local keys = {}
+    for key in pairs(self.menuSubscriptions) do keys[#keys + 1] = key end
+    table.sort(keys)
+    if self.menuOrder == "tags_first" then table.sort(keys, function(a, b) return a > b end) end
+    for _, key in ipairs(keys) do self.menuSubscriptions[key]({ miniMenu = menu }) end
     return menu
 end
 
 -- Open a native or page item's menu as the host would: Examine, then Withdraw-1 as the
 -- native default
-function Harness:MenuFor(component)
+function Harness:MenuFor(component, silent)
     local natives = {}
     for index, verb in ipairs({ "Examine", "Withdraw-1" }) do
         natives[index] = { verbText = verb, actionType = index == 1 and 1007 or 57, componentData = {
             objConfig = { id = component.associatedObjectID, name = "Item" }, component = component } }
     end
-    return hostMenu(self:Session(), natives)
+    return self:HostMenu(natives, silent)
 end
 
 -- Open a menu over mounted content with no item under the pointer
-function Harness:ContentMenu()
-    return hostMenu(self:Session(), {})
+function Harness:ContentMenu(silent)
+    return self:HostMenu({}, silent)
 end
 
 -- Left-click as the host does: run the highest-priority entry, and return its label. A

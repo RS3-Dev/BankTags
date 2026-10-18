@@ -14,7 +14,7 @@ local compiler = interpreter:gsub("lua(%d*)%.exe$", "luac%1.exe"):gsub("lua(%d*)
 -- Globals the game host and Lua itself provide, and the dependency globals it injects
 local ALLOWED = {}
 for name in ([[
-ui id Event prettyui PersistentDB config game Mouse Vector4 log bankcore runeql
+ui id Event prettyui PersistentDB config game Mouse Vector4 log bankcore runeql MiniMenuActionType
 PluginShutdown PluginDependencyUpdate pairs ipairs type tostring tonumber math string table
 pcall error select next setmetatable getmetatable rawget rawset require print os io load
 assert collectgarbage package _G utf8 coroutine debug

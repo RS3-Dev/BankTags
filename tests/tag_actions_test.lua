@@ -93,7 +93,7 @@ Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
 h:Tick(2)
 assert(not app.store:HasTag("melee", key(999, 1)))
 
--- An entry offered before the shown tag changed is dropped by Bank Core
+-- An entry offered before the shown tag changed is dropped
 pointAt(8, 4)
 h:Tick()
 menu = h:MenuFor(host.items[1])
@@ -148,12 +148,12 @@ assert(app.status == nil)
 
 -- Select mode -------------------------------------------------------------------------
 
--- Select items starts Bank Core's pick: members are outlined, and the tab shows the panel
+-- Select items starts select mode: Bank Core outlines the members, and the tab shows the panel
 pointAtRow("ranged")
 menu = h:ContentMenu()
 Harness.Choose(menu, "Select items <col=f2c66d>Ranged</col>")
 h:Tick()
-assert(app.select:Tag() == "ranged" and layout.nativeItems.pick ~= nil and app.status == nil)
+assert(app.select:Tag() == "ranged" and app.handle:GetState().highlighted and app.status == nil)
 assert((host.items[2].outlineWidth or 0) > 0 and (host.items[1].outlineWidth or 0) == 0)
 assert(Harness.Find(h:TabParent(), "Select mode") ~= nil)
 assert(Harness.Find(h:TabParent(), "Items already in this tag have a gold outline.") ~= nil)
@@ -173,7 +173,7 @@ assert(app.store:HasTag("ranged", key(4151, 1)) and (host.items[1].outlineWidth 
 -- Done ends it, restoring outlines and the column
 Harness.Find(h:TabParent(), "Done").hooks.pressed()
 h:Tick(2)
-assert(app.select:Tag() == nil and layout.nativeItems.pick == nil)
+assert(app.select:Tag() == nil and not app.handle:GetState().highlighted)
 assert((host.items[1].outlineWidth or 0) == 0 and Harness.Find(h:TabParent(), "Select mode") == nil)
 
 -- Opening a tag ends select mode quietly
@@ -186,13 +186,12 @@ assert(app.select:Toggle("ranged"))
 h:Tick(2)
 assert(app.shownTag == nil and layout.selectedTag == nil and app.select:Tag() == "ranged")
 -- A native tab ends it and the tab says why
-layout.nativeViewAll = false
 layout.DetectNativeViewAll = function() return false end
-layout.nativeItems:EndPick("not_all_items")
+layout:SetNativeViewAll(false)
 h:Tick(2)
 assert(app.select:Tag() == nil and app.status == 'Select "All Items" before choosing items for a tag.')
 -- It cannot start outside All Items
-assert(not app.select:Toggle("ranged") and layout.nativeItems.pick == nil)
+assert(not app.select:Toggle("ranged") and not app.handle:GetState().highlighted)
 layout.nativeViewAll, layout.DetectNativeViewAll = true, detect
 -- Deleting the tag being filled ends select mode
 app:ShowStatus(nil)
@@ -200,7 +199,7 @@ assert(app.select:Toggle("ranged"))
 assert(app.store:DeleteTag("ranged"))
 app:Changed()
 h:Tick(2)
-assert(app.select:Tag() == nil and layout.nativeItems.pick == nil)
+assert(app.select:Tag() == nil and not app.handle:GetState().highlighted)
 -- Renaming it keeps the session under the new name
 assert(app.select:Toggle("melee"))
 local renamed = app.windows
@@ -208,8 +207,8 @@ renamed:OpenTagSettings("melee", false)
 renamed.tagSettingsEditor.field:SetText("Fighting")
 renamed.tagSettingsEditor.saveButton.root.hooks.click()
 h:Tick(2)
-assert(app.select:Tag() == "fighting" and layout.nativeItems.pick.label == "Add to Fighting")
-assert(app.handle:EndItemPick())
+assert(app.select:Tag() == "fighting" and app.select:Label() == "Add to Fighting")
+assert(app.handle:GetState().highlighted and app.select:Stop())
 h:Tick(2)
 
 -- Bank snapshots ---------------------------------------------------------------------

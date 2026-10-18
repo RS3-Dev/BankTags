@@ -1,12 +1,12 @@
 -- Draw the Tags tab Bank Core mounts in its sidebar: the tag list, a status line, the
 -- select-mode panel, and the footer with Import/Share, New Tag, and the layout editor.
--- Right-clicks and item drops over the column arrive through Bank Core's mount callbacks
+-- Item drops over the column arrive through Bank Core's mount callbacks; right-clicks over
+-- its rows are Bank Tags' own menus
 
 local BankControls = require("banktags/ui/bank_controls")
 local Geometry = require("banktags/ui/geometry")
 local SidebarRows = require("banktags/ui/sidebar_rows")
 local TagList = require("banktags/sidebar/tag_list")
-local TagMenus = require("banktags/sidebar/tag_menus")
 local Text = require("banktags/core/text")
 local Theme = require("banktags/ui/theme")
 
@@ -33,9 +33,6 @@ function TagTab.new(app)
         end,
         resize = function() self:Build() end,
         unmount = function() self:Unmount() end,
-        onMenu = function(menu, x, y)
-            if self.controls ~= nil then TagMenus.AddRowEntries(app, menu, self.controls.list:EntryAt(x, y)) end
-        end,
         onItemDrop = function(item, x, y) self:Drop(item, x, y) end,
     }
     return self

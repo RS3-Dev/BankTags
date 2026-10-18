@@ -82,7 +82,7 @@ app.tab.controls.list.list.scrollY = row.root.y
 h:PointAt(row.root, 20, 10 - row.root.y)
 Harness.Choose(h:ContentMenu(), "Select items <col=f2c66d>Ranged</col>")
 h:Tick(2)
-assert(app.select:Tag() == "ranged" and layout.nativeItems.pick ~= nil)
+assert(app.select:Tag() == "ranged" and app.handle:GetState().highlighted)
 assert(app.shownTag == nil and layout.selectedTag == nil)
 -- Consecutive left clicks on native items add each copy and withdraw nothing
 local function pickItem(slot)
@@ -103,7 +103,7 @@ assert(app.store:HasTag("ranged", key(385, 1)) and app.status == nil)
 -- Done ends it; a left click on an item is the bank's own again
 Harness.Find(h:TabParent(), "Done").hooks.pressed()
 h:Tick(2)
-assert(app.select:Tag() == nil and layout.nativeItems.pick == nil)
+assert(app.select:Tag() == nil and not app.handle:GetState().highlighted)
 assert(Harness.LeftClick(h:MenuFor(host.items[1])) == "Withdraw-1")
 
 print("bank_clicks_test: ok")

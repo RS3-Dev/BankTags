@@ -1,8 +1,8 @@
 -- Compose Bank Tags: the tag store, preferences, windows, plugin panel, and import sources,
 -- and the connection to Bank Core's public API. Through that API Bank Tags registers its
--- Tags tab, the one page that shows a tag, an item menu, a listener, and its section of the
--- bank settings window; it reads the bank
--- only through Bank Core's state and item snapshots
+-- Tags tab, the one page that shows a tag, a listener, and its section of the bank settings
+-- window; it reads the bank only through Bank Core's state, item snapshots, and menu item
+-- descriptions, and adds its own menu entries
 
 local Config = require("banktags/core/config")
 local DebugLog = require("banktags/core/debug_log")
@@ -79,6 +79,7 @@ function App.new()
     app.publicAPI = app.imports.publicAPI
     app.windows = Windows.new(app)
     app.select = SelectMode.new(app)
+    app.menus = TagMenus.new(app)
     app.tab = TagTab.new(app)
     -- Draws the explanation on a tag too large for Bank Core to show
     app.noticeMount = { mount = function(ctx) app:DrawNotice(ctx) end }
@@ -106,7 +107,8 @@ function App:IsConnected()
     return self.handle ~= nil and self.handle:GetState().live == true
 end
 
--- Register the Tags tab, item menu, listener, and settings section with the running Bank Core
+-- Register the Tags tab, listener, and settings section with the running Bank Core, then
+-- answer bank menus
 function App:Connect()
     if self.shutDown then return false, "stopped" end
     if self:IsConnected() then return true end
@@ -129,9 +131,6 @@ function App:Connect()
         label = "Tags", icon = "LIST_LAYOUT", tooltip = "Bank tags", mount = self.tab.callbacks,
     })
     if ok then
-        ok, failure = handle:SetItemMenu(function(item, menu) TagMenus.AddItemEntries(self, item, menu) end)
-    end
-    if ok then
         ok, failure = handle:SetListener({
             onState = function(state) self:OnState(state) end,
             onPage = function(pageID, key) self:OnPage(pageID, key) end,
@@ -144,6 +143,7 @@ function App:Connect()
         self:Disconnect()
         return false, failure
     end
+    self.menus:Start()
     self:UpdatePanelNotice()
     debugLog("Bank Tags connected to Bank Core")
     return true
@@ -152,6 +152,7 @@ end
 -- Drop the owner handle and everything that needs Bank Core; the store and Import/Share stay
 function App:Disconnect()
     self.windows:CloseBankWindows()
+    self.menus:Stop()
     self.select:Forget()
     local handle = self.handle
     self.handle, self.bank = nil, nil
@@ -160,8 +161,9 @@ function App:Disconnect()
     self:UpdatePanelNotice()
 end
 
--- Follow Bank Core's readiness and bank geometry; a closed bank closes the bank's windows.
--- Outside All Items, Bank Core delivers no drops, so the tab says why
+-- Follow Bank Core's readiness, bank geometry, and select mode's outline; a closed bank
+-- closes the bank's windows. Outside All Items, Bank Core delivers no drops, so the tab
+-- says why
 function App:OnState(state)
     self.state = state
     if state.reason == "not_all_items" then
@@ -169,6 +171,7 @@ function App:OnState(state)
     elseif self.status == NEEDS_ALL_ITEMS then
         self:ShowStatus(nil)
     end
+    self.select:Follow(state)
     if not state.running or state.reason == "bank_closed" or state.reason == "not_ready" then
         self.windows:CloseBankWindows()
         return
@@ -444,7 +447,7 @@ function App:Shutdown()
     end
     if self.started then Event.ContentLayerReady.Unsubscribe(CONTENT_EVENT) end
     cleanup("select mode", function()
-        if self.handle ~= nil and self.select:Tag() ~= nil then self.handle:EndItemPick() end
+        if self.handle ~= nil and self.select:Tag() ~= nil then self.handle:SetItemHighlight(nil) end
         self.select:Forget()
     end)
     cleanup("windows", function() self.windows:CloseAll() end)
