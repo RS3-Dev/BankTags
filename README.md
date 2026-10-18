@@ -1,36 +1,22 @@
 # Bank Tags
 
-Preservation snapshot extracted from [Bank Utilities](https://github.com/RS3-Dev/bank-utilities/tree/beba274b57853d444c7017eaa9c813273f222475) at commit `beba274b57853d444c7017eaa9c813273f222475`.
+Bank Tags (`banktags`) is a standalone plugin for tags, folders, saved layouts, select mode, and Import/Share in the bank. It runs on [Bank Utilities Core](https://github.com/RS3-Dev/bank-utilities) (`bankcore`) through Bank Core's public extension API only.
 
-This repository is a starting point for a future separate plugin. **It is not yet installable or independently connected to Bank Utilities Core.** No production entry point or plugin manifest has been invented. Original module paths, function names, storage keys, and source bytes are preserved.
+This branch is being adapted in stages; the staged plan is in [docs/STANDALONE_PLAN.md](docs/STANDALONE_PLAN.md).
 
-## Contents
+## Layout
 
-- `lib/` and, where needed, `data/`: feature modules and the complete transitive closure of their literal Lua `require` dependencies. Some shared files remain here until a future dependency boundary is implemented.
-- `tests/`: existing tests that run independently against these preserved modules.
-- `reference/integration/`: unchanged copies of the old mixed application, feature lifecycle, sidebar, menu, settings, and plugin entry code. These preserve behavior that cannot yet be separated without implementation. They are reference material, not a second runnable application.
-- `reference/tests/`: original integration tests to port when Core contracts are ready. They still require the original repository's harness and are not included in the standalone checks below.
-- `reference/HOST_CONTRACT.md`: the host and API assumptions at the source revision.
-- `EXTRACTION_MANIFEST.json`: source commit, original paths, extraction roles, byte lengths, and SHA-256 hashes for every copied file.
+- `plugins/banktags/`: the entry (`main.lua`) and manifest.
+- `banktags/`: every runtime module. All require paths start with `banktags/`, so none can collide with Bank Core's modules.
+- `tools/`: the build and check tools, and the test harness that loads Bank Core beside Bank Tags.
+- `tests/`: the tests; see [tests/README.md](tests/README.md).
+- `reference/`: the preserved source from Bank Utilities `beba274`, kept as an archive. Nothing in it is built or loaded. `EXTRACTION_MANIFEST.json` records where each preserved file came from.
 
-## Remaining integration work
-
-- Preserves tags, folders, per-tag layouts, layout editing, sprite selection, and Import/Share.
-- The import-provider registry and tag-draft validation are copied here for their intended future Tags ownership; this does not relocate their live owner in Bank Core.
-- Tag sidebar and menu modules still contain legacy Cleanup/query branches. They are preserved unchanged, not refactored into a Tags-only runtime.
-- Catalog searches in the sprite picker and layout editor still use the external RuneQL API. This snapshot does not implement an optional fallback.
-- Keep the legacy bankutils plugin identity and bankutils:tags:* data access until an explicit persistence migration is designed.
-
-No user saves, credentials, game-client files, build output, or external dependency source were copied. The original Bank Utilities source remains intact. Cross-plugin migration, naming, settings registration, and API wiring are future work.
-
-## Checks
-
-The extraction was checked against the committed source bytes and every copied Lua file was syntax-checked with Lua 5.4. These independent source tests were also run:
+## Build and check
 
 ```text
-lua54 tests/tag_store_test.lua
-lua54 tests/tag_rules_test.lua
-lua54 tests/tag_layouts_test.lua
+lua54 tools/build.lua
+lua54 tools/check.lua
 ```
 
-These checks establish source preservation and the listed isolated behaviors; they do not verify a live or standalone plugin. The reference integration tests must be ported before claiming parity with the old integrated feature.
+The build writes only `dist/banktags/`, holding the entry, manifest, and the modules the entry's require graph loads, with the entry's module eviction list generated from that graph. The check builds, runs the tests, and compiles every built file while checking for unexpected globals.

@@ -1,6 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
-local TagRules = require("lib/features/tags/tag_rules")
+local TagRules = require("banktags/tags/tag_rules")
 
 assert(TagRules.normalizeTag("  Rune Gear ") == "rune gear")
 assert(TagRules.normalizeTag("a,b") == nil and TagRules.normalizeTag("   ") == nil)

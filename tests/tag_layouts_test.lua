@@ -1,6 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
-local TagLayouts = require("lib/features/tags/tag_layouts")
+local TagLayouts = require("banktags/tags/tag_layouts")
 
 local function item(name) return { kind = "item", layoutKey = name } end
 local function blank() return { kind = "blank" } end

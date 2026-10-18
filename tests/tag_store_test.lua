@@ -20,11 +20,11 @@ config = { Obj = setmetatable({
     FromID = function(objectID) return byID[objectID] end,
 }, { __index = function(_, name) return objects[name] end }) }
 
-local Json = require("lib/core/json")
-local TagStore = require("lib/features/tags/tag_store")
-local TagData = require("lib/features/tags/tag_data")
-local TagLayouts = require("lib/features/tags/tag_layouts")
-local ItemIdentity = require("lib/features/tags/item_identity")
+local Json = require("banktags/core/json")
+local TagStore = require("banktags/tags/tag_store")
+local TagData = require("banktags/tags/tag_data")
+local TagLayouts = require("banktags/tags/tag_layouts")
+local ItemIdentity = require("banktags/tags/item_identity")
 
 local function key(objectID, copy) return "object:" .. objectID .. ":" .. (copy or 1) end
 -- Return the object at a grid index of a tag's rows drawn ten wide
@@ -87,16 +87,6 @@ assert(store:RemoveTag("melee", ghost))
 assert(store:HasTag("melee", key(4151)) and store:HasTag("melee", ghostOfGhost))
 assert(objectAt(store, "melee", 2) == nil and objectAt(store, "melee", 4) == 4151)
 
--- A RuneQL conversion gets one slot per copy, in result order, under a unique name
-local converted, queryTag, count = store:CreateTagFromItems("melee", {
-    { objectID = 385, layoutKey = key(385, 2) },
-    { objectID = 385, layoutKey = key(385) },
-    { objectID = 385, layoutKey = key(385) },
-})
-assert(converted and queryTag == "melee 2" and count == 2)
-assert(store.data.tags[queryTag].rows[1].slots[1].layoutKey == key(385, 2))
-assert(not store:CreateTagFromItems("empty", {}))
-
 -- Tag names follow the limit saving enforces
 assert(not store:CreateTag(string.rep("a", TagStore.MAX_TAG_NAME + 1)))
 assert(store:CreateTag(string.rep("a", TagStore.MAX_TAG_NAME)))
@@ -143,7 +133,6 @@ refused(store:CreateFolder("Combat", "melee"))
 refused(store:InsertLabel("melee", 0, "Weapons", 10))
 refused(store:DuplicateLayoutItem("melee", key(100)))
 refused(store:MoveLayoutItem("melee", key(100), 9, 10))
-refused(store:CreateTagFromItems("query", { { objectID = 1, layoutKey = key(1) } }))
 refused(store:ImportText(TagData.Encode(store.data, "melee"), { name = "copy" }))
 failWrites = false
 
