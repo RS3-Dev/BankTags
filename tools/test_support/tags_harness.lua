@@ -14,12 +14,29 @@ local function exists(path)
     return true
 end
 
--- Find Bank Core's checkout and let tests require its stand-in host modules
+-- Read a file's text, or nil when it is missing
+local function readText(path)
+    local file = io.open(path, "rb")
+    if file == nil then return nil end
+    local text = file:read("a")
+    file:close()
+    return text
+end
+
+-- Find Bank Core's checkout and let tests require its stand-in host modules. An older
+-- checkout without the API Bank Tags uses is refused rather than tested against
 function Harness.CoreRoot()
     local root = os.getenv("BANKCORE_ROOT") or "../bank-utilities"
     root = string.gsub(root, "\\", "/")
     if not exists(root .. "/plugins/bankcore/main.lua") then
         error("Bank Core was not found at " .. root .. "; set BANKCORE_ROOT to a bank-utilities checkout", 0)
+    end
+    local contract = readText(root .. "/HOST_CONTRACT.md") or ""
+    for _, needed in ipairs({ "PluginDependencyUpdate(event)", "SetItemMenu", "BeginItemPick", "`columns`" }) do
+        if not string.find(contract, needed, 1, true) then
+            error("Bank Core at " .. root .. " lacks " .. needed .. " in its contract; set BANKCORE_ROOT "
+                .. "to a checkout with the extension API Bank Tags uses", 0)
+        end
     end
     -- Bank Tags' own modules come first; Bank Core's tools fill in what Bank Tags lacks
     if not string.find(package.path, root .. "/?.lua", 1, true) then

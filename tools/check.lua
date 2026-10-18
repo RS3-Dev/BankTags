@@ -66,6 +66,11 @@ for _, path in ipairs(trackedFiles('"plugins/*.lua"', '"banktags/*.lua"')) do
     end
 end
 
+-- Say which Bank Core the tests load, since they run against whatever checkout that is
+local coreRoot = os.getenv("BANKCORE_ROOT") or "../bank-utilities"
+local _, coreHead = run('git -C "' .. coreRoot .. '" log -1 --format="%h %s"')
+print("Bank Core for tests: " .. coreRoot .. " at " .. (coreHead:match("[^\r\n]+") or "unknown"))
+
 local tests = trackedFiles('"tests/*_test.lua"')
 for _, path in ipairs(tests) do
     local ok, output = run(('"%s" %s'):format(interpreter, path))
