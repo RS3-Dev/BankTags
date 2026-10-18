@@ -98,6 +98,17 @@ assert(h:TabParent() ~= nil and Harness.Find(h:TabParent(), "Melee") ~= nil)
 rawget(tags.env, "PluginDependencyUpdate")({ pluginIdentifier = "bankcore", enabled = true })
 assert(reloaded:IsConnected() and not app:IsConnected())
 
+-- A hot reload that keeps the module cache still runs fresh modules: the entry evicts them
+local cachedApp = h:TagsModule("banktags/app")
+h.host:Reload("banktags")
+local hotReloaded = h:App()
+assert(hotReloaded ~= reloaded and reloaded.shutDown and hotReloaded:IsConnected())
+assert(h:TagsModule("banktags/app") ~= cachedApp and getmetatable(hotReloaded) ~= getmetatable(reloaded))
+assert(h:TagsModule("banktags/core/debug_log") ~= nil)
+reloaded = hotReloaded
+h:Tick(2)
+assert(h:TabParent() ~= nil)
+
 -- Unloading Bank Tags leaves no column, listener, or subscription behind in Core
 h.host:Unload("banktags")
 assert(h:TabParent() == nil)

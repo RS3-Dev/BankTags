@@ -4,11 +4,7 @@ local Config = {
     -- The owner ID Bank Core knows this plugin by, and the prefix for its event names
     PLUGIN_REF = "banktags",
     OWNER_LABEL = "Bank Tags",
-    -- The optional dependency this plugin connects to
-    CORE_DEPENDENCY = "bankcore",
-    -- Reload references this plugin publishes in the shared Lua state
-    SESSION_KEY = "__banktags_session",
-    API_KEY = "__banktags_api",
+    -- Where Bank Core and RuneQL publish their APIs for plugins whose injected copy is missing
     CORE_API_KEY = "__bankcore_api",
     RUNEQL_API_KEY = "__runeql_api",
     -- The tag save, written as chunked share-code text

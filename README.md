@@ -1,8 +1,43 @@
 # Bank Tags
 
-Bank Tags (`banktags`) is a standalone plugin for tags, folders, saved layouts, select mode, and Import/Share in the bank. It runs on [Bank Utilities Core](https://github.com/RS3-Dev/bank-utilities) (`bankcore`) through Bank Core's public extension API only.
+Bank Tags (`banktags`) is a standalone plugin for tags, folders, saved layouts, select mode, and Import/Share in the bank. It runs on [Bank Utilities Core](https://github.com/RS3-Dev/bank-utilities) (`bankcore`) and reaches the bank only through Bank Core's public extension API: no private Core module, native bank component, or bank menu event is used. The full contract, including the API other plugins use to add import sources, is in [CONTRACT.md](CONTRACT.md). The staged plan it was built from is in [docs/STANDALONE_PLAN.md](docs/STANDALONE_PLAN.md).
 
-This branch is being adapted in stages; the staged plan is in [docs/STANDALONE_PLAN.md](docs/STANDALONE_PLAN.md).
+Everything here is checked against Bank Core's stand-in host only. Nothing in this repository has been verified in the live client yet; see [Not yet verified live](#not-yet-verified-live).
+
+## Features
+
+- **Tags tab.** A sidebar tab Bank Core mounts, drawn by Bank Tags: search, sorting, folders with collapse, tag icons, a status line, and a footer with Import/Share, New Tag, and the layout editor. Any number of tags fits; the list is Bank Tags' own, not Core's row list.
+- **Showing a tag.** Choosing a tag shows it through one Bank Core page, keyed `tag:<name>`, with its saved layout: labels, deliberate empty rows, exact copies, ghost copies that open their source, and Unsorted items under their own heading. Choosing the shown tag again returns to the bank's own view.
+- **Right-click menus.** Tag rows offer Select, Edit, Select items, Remove, Remove from folder, and Move to folder. Folder rows offer Collapse or Expand, Rename folder, and Ungroup folder. Items of the shown tag, including ghosts and items the bank does not hold, offer Remove from the tag, which removes the copy that slot was drawn for.
+- **Drag and drop.** Dragging a bank item onto a tag row adds that copy; dropping it on New Tag creates a tag holding it and opens it for naming.
+- **Select mode.** Select items makes "Add to <tag>" the left click on bank items and outlines the tag's members in gold. The Tags tab shows the tag being filled, pulses its row, and offers Done.
+- **Layout editor.** A window over the bank, sized and placed from Bank Core's bank bounds, laid out at Bank Core's grid columns so it matches the page. Drag items and labels, add catalog items, Create Copy, Remove, and Move to Unsorted.
+- **Import/Share.** Share codes per tag, import with a preview, renaming, a sprite, and a folder, and import sources other plugins register.
+- **Plugin panel.** Show tag sprites, where new items go (Unsorted or the first empty slot), Import/Share, and debug logging. It says when Bank Core is missing.
+
+## Requirements and load order
+
+- **PrettyUI** is a required dependency.
+- **Bank Core** (`bankcore`) is needed for anything in the bank. It is declared as an optional dependency only because the host reports changes for optional dependencies; required dependencies get no change notification. Without Bank Core, Bank Tags loads, keeps its tags, offers Import/Share from its plugin panel, and the panel says Bank Core is needed.
+- **RuneQL** (`runeql`) is optional. With it, the sprite picker and the editor's item search cover every item. Without it they find items in the bank by name, an exact item ID, or an exact config name, and say so.
+
+Any load order works: Bank Tags connects when Bank Core loads, reconnects when Bank Core reloads, and lets go when Bank Core unloads, through the host's `PluginDependencyUpdate`. Reloading Bank Tags shuts down the previous copy in the same Lua state first; a copy whose owner ID a newer load took stays idle. A typical development reload is Bank Core first, then Bank Tags, but either can reload alone.
+
+## Saved data
+
+- Tags save under `banktags:tags:v3:*` and preferences under `banktags:settings:v1`, in Bank Tags' own saved data.
+- **A new install starts with no tags.** Each plugin's saved data is separate, so Bank Tags cannot read the old Bank Utilities plugin's `bankutils:tags:*` data, and it never changes or deletes it. Tags made with the old plugin come across through its per-tag share codes, if you have them: paste each into Import. The share format, `bankutilities-tags` version 3, is unchanged. The old Bank Utilities plugin is not expected to work against this Bank Core, whose private bridge it used was removed.
+- A tag holds at most 9,998 rows, labels, and items, so Bank Core can always add the Unsorted heading. A larger saved tag is kept whole; until it is made smaller, its page explains why it is not drawn.
+- A save that cannot be read is reported in the Tags tab and never overwritten; nothing is saved until it is fixed or removed.
+
+## Changes from the old integrated plugin
+
+- Select mode and drops work in the bank's All Items view only, where copy numbers are known. On another native tab the Tags tab says to select All Items.
+- Select mode outlines members in gold, Bank Core's highlight, not white. Its status and Done button are in the Tags tab, not a panel over the bank's right column. The pick entry reads "Add to <tag>" followed by the item's name.
+- Moving a tag to a folder opens a folder chooser instead of a submenu; Bank Core's menus have no submenus.
+- The layout editor's item actions are buttons (Create Copy, Remove, Move to Unsorted), not a right-click menu, because only Bank Core may change bank menus. Its tag column has no tab rail, and its item icons use the client's default look because Bank Core does not report a stack's outline or shadow.
+- Tag names may be up to 80 characters in the tag settings field, matching what saving always allowed.
+- Cleanup, RuneQL queries, and Advanced Bank Search are not part of Bank Tags.
 
 ## Layout
 
@@ -19,4 +54,16 @@ lua54 tools/build.lua
 lua54 tools/check.lua
 ```
 
-The build writes only `dist/banktags/`, holding the entry, manifest, and the modules the entry's require graph loads, with the entry's module eviction list generated from that graph. The check builds, runs the tests, and compiles every built file while checking for unexpected globals.
+The build writes only `dist/banktags/`: `main.lua`, `plugin.json`, and the 44 modules the entry's require graph loads, with the entry's module eviction list generated from that graph. It refuses output paths inside the source tree and removes only what its previous build wrote. The check builds into `dist/check`, runs every test, compiles every built file, and fails on unexpected globals, a runtime source the entry never loads, or anything from `reference/`, `tests/`, or `tools/` in the package. Tests that load Bank Core read it from `BANKCORE_ROOT`.
+
+The toolchain used locally is a Lua 5.4 interpreter with `luac54` beside it, which the compile step needs.
+
+## Not yet verified live
+
+- Keyboard focus in the Tags tab's search field inside Bank Core's mounted column, and tooltips drawn through the mount's overlay.
+- How the host positions PrettyUI list rows and scrolls them; drops and right-clicks find rows by where they are drawn, which the stand-in host models.
+- Whether the host clones Bank Core's exported API in a way that keeps its functions; Bank Tags falls back to `__bankcore_api` when the shared Lua state has it, and never reads `LIMITS`.
+- When the host calls `PluginDependencyUpdate` on reloads, whether it re-injects the global, and whether module caches are scoped per plugin.
+- The drop hook's return value and naming, which Bank Core owns.
+- Bank Core's bank bounds as screen coordinates for placing the layout editor, and how 80-character names fit the bank header.
+- PrettyUI's item slot `SetTooltip` and the item grid in the sprite picker, which the stand-in host does not draw.

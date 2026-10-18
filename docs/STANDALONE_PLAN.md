@@ -47,3 +47,20 @@ This records the signed-off plan for making Bank Tags a standalone plugin on Ban
 - Folder moves use a chooser window instead of a submenu.
 - The layout editor's item actions are buttons, not a bank right-click menu, and its icons use the client's default look because Bank Core does not report a stack's outline or shadow.
 - Select mode's status and Done button are in the Tags tab instead of a panel over the bank's right column.
+
+## Results
+
+All six stages are implemented on `feature/standalone-banktags`, each in its own commit, with `tools/check.lua` passing at every stage. Everything was checked against Bank Core's stand-in host only, loading the real Bank Core from its checkout through `BANKCORE_ROOT`; nothing has been verified in the live client.
+
+| | Lua files | Lines | Bytes |
+| --- | ---: | ---: | ---: |
+| Preserved `lib/` at `3c3771b` (not runnable; its app, entry, and windows lived in `reference/`) | 47 | 8,435 | 319,584 |
+| Built `dist/banktags` (entry and 44 modules, plus `plugin.json`) | 45 | 7,819 | 298,921 |
+
+Tests: `plugin_reload_test` (packaged load orders, cloned exports, reloads in shared, separate, and cached states, RuneQL), `tag_page_test` (conversion and budget against Bank Core), `tag_tab_test` (the tab, menus, folder chooser, panel), `tag_actions_test` (item menus, ghosts, drops, select mode, snapshots), `layout_editor_test` (geometry, columns, buttons, windows), `import_providers_test` (ported), and the preserved `tag_store_test`, `tag_rules_test`, and `tag_layouts_test`.
+
+Found during implementation and left for review:
+
+- Bank Core delivers no drop outside All Items, so the old plugin's drops on native category tabs are gone; the Tags tab says to select All Items while Core reports that reason.
+- Bank Core's `examples/page-demo` finds Bank Core with `ipairs({ bankcore, rawget(_G, "__bankcore_api") })`, which stops at a missing injected global and never reaches the published copy. Bank Tags checks both by position.
+- Bank Core's stand-in loader shares exported tables instead of cloning them, and Bank Core's API root is a read-only proxy whose fields `pairs` cannot see. How the live host clones it is unverified; Bank Tags' test covers a clone that copies the documented fields.
