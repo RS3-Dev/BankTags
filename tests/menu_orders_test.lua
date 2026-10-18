@@ -6,8 +6,9 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 -- started from a shown tag, leaves it and tags consecutive native clicks without
 -- withdrawing; Remove takes the exact slot's copy on a stack, a borrowed slot, and a ghost;
 -- rows keep Cancel the left click; an entry the host does not report leaves Cancel the
--- left click; a native item without a known copy pauses select mode instead of
--- withdrawing; and an entry offered or chosen before the bank view changed writes nothing.
+-- left click; a preset view seen opening ends select mode, a native click staying Cancel
+-- until Bank Tags hears it; and an entry offered or chosen before the bank view changed,
+-- including a preset view opened and closed again, writes nothing.
 -- Also covers select mode started while the native tab reads All Items before Bank Core
 -- recorded it, followed by a native tab and back. This exercises the path behind a
 -- reported tab-switch error, whose exact message is unknown; it does not confirm a fix
@@ -137,10 +138,32 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
             and app.store:HasTag("ranged", key(385, 1)), where)
         -- An entry the host does not report leaves Cancel the left click
         assert(leftClick(h:MenuFor(host.items[1], true)) == "Cancel", where)
-        -- In the preset view no copy is known, so select mode pauses on Cancel
+        -- A preset view seen at a bank action ends select mode: Bank Core restores the
+        -- items' own looks, a native click is Cancel until Bank Tags hears it, and then
+        -- the tab says why and the left click returns to the bank
         presetOpen = true
-        assert(leftClick(h:MenuFor(host.items[1])) == "Cancel", where)
+        layout:Changed(false)
+        assert((host.items[2].outlineWidth or 0) == 0 and leftClick(h:MenuFor(host.items[1])) == "Cancel", where)
+        h:Tick(2)
+        assert(app.select:Tag() == nil and app.status == 'Select "Return to Bank" before choosing items for a tag.', where)
         presetOpen = false
+        layout:Changed(false)
+        assert(leftClick(h:MenuFor(host.items[1])) == "Withdraw-1", where)
+        -- An Add offered before a preset view opened and closed again writes nothing
+        assert(app.store:RemoveTag("ranged", key(4151, 1)) and app.select:Toggle("ranged"))
+        h:Tick(2)
+        assert(host.items[2].outlineWidth == 2, where)
+        menu = h:MenuFor(host.items[1])
+        presetOpen = true
+        layout:Changed(false)
+        presetOpen = false
+        layout:Changed(false)
+        leftClick(menu)
+        h:Tick(2)
+        assert(not app.store:HasTag("ranged", key(4151, 1)) and app.select:Tag() == nil, "stale add after preset" .. where)
+        assert((host.items[2].outlineWidth or 0) == 0, where)
+        assert(app.select:Toggle("ranged"))
+        h:Tick(2)
         -- An Add chosen before the bank rebuilt writes nothing
         assert(app.store:RemoveTag("ranged", key(4151, 1)))
         menu = h:MenuFor(host.items[1])

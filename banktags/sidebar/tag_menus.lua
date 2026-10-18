@@ -68,11 +68,13 @@ function TagMenus:Defer(current, action)
     end
 end
 
--- Check that the handle and the bank view an item was described in are still current
+-- Check that the handle and the bank view an item was described in are still current; an
+-- item described without a view is never current
 function TagMenus:ItemCheck(item, extra)
     local app, handle = self.app, self.app.handle
     return function()
-        return app.handle == handle and handle ~= nil and handle:GetState().viewID == item.viewID
+        return app.handle == handle and handle ~= nil and item.viewID ~= nil
+            and handle:GetState().viewID == item.viewID
             and (extra == nil or extra())
     end
 end
