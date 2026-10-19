@@ -1,10 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Drive the layout editor over a bank Bank Core reports: it opens at Bank Core's bounds and
--- lays rows out at Bank Core's columns, so a move it saves lands where the page draws it.
--- Its buttons copy, unsort, and remove the selected item, labels go through the prompt,
--- quantities come from Bank Core's snapshots, and it follows the bank's moves and resizes
--- and closes with the bank and with Bank Core
+-- Drive the layout editor over a bank Bank Core reports
+-- Moves it saves land where the page draws them
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -82,15 +79,14 @@ local function drag(fromColumn, fromRow, toColumn, toRow)
     surface.hooks.release()
 end
 
--- Unsorted items sit below their own heading; drag the shark into column 12 of row 1,
--- which exists only because Bank Core reports 13 columns
+-- Drag the shark into column 12, which only 13 columns allow
 local slots = editor.centerSlots
 assert(slots[1].layoutKey == key(4151, 1) and editor.centerUnsortedRow == 1)
 drag(0, 2, 11, 0)
 local row = app.store.data.tags.melee.rows[1].slots
 assert(#row == 12 and row[12].layoutKey == key(385, 1), "the shark landed at row 1, column 12")
 h:Tick(4)
--- Bank Core draws the page at the same columns, so the shark is on the whip's line
+-- Bank Core draws the page at the same columns
 local whipY, sharkX, sharkY = nil, nil, nil
 for _, entry in ipairs(layout:VisibleMirrorEntries()) do
     if entry.objectID == 4151 then whipY = entry.y end
@@ -98,7 +94,7 @@ for _, entry in ipairs(layout:VisibleMirrorEntries()) do
 end
 assert(whipY ~= nil and sharkY == whipY and sharkX == 8 + 11 * 44, tostring(sharkX))
 
--- Select the whip by clicking it, then copy it: the ghost opens copy 1
+-- Select the whip, then copy it; the ghost opens copy 1
 drag(0, 0, 0, 0)
 assert(editor.selectedLayoutKey == key(4151, 1))
 Harness.Find(editor.centerPanel, "Create Copy").hooks.pressed()
@@ -108,7 +104,7 @@ for _, slot in ipairs(app.store.data.tags.melee.rows[1].slots) do
     if slot.layoutKey == key(4151, 2) then ghost = slot end
 end
 assert(ghost ~= nil and ghost.sourceLayoutKey == key(4151, 1))
--- Move to Unsorted sends the selected copy below the heading, keeping it in the tag
+-- Move to Unsorted keeps the selected copy in the tag
 Harness.Find(editor.centerPanel, "Move to Unsorted").hooks.pressed()
 local unsorted = app.store.data.tags.melee.unsorted
 assert(unsorted[#unsorted].layoutKey == key(4151, 2) and app.store:HasTag("melee", key(4151, 2)))
@@ -123,7 +119,7 @@ assert(editor.errorBanner ~= nil)
 h:Tick(260)
 assert(editor.errorBanner == nil, "the error fades on the editor's own logic subscription")
 
--- Clicking New label asks for its text and adds the label after the layout
+-- New label asks for text and adds the label after the layout
 local labelSurface = editor.labelDragSurface
 local labelLeft, labelTop = Geometry.absolutePosition(editor.content)
 host.mouse = { x = labelLeft + editorSize.CENTER_X + editorSize.LABEL_BUTTON_X + 10,
@@ -137,7 +133,7 @@ prompt.buttons[#prompt.buttons].root.hooks.click()
 local rows = app.store.data.tags.melee.rows
 assert(rows[#rows].kind == "label" and rows[#rows].text == "Weapons")
 
--- Searching without RuneQL finds the bank's items by name and says it is limited
+-- Searching without RuneQL finds bank items and says it is limited
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "")
 assert(string.find(editor.searchHint.content, "Without RuneQL", 1, true) ~= nil)
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "shark")
@@ -153,7 +149,7 @@ window.host:SetPos(window.host.x + 30, 80)
 h:Tick(12)
 assert(app.state.bounds.y == 80 and editor.window.root.y == 80)
 assert(app.windows.layoutEditor == editor)
--- Resizing the bank's item area reopens the editor at the new columns on the same tag
+-- Resizing the item area reopens the editor at the new columns
 host.itemLayer.width = 448
 h:Tick(12)
 assert(app.state.columns == 10)
@@ -169,7 +165,7 @@ host:UnmountBankWindow()
 h:Tick(2)
 assert(app.windows.layoutEditor == nil and app.windows.importShare == importShare)
 
--- Tag settings choose a sprite through the picker, which searches the bank without RuneQL
+-- Tag settings pick a sprite from the bank without RuneQL
 session, layout = h:OpenBank()
 h:Tick(12)
 app.windows:OpenTagSettings("melee", false)
@@ -192,7 +188,7 @@ app.windows.tagDeleteConfirm.deleteButton.root.hooks.click()
 h:Tick(2)
 assert(app.store.data.tags.food == nil and app.shownTag == nil and layout.selectedTag == nil)
 
--- The editor's close button closes it, and Bank Core going closes it too
+-- The close button closes the editor, as does Bank Core unloading
 assert(app:ShowTag("melee"))
 h:Tick(2)
 app.windows:OpenLayoutEditor("melee")

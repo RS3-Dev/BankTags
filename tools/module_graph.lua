@@ -1,5 +1,5 @@
--- Walk the require graph from the plugin entry and report which modules it needs.
--- The package builder copies exactly this list. Adapted from Bank Core's build tools.
+-- Walk the require graph from the plugin entry
+-- Adapted from Bank Core's build tools
 -- Run from the repository root; module names are paths without ".lua"
 
 local ModuleGraph = {}
@@ -13,11 +13,8 @@ function ModuleGraph.Source(moduleName)
     return source
 end
 
--- List the modules one module requires, in source order. A call is the global
--- `require`, then optional parentheses around one quoted module name; whitespace and
--- line breaks may sit between the parts, and comments and strings are ignored. Any other
--- use of `require`, such as a computed name, raises an error instead of being skipped,
--- so a package built from this graph never silently misses a module
+-- List a module's required names in source order
+-- Unsupported require forms raise, so no module is silently missed
 function ModuleGraph.Requires(moduleName)
     local source = ModuleGraph.Source(moduleName)
     if source == nil then error("module " .. moduleName .. " has no file", 2) end
@@ -61,7 +58,7 @@ function ModuleGraph.RequiresIn(source, moduleName)
     return names
 end
 
--- Collect every module the roots load, directly or through other modules, sorted by name
+-- Collect every module the roots load, sorted by name
 function ModuleGraph.Closure(roots)
     local seen, pending = {}, {}
     for _, root in ipairs(roots) do pending[#pending + 1] = root end
@@ -80,8 +77,7 @@ function ModuleGraph.Closure(roots)
     return names, seen
 end
 
--- Blank out comments and string contents with spaces, keeping code, quote marks, and
--- line breaks, so every position in the result is the same position in the source
+-- Blank comments and string contents, keeping every position
 function ModuleGraph.Code(source)
     local out, index, length = {}, 1, #source
     local function blank(first, last)
@@ -133,8 +129,7 @@ function ModuleGraph.Code(source)
     return table.concat(out)
 end
 
--- List the modules a plugin's entry file loads, directly or not, without the entry itself.
--- The entry is a path without ".lua", such as plugins/banktags/main
+-- List the modules a plugin entry loads, excluding the entry
 function ModuleGraph.PluginModules(entry)
     local names = {}
     for _, name in ipairs((ModuleGraph.Closure({ entry }))) do

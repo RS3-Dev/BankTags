@@ -1,5 +1,4 @@
--- Render Bank Tags' host plugin panel: where its settings are, or why Bank Core is needed,
--- and Import/Share, which works without Bank Core
+-- Draw Bank Tags' plugin panel: a notice and Import/Share
 
 local PluginPanel = {}
 PluginPanel.__index = PluginPanel
@@ -9,7 +8,7 @@ local CONTENT_HEIGHT = 200
 local TEXT = 0xD7C9ADFF
 local GOLD = 0xF2C66DFF
 
--- Mount the notice and the Import/Share button. options: notice and onOpenImport()
+-- Mount the notice and the Import/Share button
 function PluginPanel.new(parent, options)
     local self = setmetatable({ destroyed = false }, PluginPanel)
     self.view = prettyui.SimpleView.new(parent, {
@@ -44,13 +43,13 @@ function PluginPanel.new(parent, options)
     return self
 end
 
--- Say where the settings are or why tags are missing from the bank
+-- Show the panel notice
 function PluginPanel:ShowNotice(text)
     if self.destroyed then return end
     self.notice.content = text or ""
 end
 
--- Release the controls before the host replaces the panel or the plugin unloads
+-- Release the panel controls
 function PluginPanel:Destroy()
     if self.destroyed then return end
     self.destroyed = true

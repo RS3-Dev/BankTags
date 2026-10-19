@@ -1,4 +1,4 @@
--- Publish large saves without replacing the previous generation until writing succeeds
+-- Save large strings in chunks, publishing only complete saves
 
 local ChunkedStringStore = {}
 
@@ -49,7 +49,7 @@ function ChunkedStringStore.Read(options)
     return table.concat(chunks)
 end
 
--- Write the inactive generation first and publish its marker only after all chunks succeed
+-- Write the spare generation, then publish it once complete
 function ChunkedStringStore.Write(options, value)
     local activeGeneration = manifest(options)
     local generation = activeGeneration == "a" and "b" or "a"

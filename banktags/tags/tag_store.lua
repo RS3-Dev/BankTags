@@ -1,6 +1,4 @@
--- Own the saved tags. A tag holds its icon, folder, layout rows, and Unsorted
--- list, and an item copy belongs to a tag exactly when one of its slots lists
--- that copy. Layouts and folders are in tag_store_layouts.lua and tag_store_folders.lua
+-- Own the saved tags; layouts and folders live in companion modules
 
 local Config = require("banktags/core/config")
 local ChunkedStringStore = require("banktags/core/chunked_string_store")
@@ -36,8 +34,7 @@ local function iconReference(spriteObjectID)
     return true, ItemIdentity.Reference(objectID)
 end
 
--- Load the saved tags, starting empty when there are none. A save that cannot be read is
--- left as it is: the store shows no tags and refuses every change, so nothing overwrites it
+-- Load saved tags, refusing changes when the save cannot be read
 function TagStore.new()
     local saved = ChunkedStringStore.Read(TEXT_STORE)
     local data, reason = nil, nil
@@ -50,15 +47,12 @@ function TagStore.new()
     return store
 end
 
--- Apply the user's placement preference for newly tagged items
+-- Apply the placement preference for newly tagged items
 function TagStore:SetLayoutPlacement(preserve)
     self.preserveTagLayout = preserve ~= false
 end
 
--- Save changed data and adopt it only if the save succeeds, so a failed write
--- never leaves a half-applied edit. Rows lose trailing blanks and folders
--- without tags are dropped first. A tag may not grow past the edit limit, though a
--- larger saved tag keeps its size
+-- Save changed data and adopt it only once the save succeeds
 function TagStore:Commit(nextData, failureMessage)
     if self.loadError ~= nil then return false, self.loadError end
     local used = {}
@@ -119,8 +113,7 @@ function TagStore:HasTag(tag, layoutKey)
     return members ~= nil and members[layoutKey] == true
 end
 
--- Add an item copy to a tag: into the first open slot when filling the layout,
--- otherwise into Unsorted. The third result reports whether it was added
+-- Add an item copy to a tag's layout or Unsorted list
 function TagStore:AddTag(tag, objectID, layoutKey)
     objectID = math.tointeger(tonumber(objectID))
     layoutKey = layoutKey or ItemIdentity.LayoutKey(objectID, 1)
@@ -145,8 +138,7 @@ function TagStore:AddTag(tag, objectID, layoutKey)
     return saved, reason, saved
 end
 
--- Take an item copy out of a tag's rows, leaving a blank so later items keep
--- their places, or out of its Unsorted list. Returns the slot it held
+-- Take a copy out of a tag, leaving a blank in its row
 function TagStore.TakeSlot(record, layoutKey)
     for _, entry in ipairs(record.rows) do
         for position, slot in ipairs(entry.slots or {}) do
@@ -164,7 +156,7 @@ function TagStore.TakeSlot(record, layoutKey)
     return nil
 end
 
--- Remove one item copy from a tag. The third result reports whether it was removed
+-- Remove one item copy from a tag
 function TagStore:RemoveTag(tag, layoutKey)
     if not self:HasTag(tag, layoutKey) then return true, nil, false end
     local nextData = copy(self.data)
@@ -308,8 +300,7 @@ local function customizeImport(imported, options, current)
     return true, nil
 end
 
--- Import shared tags or a backup, replacing any tag with the same name
--- Options rename, re-icon, and file a single shared tag
+-- Import shared tags or a backup, replacing same-named tags
 function TagStore:ImportText(source, options)
     local imported, reason = TagData.Decode(source)
     if imported == nil then return false, nil, reason end
@@ -325,7 +316,7 @@ function TagStore:ImportText(source, options)
             nextData.folders[tag.folder] = imported.folders[tag.folder]
         end
     end
-    -- Imported tags go first unless a chosen folder places the tag
+    -- Imported tags go first unless a folder places them
     if options ~= nil and (options.folderKey ~= nil or options.newFolderName ~= nil) then
         nextData.order = self:FolderTagOrder(imported.order[1], nextData.tags[imported.order[1]].folder)
     else

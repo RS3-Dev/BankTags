@@ -1,9 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Change Bank Tags' preferences as a player does, in its section of Bank Core's bank settings
--- window: each saves under Bank Tags' own key, applies at once, and a refused save puts the
--- control back. The plugin panel keeps Import/Share and its notice but no preference controls.
--- The section follows Bank Core unloading and loading again, and Bank Tags unloading
+-- Change Bank Tags' preferences in Bank Core's settings window
+-- Each saves under Bank Tags' key, applies at once, and reverts if refused
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -32,7 +30,7 @@ local function sectionLabels()
     return table.concat(labels, " | ")
 end
 
--- The plugin panel says where the settings are and keeps Import/Share, with no preference controls
+-- The plugin panel points to the settings and keeps Import/Share
 local panel = h:OpenContentPanel()
 assert(Harness.Find(panel, IN_BANK) ~= nil and Harness.Find(panel, "Import / Share tags") ~= nil)
 assert(Harness.Find(panel, "Show tag sprites") == nil and app.panel.controls == nil)
@@ -79,7 +77,7 @@ section = openSection()
 assert(section.controls.showTagSprites:IsSelected("showTagSprites") and section.placement:GetSelectedID() == "fill")
 assert(section.controls.enableDebug:IsSelected("enableDebug"))
 
--- Bank Core unloads: its window and Bank Tags' section close; on return the section is back
+-- Bank Core unloads, closing the section; it returns on reload
 h.host:Unload("bankcore")
 assert(app.settingsSection == nil and section.destroyed)
 h:LoadCore()
@@ -89,7 +87,7 @@ h:Tick(2)
 section = openSection()
 assert(section.controls.showTagSprites:IsSelected("showTagSprites"))
 
--- Bank Tags unloads: its section leaves the open window, which falls back to Core's
+-- Bank Tags unloads, so the window falls back to Core's section
 h.host:Unload("banktags")
 assert(section.destroyed and app.settingsSection == nil)
 assert(sectionLabels() == "Bank Core" and session.coreSettings ~= nil)

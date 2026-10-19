@@ -1,4 +1,4 @@
--- Edit a tag name and icon through callbacks supplied by the app
+-- Edit a tag's name and icon
 
 local TagRules = require("banktags/tags/tag_rules")
 
@@ -17,7 +17,7 @@ local SLOT_GAP = 8
 local FIELD_WIDTH = CONTROL_WIDTH - SLOT_SIZE - SLOT_GAP
 local SLOT_X = MARGIN + FIELD_WIDTH + SLOT_GAP
 
--- Look up an item definition, allowing unavailable catalog entries
+-- Look up an item definition, allowing missing entries
 local function objectFromID(objectID)
     local id = math.tointeger(tonumber(objectID))
     if id == nil then return nil end
@@ -25,7 +25,7 @@ local function objectFromID(objectID)
     return ok and object or nil
 end
 
--- Create the tag name and icon editor with save and picker callbacks
+-- Create the tag name and icon editor
 function TagSettingsEditor.new(parent, options)
     local self = setmetatable({
         originalTag = options.tag,
@@ -108,7 +108,7 @@ function TagSettingsEditor.new(parent, options)
     return self
 end
 
--- Show the chosen item icon without changing persisted tag settings yet
+-- Show the chosen icon without saving it yet
 function TagSettingsEditor:SetSprite(objectID)
     self.spriteObjectID = math.tointeger(tonumber(objectID))
     self.spriteSlot:SetObject(objectFromID(self.spriteObjectID))
@@ -116,7 +116,7 @@ function TagSettingsEditor:SetSprite(objectID)
     self.status.hidden = true
 end
 
--- Submit the edited tag name and icon and display validation or persistence feedback
+-- Save the name and icon, showing any problem
 function TagSettingsEditor:Save(value)
     if self.onSave == nil then return end
     local success, reason = self.onSave(value, self.spriteObjectID)
@@ -129,12 +129,12 @@ function TagSettingsEditor:Save(value)
     end
 end
 
--- Show the existing editor window
+-- Show the editor window
 function TagSettingsEditor:Show()
     self.window:Show()
 end
 
--- Destroy tag-setting controls and release the editor window
+-- Destroy the editor controls and window
 function TagSettingsEditor:Destroy()
     for _, control in ipairs({
         self.saveButton,

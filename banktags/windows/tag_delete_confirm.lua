@@ -1,4 +1,4 @@
--- Confirm tag deletion before delegating the save to the app
+-- Confirm a tag deletion before the app saves it
 
 local Theme = require("banktags/ui/theme")
 
@@ -17,7 +17,7 @@ local BUTTON_X = math.floor((CONTENT_WIDTH - (BUTTON_WIDTH * 2 + BUTTON_GAP)) / 
 local TEXT = Theme.TEXT
 local ERROR = Theme.ERROR_TEXT
 
--- Create a confirmation dialog that delegates tag deletion to its owner
+-- Create the deletion confirmation dialog
 function TagDeleteConfirm.new(parent, options)
     local self = setmetatable({
         tag = options.tag,
@@ -80,12 +80,12 @@ function TagDeleteConfirm.new(parent, options)
     return self
 end
 
--- Show the existing editor window
+-- Show the dialog window
 function TagDeleteConfirm:Show()
     self.window:Show()
 end
 
--- Destroy the confirmation controls and release the dialog window
+-- Destroy the dialog controls and window
 function TagDeleteConfirm:Destroy()
     for _, control in ipairs({
         self.deleteButton,

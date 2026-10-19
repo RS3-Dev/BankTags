@@ -6,7 +6,7 @@ local folderName = TagRules.folderName
 
 local TagStoreFolders = {}
 
--- Flatten sibling groups into the existing order format without losing hierarchy
+-- Flatten sibling groups into the saved tag order
 local function treeTagOrder(nodes)
     local order = {}
     for _, node in ipairs(nodes) do
@@ -60,7 +60,7 @@ function TagStoreFolders:TagTree()
     return nodes
 end
 
--- Move exactly one sibling step, keeping folder members together at the top tier
+-- Move one sibling step, keeping folder members together
 function TagStoreFolders:MoveSidebarEntry(tag, folderKey, offset)
     if offset ~= -1 and offset ~= 1 then return false, "Choose up or down." end
     local tree = self:TagTree()
@@ -91,7 +91,7 @@ function TagStoreFolders:MoveSidebarEntry(tag, folderKey, offset)
     return self:SaveTagOrder(treeTagOrder(tree))
 end
 
--- Keep existing tiers stable when filing a tag or promoting it beside its folder
+-- Order tags for filing without disturbing existing tiers
 function TagStoreFolders:FolderTagOrder(tag, folderKey)
     local tree = self:TagTree()
     local destination, source
@@ -206,7 +206,7 @@ function TagStoreFolders:DeleteFolder(key)
     return self:Commit(nextData, "Could not delete the folder.")
 end
 
--- Toggle one flag in place rather than copying every tag record per click
+-- Toggle the flag in place rather than copying every tag
 function TagStoreFolders:SetFolderCollapsed(key, collapsed)
     local folder = type(key) == "string" and self.data.folders[key] or nil
     if type(folder) ~= "table" then return false end

@@ -1,6 +1,4 @@
--- Build Bank Tags, run every test, and check that every built runtime file compiles and
--- reads or writes no unexpected global, that every runtime source ships, and that nothing
--- from reference/ or tests/ does
+-- Build Bank Tags, run every test, and check the built files
 -- Usage, from the repository root: lua54 tools/check.lua
 -- Tests that load Bank Core read it from BANKCORE_ROOT; see tests/README.md
 -- Each test runs in its own process because the tests install different host stand-ins
@@ -38,7 +36,7 @@ end
 
 local failures = 0
 
--- The built folder is what the client loads, so it is what gets compiled
+-- Compile the built folder, since that is what the client loads
 local Build = require("tools/build")
 local built, build = pcall(Build.Run, { out = "dist/check" })
 if not built then
@@ -57,7 +55,7 @@ for _, file in ipairs(build.files) do
 end
 print(("built %d files into %s"):format(#build.files, build.folder))
 
--- Every runtime source belongs to the plugin; one the entry never loads would never ship
+-- A runtime source the entry never loads would never ship
 local orphans = 0
 for _, path in ipairs(trackedFiles('"plugins/*.lua"', '"banktags/*.lua"')) do
     if not shipped[path] then
@@ -66,7 +64,7 @@ for _, path in ipairs(trackedFiles('"plugins/*.lua"', '"banktags/*.lua"')) do
     end
 end
 
--- Say which Bank Core the tests load, since they run against whatever checkout that is
+-- Name the Bank Core checkout the tests run against
 local coreRoot = os.getenv("BANKCORE_ROOT") or "../bank-utilities"
 local _, coreHead = run('git -C "' .. coreRoot .. '" log -1 --format="%h %s"')
 print("Bank Core for tests: " .. coreRoot .. " at " .. (coreHead:match("[^\r\n]+") or "unknown"))

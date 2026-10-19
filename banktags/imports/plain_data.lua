@@ -1,12 +1,11 @@
--- Read plain data other plugins pass in, without running their metamethods, and wrap the
--- tables handed back to them so they cannot be replaced
+-- Read plain data from other plugins without running their metamethods
 
 local PlainData = {}
 
 local ID_PATTERN = "^[%w][%w_%.%-]*$"
 local MAX_OBJECT_ID = 0x7FFFFFFF
 
--- Accept an owner, page, tab, or provider identifier within a length limit
+-- Accept an identifier within a length limit
 function PlainData.ID(value, limit)
     return type(value) == "string"
         and #value <= limit

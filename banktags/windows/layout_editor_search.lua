@@ -21,20 +21,20 @@ local TEXT = Theme.TEXT
 
 local LayoutEditorSearch = {}
 
--- Remove previous search hit targets and decorative result sprites
+-- Clear previous search hit targets and sprites
 function LayoutEditorSearch:ClearSearchInteractions()
     self.searchResults = {}
     if self.searchList ~= nil then self.searchList:SetEntries({}) end
 end
 
--- Show guidance in the empty search panel, or hide it when message is nil
+-- Show or hide guidance in the empty search panel
 function LayoutEditorSearch:SetSearchHint(message)
     if self.searchHint == nil then return end
     self.searchHint.content = tostring(message or "")
     self.searchHint.hidden = message == nil
 end
 
--- Add the note that only the bank and exact lookups are searched, when RuneQL is missing
+-- Add the limited-search note when RuneQL is missing
 local function withLimit(message)
     if Catalog.IsFull() then return message end
     return message .. " " .. Catalog.LIMITED_HINT
@@ -58,7 +58,7 @@ function LayoutEditorSearch:RunSearch(value)
     self:ShowSearchResults(results, total)
 end
 
--- Build catalog result rows and their item sprites for the search panel
+-- Build result rows and their item sprites
 function LayoutEditorSearch:ShowSearchResults(results)
     local entries, visible = {}, {}
     for _, result in ipairs(results or {}) do
@@ -101,7 +101,7 @@ function LayoutEditorSearch:ShowSearchResults(results)
     if self.labelDragSurface ~= nil then self.labelDragSurface:MoveToFront() end
 end
 
--- Save membership and requested placement, reporting partial success if positioning fails
+-- Save a search result to the tag at the requested place
 function LayoutEditorSearch:AddCatalogResult(result, destination)
     local objectID = math.tointeger(tonumber(result and result.objectId))
     if self.selectedTag == nil or objectID == nil then return false end
@@ -109,7 +109,7 @@ function LayoutEditorSearch:AddCatalogResult(result, destination)
     for _, item in ipairs(self.store:GetTaggedItems(self.selectedTag)) do
         if item.objectID == objectID then source = source or item end
     end
-    -- An item already in the tag gets a ghost copy instead
+    -- An item already in the tag gets a ghost copy
     local saved, layoutKey, reason
     if source == nil then
         layoutKey = ItemIdentity.LayoutKey(objectID, 1)

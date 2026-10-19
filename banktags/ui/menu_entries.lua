@@ -1,9 +1,5 @@
--- Add Bank Tags' entries to a native right-click menu without disturbing its default. The
--- host lists entries from lowest to highest priority, and a left click runs the last one.
--- The API documents Add as appending there, but live clients placed plugin entries just
--- above Cancel or just below the native default, so each new entry is found by comparing
--- the list before and after, then moved. Bank Core may promote Cancel before or after
--- this runs; nothing here relies on which comes first
+-- Add Bank Tags' entries to native menus without changing the default
+-- Live clients place added entries inconsistently, so each one is found and moved
 
 local MenuEntries = {}
 
@@ -17,7 +13,7 @@ local function cancelIndex(menu)
     return nil
 end
 
--- Place Cancel at the highest priority, so a left click does nothing
+-- Make Cancel the left click
 function MenuEntries.PromoteCancel(menu)
     local index = cancelIndex(menu)
     if index == nil then return end
@@ -30,12 +26,12 @@ local function signature(entry)
         tostring(entry.fullText), tostring(entry.verbText), tostring(entry.subjectText) }, "\n")
 end
 
--- Remove markup and outer spaces, then lowercase, so menu text compares reliably
+-- Normalize menu text for comparison
 local function normalize(value)
     return string.lower((tostring(value or ""):gsub("<[^>]->", "")):match("^%s*(.-)%s*$"))
 end
 
--- Add one entry and return where the host put it, or nil when it cannot be found
+-- Add one entry and find where the host put it
 local function add(menu, entry)
     local text = entry.label
     if entry.subject ~= nil then text = text .. " <col=" .. NAME_COLOUR .. ">" .. entry.subject .. "</col>" end
@@ -65,9 +61,8 @@ local function move(menu, from, to)
     for current = from, to - step, step do menu:Swap(current, current + step) end
 end
 
--- Add entries at the lowest priority, in order, just above a Cancel at the bottom, so the
--- default stays as it was. An entry that cannot be found, or a default that moved, makes
--- Cancel the default, so a left click runs nothing unplaced
+-- Add entries at the lowest priority, keeping the default
+-- If placement fails, Cancel becomes the default
 function MenuEntries.AddLow(menu, entries)
     if #entries == 0 then return end
     local top = menu.entries[menu.entryCount]
@@ -87,8 +82,8 @@ function MenuEntries.AddLow(menu, entries)
     if now == nil or signature(now) ~= topSignature then MenuEntries.PromoteCancel(menu) end
 end
 
--- Make an entry the left-click default. When Cancel already is, something guarded the
--- menu, so the entry goes low instead; one that cannot be found makes Cancel the default
+-- Make an entry the left-click default
+-- If Cancel already is, add it low instead
 function MenuEntries.AddDefault(menu, entry)
     local top = menu.entries[menu.entryCount]
     if top == nil or top.actionType == MiniMenuActionType.CANCEL then

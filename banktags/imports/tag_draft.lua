@@ -41,7 +41,7 @@ end
 local function readSlot(entry, copies)
     local objectID, name = readReference(entry)
     if objectID == nil then
-        -- A config name this client cannot resolve stays saved by name, as in a share code
+        -- An unknown config name stays saved by name
         if name ~= nil then return { kind = "blank", dormant = name } end
         return nil
     end
@@ -129,7 +129,7 @@ local function readTag(input, index, budget, data)
     return true
 end
 
--- Check and copy a draft, returning the share-code text that imports it, or nil and why
+-- Read a draft into share-code text, or return nil and why
 function TagDraft.Read(draft)
     if not isPlain(draft) or not PlainData.HasOnlyFields(draft, DRAFT_FIELDS) then
         return nil, "a draft is a table with a tags list"

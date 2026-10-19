@@ -1,8 +1,4 @@
--- Compose Bank Tags: the tag store, preferences, windows, plugin panel, and import sources,
--- and the connection to Bank Core's public API. Through that API Bank Tags registers its
--- Tags tab, the one page that shows a tag, a listener, and its section of the bank settings
--- window; it reads the bank only through Bank Core's state, item snapshots, and menu item
--- descriptions, and adds its own menu entries
+-- Compose Bank Tags and connect it to Bank Core's public API
 
 local Config = require("banktags/core/config")
 local DebugLog = require("banktags/core/debug_log")
@@ -33,7 +29,7 @@ local NEEDS_ALL_ITEMS = 'Select "All Items" before adding items to tags.'
 
 -- Find a running Bank Core API: the injected dependency first, the published copy second
 local function findBank()
-    -- Either may be missing, so both are checked by position rather than with ipairs
+    -- Either may be nil, so check them by position
     local candidates = { bankcore, rawget(_G, Config.CORE_API_KEY) }
     for index = 1, 2 do
         local candidate = candidates[index]
@@ -45,8 +41,7 @@ local function findBank()
     return nil
 end
 
--- Load the store and preferences and build the windows, tab, and import API, connected to
--- nothing and subscribed to nothing
+-- Build the store, windows, tab, and import API, unconnected
 function App.new()
     local settings = Settings.load()
     DebugLog.SetEnabled(settings.enableDebug)
@@ -55,18 +50,18 @@ function App.new()
     local app = setmetatable({
         store = store,
         settings = settings,
-        -- Bank Core's API table and this plugin's owner handle while connected
+        -- Bank Core's API and this plugin's owner handle
         bank = nil,
         handle = nil,
-        -- What Bank Core last reported: its state, the shown tag, and the bank's items
+        -- What Bank Core last reported
         state = nil,
         shownTag = nil,
         bankItems = nil,
         pageRegistered = false,
-        -- A notice the Tags tab shows, such as why an item could not be added
+        -- A notice the Tags tab shows
         status = nil,
         panel = nil,
-        -- The preferences shown in Bank Core's settings window while that section is open
+        -- Preferences shown while their settings section is open
         settingsSection = nil,
         retired = false,
         started = false,
@@ -81,7 +76,7 @@ function App.new()
     app.select = SelectMode.new(app)
     app.menus = TagMenus.new(app)
     app.tab = TagTab.new(app)
-    -- Draws the explanation on a tag too large for Bank Core to show
+    -- Explain a tag too large for Bank Core to show
     app.noticeMount = { mount = function(ctx) app:DrawNotice(ctx) end }
     -- Bank Tags' section of Bank Core's settings window
     app.settingsMount = {
@@ -107,12 +102,11 @@ function App:IsConnected()
     return self.handle ~= nil and self.handle:GetState().live == true
 end
 
--- Register the Tags tab, listener, and settings section with the running Bank Core, then
--- answer bank menus
+-- Register the tab, listener, and settings with Bank Core
 function App:Connect()
     if self.shutDown then return false, "stopped" end
     if self:IsConnected() then return true end
-    -- A newer load of Bank Tags took the owner ID; taking it back would undo that
+    -- A newer load owns the ID now, so leave it
     if self.handle ~= nil and self.bank.GetState().running then
         self.handle, self.bank, self.retired = nil, nil, true
         self:Disconnect()
@@ -149,7 +143,7 @@ function App:Connect()
     return true
 end
 
--- Drop the owner handle and everything that needs Bank Core; the store and Import/Share stay
+-- Drop the owner handle and everything that needs Bank Core
 function App:Disconnect()
     self.windows:CloseBankWindows()
     self.menus:Stop()
@@ -161,8 +155,7 @@ function App:Disconnect()
     self:UpdatePanelNotice()
 end
 
--- Follow Bank Core's readiness, bank geometry, and select mode's outline; a closed bank
--- closes the bank's windows
+-- Follow Bank Core's state, closing windows with the bank
 function App:OnState(state)
     self.state = state
     self.select:Follow(state)
@@ -179,8 +172,7 @@ function App:OnPage(pageID, key)
     self.tab:Refresh()
 end
 
--- Read the bank's items for the layout editor and item search, keeping the last good copy
--- while Bank Core is still building
+-- Read bank items, keeping the last good copy while loading
 function App:OnBankItems()
     if self.handle == nil then return end
     local snapshot = self.handle:GetBankItems()
@@ -217,8 +209,7 @@ function App:PutPage(tag)
     return ok, reason
 end
 
--- Show a tag in the bank. Opening is refused outside the bank's All Items view, and the
--- tab's own context shows Bank Core's guidance when it is
+-- Show a tag, only from the bank's All Items view
 function App:ShowTag(tag)
     if self.handle == nil or self.store.data.tags[tag] == nil then return false end
     local ok, reason = self:PutPage(tag)
@@ -249,7 +240,7 @@ function App:ToggleTag(tag)
     return self:ShowTag(tag)
 end
 
--- Show every change to the store: the tab, open windows, the shown page, and select mode
+-- Refresh everything that shows the store
 function App:Changed()
     self.tab:Refresh()
     self.windows:StoreChanged()
@@ -268,7 +259,7 @@ function App:Changed()
     end
 end
 
--- Follow a renamed tag in the shown page and select mode before showing the change
+-- Follow a renamed tag before showing the change
 function App:Renamed(oldTag, newTag)
     self.select:Rename(oldTag, newTag)
     if self.shownTag == oldTag and self.handle ~= nil then
@@ -278,8 +269,7 @@ function App:Renamed(oldTag, newTag)
     self:Changed()
 end
 
--- Add one bank copy to a tag. An item with no copy is refused rather than guessed; a drop
--- names the copy it tags before calling
+-- Add one bank copy of an item to a tag
 function App:AddItemToTag(tag, objectID, copy)
     if copy == nil then
         self:ShowStatus(NEEDS_ALL_ITEMS)
@@ -362,7 +352,7 @@ function App:DeleteFolder(folderKey)
     return true
 end
 
--- Draw the explanation on a tag page too large for Bank Core to show
+-- Explain a tag page too large for Bank Core to show
 function App:DrawNotice(ctx)
     local block = ctx:GetBlocks().notice
     local text = ui.Text.new(ctx.parent)
@@ -391,7 +381,7 @@ function App:SetSetting(key, value)
     return true
 end
 
--- Say on the plugin panel where the settings are, or why tags are missing from the bank
+-- Pick the plugin panel's notice text
 function App:PanelNotice()
     if self:IsConnected() then return SETTINGS_IN_BANK end
     return self.retired and REPLACED or NOT_CONNECTED
@@ -402,8 +392,7 @@ function App:UpdatePanelNotice()
     if self.panel ~= nil then self.panel:ShowNotice(self:PanelNotice()) end
 end
 
--- Mount the notice and Import/Share on this plugin's own panel, connecting first if Bank
--- Core started
+-- Mount the notice and Import/Share on the plugin panel
 function App:CreatePanel(parent)
     if self.shutDown then return end
     self:Connect()
@@ -414,7 +403,7 @@ function App:CreatePanel(parent)
     })
 end
 
--- Draw the preferences in Bank Tags' section of Bank Core's settings window
+-- Draw preferences in Bank Core's settings window
 function App:MountSettings(parent)
     self:DestroySettings()
     self.settingsSection = SettingsSection.new(parent, {
@@ -429,8 +418,7 @@ function App:DestroySettings()
     self.settingsSection = nil
 end
 
--- Stop Bank Tags: release its panel, windows, select mode, Bank Core registration, and
--- import sources. Saved tags stay as they are
+-- Stop Bank Tags, keeping saved tags as they are
 function App:Shutdown()
     if self.shutDown then return end
     self.shutDown = true

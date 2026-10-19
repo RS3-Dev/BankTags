@@ -1,4 +1,4 @@
--- Read and write the one JSON form of tag data used for saving, sharing, and backups
+-- Read and write the JSON tag data used by saves and share codes
 
 local Json = require("banktags/core/json")
 local TagRules = require("banktags/tags/tag_rules")
@@ -13,9 +13,9 @@ local VERSION = 3
 local MAX_TEXT_LENGTH = 1000000
 local MAX_TAGS = 1000
 local MAX_FOLDERS = 200
--- Rows, labels, and slots one saved tag may hold, which matches Bank Core's page limit
+-- Rows, labels, and slots one tag may hold, matching Bank Core
 local MAX_TAG_ENTRIES = 10000
--- A shown tag adds an Unsorted label and row, so edits and imports leave room for them
+-- Room for the Unsorted label and row a shown tag adds
 local RENDER_RESERVE = 2
 
 TagData.MAX_TAG_ENTRIES = MAX_TAG_ENTRIES
@@ -31,9 +31,7 @@ function TagData.CopyNumber(layoutKey)
     return math.tointeger(tonumber(string.match(tostring(layoutKey or ""), ":(%d+)$")))
 end
 
--- Write a slot as "" when blank, otherwise as its item reference, then ":<copy>"
--- after the first copy, then "<<copy>" for a ghost's source copy. A blank still
--- holding an item this client cannot resolve writes its saved text back
+-- Write a slot as its reference with copy suffixes, or "" when blank
 local function slotText(slot)
     if slot.kind ~= "item" then return slot.dormant or "" end
     local copy = TagData.CopyNumber(slot.layoutKey) or 1
@@ -42,7 +40,7 @@ local function slotText(slot)
     return source ~= nil and (text .. "<" .. source) or text
 end
 
--- Read one saved slot; an item this client cannot resolve becomes a blank that keeps its text
+-- Read one saved slot, keeping unresolved items as blanks
 local function readSlot(text)
     if type(text) ~= "string" or text == "" then return { kind = "blank" } end
     local item, source = string.match(text, "^(.-)<(%d+)$")
@@ -83,7 +81,7 @@ function TagData.Encode(data, onlyTag)
     return Json.encode(saved)
 end
 
--- Count a tag's rows, labels, row slots, and Unsorted entries, as a save counts them
+-- Count a tag's entries the way a save counts them
 function TagData.EntryCount(tag)
     local count = #tag.unsorted
     for _, entry in ipairs(tag.rows) do
@@ -92,7 +90,7 @@ function TagData.EntryCount(tag)
     return count
 end
 
--- Read one saved tag, dropping anything invalid and repeated item copies
+-- Read one saved tag, dropping invalid entries and repeated copies
 local function readTag(value, entryLimit)
     local tag = {
         icon = type(value.icon) == "string" and value.icon or nil,
@@ -100,7 +98,7 @@ local function readTag(value, entryLimit)
         unsorted = {},
     }
     local seen, count = {}, 0
-    -- Keep a slot unless it repeats an item copy already in this tag
+    -- Keep a slot unless it repeats a copy already in this tag
     local function add(list, text, keepBlank)
         count = count + 1
         local slot = readSlot(text)
@@ -127,8 +125,8 @@ local function readTag(value, entryLimit)
     return tag
 end
 
--- Decode and check saved or pasted tag data. Only a save may hold no tags, and only a
--- save may use the full entry limit; a share code must leave room to show each tag
+-- Decode and check saved or pasted tag data
+-- Only a save may be empty or use the full entry limit
 function TagData.Decode(text, allowEmpty)
     if type(text) ~= "string" or trim(text) == "" then
         return nil, "Paste a bank tag share code first."

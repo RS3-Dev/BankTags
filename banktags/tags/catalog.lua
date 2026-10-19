@@ -1,17 +1,14 @@
--- Search items by name for the sprite picker and layout editor. RuneQL's catalog covers every
--- item when that plugin is loaded; without it the search covers the items in the bank, an
--- exact item ID, and an exact config name
+-- Search items by name, using RuneQL's catalog when it is loaded
 
 local Config = require("banktags/core/config")
 local ObjectConfig = require("banktags/core/object_config")
 
 local Catalog = {}
 
--- Shown beside results when only the bank and exact lookups were searched
+-- Shown beside results when RuneQL is unavailable
 Catalog.LIMITED_HINT = "Without RuneQL, search finds items in your bank, an item ID, or a config name."
 
--- Whether the host last reported RuneQL enabled. An unloaded RuneQL's injected global and
--- published copy can outlive it, so neither is read once the host reports it disabled
+-- RuneQL's globals can outlive it, so trust the host's last report
 local runeqlEnabled = true
 
 -- Follow the host's report that RuneQL loaded or unloaded
@@ -22,7 +19,7 @@ end
 -- Find RuneQL's catalog search when the optional plugin is loaded
 local function runeqlFind()
     if not runeqlEnabled then return nil end
-    -- Either may be missing, so both are checked by position rather than with ipairs
+    -- Either may be nil, so check them by position
     local candidates = { runeql, rawget(_G, Config.RUNEQL_API_KEY) }
     for index = 1, 2 do
         local candidate = candidates[index]
@@ -87,7 +84,7 @@ local function findLimited(query, limit, bankItems)
     return resolved, #resolved
 end
 
--- Search item names, returning results, their total, and whether the search was limited
+-- Search item names, returning results, total, and whether limited
 function Catalog.Find(query, limit, bankItems)
     local find = runeqlFind()
     if find ~= nil then

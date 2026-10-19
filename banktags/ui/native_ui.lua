@@ -1,5 +1,4 @@
--- Provide the native-style pieces Bank Tags draws with: panel sprites, button styles, and
--- sprite rotation
+-- Provide native panel sprites, button styles, and sprite rotation
 
 local NativeUi = {}
 
@@ -11,7 +10,7 @@ local STYLE_FALLBACK_IDS = {
     BUTTON_PANEL = 318,
 }
 
--- Resolve a named native style through host IDs or the known style table
+-- Resolve a native style ID by name
 function NativeUi.styleID(styleName)
     if id ~= nil and id.StyleSheet ~= nil and id.StyleSheet[styleName] ~= nil then
         return id.StyleSheet[styleName]
@@ -19,7 +18,7 @@ function NativeUi.styleID(styleName)
     return STYLE_FALLBACK_IDS[styleName]
 end
 
--- Create a native-style text button and bind its press callback
+-- Create a native-style text button
 function NativeUi.makeButton(parent, x, y, width, height, options)
     options = options or {}
     local button = ui.Button.new(parent)
@@ -35,7 +34,7 @@ function NativeUi.makeButton(parent, x, y, width, height, options)
     return button
 end
 
--- Apply rotation through the host's supported sprite method and property variants
+-- Set sprite rotation through each variant the host supports
 function NativeUi.setSpriteRotation(sprite, rotationRadians, rotationDegrees)
     if sprite.SetRotation ~= nil then
         pcall(function() sprite:SetRotation(rotationRadians) end)

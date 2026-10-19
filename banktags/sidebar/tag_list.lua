@@ -1,6 +1,4 @@
--- Build the tag list that the bank's Tags tab and the layout editor both show: a search
--- field, the sort toggle, and tag and folder rows. The owner places it in its column, draws
--- the footer, and decides what choosing a tag does
+-- Build the tag list shown in the Tags tab and layout editor
 
 local BankControls = require("banktags/ui/bank_controls")
 local Geometry = require("banktags/ui/geometry")
@@ -23,10 +21,10 @@ local TAG_ROW_LEFT = SidebarRows.ROW_LEFT
 local FOLDER_CHEVRON_RIGHT = 8
 local FOLDER_CHEVRON_SIZE = 14
 local FOLDER_LABEL_LEFT = 26
--- Folder members start where the folder name does, so their icons line up beneath it
+-- Indent folder members to line up with the folder name
 local FOLDER_INDENT = FOLDER_LABEL_LEFT - TAG_ROW_LEFT
 local FOLDER_ROW = 0x302A21FF
--- Folder members take a warmer zebra that stays darker than the folder header
+-- Folder members use a warmer zebra, darker than the header
 local FOLDER_ROW_ODD = 0x27231DFF
 local FOLDER_ROW_EVEN = 0x2D2823FF
 local FOLDER_ACCENT_WIDTH = 2
@@ -39,7 +37,7 @@ local function folderKeyOf(entryID)
     return string.sub(entryID, #FOLDER_ENTRY_PREFIX + 1)
 end
 
--- Mark a folder header or member with a left bar that runs the folder's length
+-- Draw a left bar along a folder's header and members
 local function addFolderAccent(root, rowHeight)
     local accent = ui.Rectangle.new(root)
     accent:SetPos(0, 0)
@@ -51,9 +49,7 @@ local function addFolderAccent(root, rowHeight)
     return accent
 end
 
--- Create the list in a parent. options: store, settings, state (kept across rebuilds, holds
--- the search text), width, listHeight, isSelected(tag), onSelect(tag), and onChanged() for
--- order and folder changes other lists should show
+-- Create the tag list in a parent
 function TagList.new(parent, options)
     local self = setmetatable({
         parent = parent,
@@ -104,7 +100,7 @@ function TagList.new(parent, options)
     return self
 end
 
--- Describe the rows: tags in sidebar order, each folder where its first member is
+-- Describe the rows in sidebar order, with folders where they start
 function TagList:Entries()
     local query = string.lower(self.state.searchQuery or "")
     local entries, rowNumber = {}, 0
@@ -145,7 +141,7 @@ function TagList:Entries()
         if node.kind == "tag" then
             if matches(node.tag) then addTag(node.tag, false) end
         else
-            -- A folder-name match lists every member; searches always expand folders
+            -- A folder name match lists every member; searches expand folders
             local folderMatches = query ~= "" and matches(node.name)
             local visible, containsSelected = {}, false
             for _, tag in ipairs(node.tags) do
@@ -160,7 +156,7 @@ function TagList:Entries()
                     enabled = true,
                     expanded = expanded,
                     memberCount = #node.tags,
-                    -- A collapsed folder carries the outline of its hidden selected tag
+                    -- A collapsed folder outlines its hidden selected tag
                     selected = containsSelected and not expanded,
                     backgroundColour = FOLDER_ROW,
                     hoverColour = Theme.ROW_HOVER,
@@ -198,10 +194,10 @@ function TagList:Refresh()
     self:DecorateRows()
 end
 
--- Add folder chevrons and accents, tag icons, selection frames, and sort arrows to the rows
+-- Decorate rows with chevrons, accents, icons, frames, and arrows
 function TagList:DecorateRows()
     local rows = self.list.rows or {}
-    -- The folder bar bridges the gap between rows until the folder's last member
+    -- Extend the folder bar across gaps until its last member
     local function accentHeight(index)
         local nextRow = rows[index + 1]
         if nextRow == nil then return ROW_HEIGHT end
@@ -209,7 +205,7 @@ function TagList:DecorateRows()
         return nextEntry.inFolder and SidebarRows.ENTRY_HEIGHT or ROW_HEIGHT
     end
     for index, row in ipairs(rows) do
-        -- PrettyUI may copy only known entry fields into its rows
+        -- PrettyUI may copy only known entry fields into rows
         local entry = self.entriesByID[row.entry.id] or row.entry
         row.background:SetSize(0, ROW_HEIGHT, 1.0, 0)
         row.label.font = id.Font.MUSEO_SANS_11PT_REGULAR
@@ -223,8 +219,7 @@ function TagList:DecorateRows()
             row.label:SetSize(chevronLeft - FOLDER_LABEL_LEFT - 4, ROW_HEIGHT, 1.0, 0)
             row.label.content = tostring(entry.label or "") .. " (" .. tostring(entry.memberCount or 0) .. ")"
             row.label:MoveToFront()
-            -- The bank arrow faces up and the host turns sprites anticlockwise:
-            -- a half turn faces down for an open folder, three quarters faces right
+            -- Sprites turn anticlockwise from the up-facing bank arrow
             local chevron = ui.Sprite.new(row.root)
             chevron:SetPos(chevronLeft, math.floor((ROW_HEIGHT - FOLDER_CHEVRON_SIZE) / 2), 1.0, 0)
             chevron:SetSize(FOLDER_CHEVRON_SIZE, FOLDER_CHEVRON_SIZE)
@@ -261,7 +256,7 @@ function TagList:DestroySortButtons()
     self.sortButtons = {}
 end
 
--- Add up and down arrows whose bounds come from the entry's whole sibling tier
+-- Add sort arrows bounded by the entry's sibling tier
 function TagList:AddSortArrows(row)
     local position = self.sortPositions[row.entry.id]
     if position == nil then return end
@@ -283,7 +278,7 @@ function TagList:AddSortArrows(row)
     end
 end
 
--- Turn sorting on or off; sorting clears the search so every move has a visible neighbour
+-- Toggle sort mode, clearing the search so moves stay visible
 function TagList:SetSortMode(enabled)
     self.sortMode = enabled == true
     if self.sortMode and (self.state.searchQuery or "") ~= "" then
@@ -315,7 +310,7 @@ function TagList:ToggleFolder(folderKey)
     return true
 end
 
--- Report whether a point in the parent lies inside a component, measured from the parent
+-- Check whether a parent point lies inside a component
 local function contains(component, parent, x, y, scrollY, height)
     local left, top = Geometry.relativePosition(component, parent)
     if left == nil then return false end
@@ -325,9 +320,7 @@ local function contains(component, parent, x, y, scrollY, height)
     return x >= left and x < left + width and y >= top and y < top + height
 end
 
--- Find the row under a point in the parent's coordinates: { kind = "tag", tag } or
--- { kind = "folder", key }, or nil. Rows are measured where they are drawn, so a scrolled
--- list finds the row actually under the point
+-- Find the tag or folder row drawn under a parent point
 function TagList:EntryAt(x, y)
     if x == nil or y == nil or self.list.root.hidden or not contains(self.list.root, self.parent, x, y) then
         return nil
@@ -342,7 +335,7 @@ function TagList:EntryAt(x, y)
     return nil
 end
 
--- Find the drawn row for a tag, such as the one select mode pulses
+-- Find the drawn row for a tag
 function TagList:RowFor(tag)
     for _, row in ipairs(self.list.rows or {}) do
         if row.entry.id == tag then return row end
@@ -350,7 +343,7 @@ function TagList:RowFor(tag)
     return nil
 end
 
--- Resize the row list, as when the select-mode panel opens or closes
+-- Resize the row list
 function TagList:SetListHeight(height)
     self.list:SetSize(SidebarRows.ContentWidth(self.width), height)
 end

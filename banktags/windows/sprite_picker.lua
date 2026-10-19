@@ -1,5 +1,4 @@
--- Choose a tag icon by searching items: the full catalog with RuneQL, otherwise the bank's
--- items, an item ID, or a config name
+-- Choose a tag icon by searching items
 
 local debugLog = require("banktags/core/debug_log").Write
 local Catalog = require("banktags/tags/catalog")
@@ -28,7 +27,7 @@ local GRID_X = math.floor((CONTENT_WIDTH - GRID_WIDTH) / 2)
 local MUTED = 0xA99F8AFF
 local ERROR = Theme.ERROR_TEXT
 
--- Look up an item definition, allowing unavailable catalog entries
+-- Look up an item definition, allowing missing entries
 local function objectFromID(objectID)
     local ok, object = pcall(function()
         return config.Obj.FromID(math.tointeger(objectID))
@@ -36,8 +35,7 @@ local function objectFromID(objectID)
     return ok and object or nil
 end
 
--- Create the tag icon picker. options: bankItems() for the search without RuneQL, and
--- onSelect(result)
+-- Create the tag icon picker
 function SpritePicker.new(parent, options)
     local self = setmetatable({
         bankItems = options.bankItems,
@@ -103,14 +101,14 @@ function SpritePicker.new(parent, options)
     return self
 end
 
--- Display feedback in the editor using the requested text and colour
+-- Show a status message in the picker
 function SpritePicker:SetStatus(message, colour)
     if self.status == nil then return end
     self.status.content = tostring(message or "")
     self.status.rgba = colour or MUTED
 end
 
--- Remove input controls for the previous catalog results
+-- Remove the previous result controls
 function SpritePicker:ClearInteractions()
     for _, tooltip in ipairs(self.tooltips) do pcall(function() tooltip:Destroy() end) end
     for _, hit in ipairs(self.hitTargets) do pcall(function() hit:Destroy() end) end
@@ -118,7 +116,7 @@ function SpritePicker:ClearInteractions()
     self.hitTargets = {}
 end
 
--- Display result rows and bind each choice to its item icon
+-- Show result rows, each choosing its item icon
 function SpritePicker:ShowResults(results, totalMatches, limited)
     self:ClearInteractions()
     local entries = {}
@@ -170,7 +168,7 @@ function SpritePicker:ShowResults(results, totalMatches, limited)
     end
 end
 
--- Search the local catalog and refresh icon choices or report an error
+-- Search items and refresh the choices
 function SpritePicker:RunSearch(value)
     local query = trim(value)
     if query == "" then
@@ -191,12 +189,12 @@ function SpritePicker:RunSearch(value)
     self:ShowResults(results, totalMatches, limited)
 end
 
--- Show the existing editor window
+-- Show the picker window
 function SpritePicker:Show()
     self.window:Show()
 end
 
--- Destroy search result controls and release the picker window
+-- Destroy the result controls and picker window
 function SpritePicker:Destroy()
     self:ClearInteractions()
     if self.grid ~= nil then self.grid:Destroy() end

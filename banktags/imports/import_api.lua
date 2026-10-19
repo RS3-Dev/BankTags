@@ -1,6 +1,4 @@
--- Publish the API other plugins use to add import sources to Bank Tags' Import window.
--- Each plugin registers an owner and adds its sources through the owner's handle; a newer
--- registration under the same owner ID replaces the older one and its sources
+-- Let other plugins add import sources to the Import window
 
 local PlainData = require("banktags/imports/plain_data")
 local ImportProviders = require("banktags/imports/import_providers")
@@ -15,8 +13,7 @@ ImportAPI.LIMITS = {
 }
 local LIMITS = ImportAPI.LIMITS
 
--- Create the owners and the import source registry. readDraft reads a provider's draft into
--- share text, and onChange tells an open Import window that the sources changed
+-- Create the owner and import source registries
 function ImportAPI.new(options)
     local self = setmetatable({ owners = {}, count = 0, closed = false }, ImportAPI)
     self.providers = ImportProviders.new({
@@ -82,9 +79,7 @@ function ImportAPI:Handle(owner)
     })
 end
 
--- Build the root table other plugins receive as the banktags dependency. The host clones a
--- dependency's export before injecting it, so this is a plain table of functions and a copy
--- of the limits: a clone keeps every field, and changing one reaches no registry state
+-- Build the plain, clone-safe table other plugins receive
 function ImportAPI:Root()
     local limits = {}
     for key, value in pairs(LIMITS) do limits[key] = value end

@@ -1,4 +1,4 @@
--- Lay saved layout rows and labels out on a bank grid of any width
+-- Lay saved rows and labels out on a bank grid of any width
 
 local TagRules = require("banktags/tags/tag_rules")
 
@@ -12,12 +12,12 @@ local function blank()
     return { kind = "blank" }
 end
 
--- Report whether a slot is empty and does not reserve an unresolved item
+-- Check whether a slot is empty and reserves no item
 function TagLayouts.IsOpen(slot)
     return type(slot) == "table" and slot.kind == "blank" and slot.dormant == nil
 end
 
--- Report whether a row holds no items and no reserved positions
+-- Check whether a row holds no items or reserved positions
 local function rowIsEmpty(entry)
     for _, slot in ipairs(entry.slots) do
         if not TagLayouts.IsOpen(slot) then return false end
@@ -25,8 +25,7 @@ local function rowIsEmpty(entry)
     return true
 end
 
--- Drop trailing open slots from every row and empty rows from the end
--- Empty rows between entries are kept, since they are deliberate gaps
+-- Trim trailing open slots and trailing empty rows
 function TagLayouts.Trim(entries)
     for _, entry in ipairs(entries) do
         if entry.kind == "row" then TagRules.trimTrailingLayoutBlanks(entry.slots) end
@@ -37,10 +36,7 @@ function TagLayouts.Trim(entries)
     return entries
 end
 
--- Lay entries out at a column count. A row longer than the width wraps onto the
--- next lines, and a label takes a whole line. The view holds the flat grid
--- slots, the label lines, a map from grid index to { entry, position }, and
--- the first line after the layout
+-- Lay entries out at a column count, wrapping long rows
 function TagLayouts.Render(entries, columns)
     columns = math.max(1, math.tointeger(tonumber(columns)) or DEFAULT_COLUMNS)
     local view = { columns = columns, slots = {}, labels = {}, cells = {}, starts = {}, lines = 0 }
@@ -65,8 +61,7 @@ function TagLayouts.Render(entries, columns)
     return view
 end
 
--- Find the entry a new entry should go before to start at a grid line
--- A line inside a wrapped row places it before that whole row
+-- Find the entry a new entry should precede to start at a line
 function TagLayouts.EntryAtLine(view, entries, line)
     for index = 1, #entries do
         local nextStart = view.starts[index + 1] or view.lines
@@ -75,7 +70,7 @@ function TagLayouts.EntryAtLine(view, entries, line)
     return #entries + 1
 end
 
--- Report whether an entry is a row without items or reserved positions
+-- Check whether an entry is a row with nothing in it
 function TagLayouts.IsEmptyRow(entry)
     return entry ~= nil and entry.kind == "row" and rowIsEmpty(entry)
 end
@@ -91,8 +86,7 @@ function TagLayouts.RowSlots(entries)
     return slots
 end
 
--- Find the first open slot in a layout's rows, starting after a position
--- Returns the entry index and slot position, or nil when every slot is filled
+-- Find the first open slot after a position, or nil
 function TagLayouts.FirstOpenSlot(entries, afterEntry, afterPosition)
     afterEntry = afterEntry or 0
     afterPosition = afterPosition or 0
@@ -112,7 +106,7 @@ function TagLayouts.FirstOpenSlot(entries, afterEntry, afterPosition)
     return nil, nil
 end
 
--- Add a slot to the end of the last row, starting a row if the layout ends in a label
+-- Add a slot to the end of the last row
 function TagLayouts.AppendToLastRow(entries, slot)
     local last = entries[#entries]
     if last == nil or last.kind ~= "row" then

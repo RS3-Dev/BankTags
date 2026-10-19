@@ -14,7 +14,7 @@ local function escape(value)
     return value
 end
 
--- Recognize consecutive numeric keys so tables encode as arrays or objects correctly
+-- Check whether a table encodes as a JSON array
 local function isArray(value)
     local count = 0
     for key in pairs(value) do

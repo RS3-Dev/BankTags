@@ -1,5 +1,5 @@
--- Choose the folder a tag is filed under: any other folder, a new folder, or none. Bank
--- Core's menus have no submenus and a few entries each, so the folders are listed here
+-- Choose a tag's folder: another folder, a new folder, or none
+-- Bank Core menus have no submenus, so folders are listed here
 
 local Text = require("banktags/core/text")
 local Theme = require("banktags/ui/theme")
@@ -16,8 +16,7 @@ local CREATE_ENTRY = "__banktags_create_folder"
 local REMOVE_ENTRY = "__banktags_no_folder"
 local FOLDER_PREFIX = "folder:"
 
--- Create the chooser. options: tag, current folder key, folders, onMove(folderKey or nil),
--- onCreate(), and onClose()
+-- Create the folder chooser
 function FolderChooser.new(parent, options)
     local self = setmetatable({ options = options }, FolderChooser)
     self.window = prettyui.Window.new(parent, {

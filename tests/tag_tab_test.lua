@@ -1,8 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Drive the Tags tab Bank Core mounts, only as a player would: many tags and folders,
--- searching, sorting, collapsing folders, choosing tags (one page, a new key each), the
--- footer, row menus, the folder chooser, and Bank Core's View All guidance
+-- Drive the Tags tab Bank Core mounts, as a player would
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -14,7 +12,7 @@ local app = h:App()
 local session, layout = h:OpenBank()
 h:Tick(2)
 
--- Seventy tags, more than Bank Core's 16 tabs or 64 rows, and two folders
+-- Seventy tags, more than Bank Core's 16 tabs or 64 rows
 for index = 1, 70 do assert(app.store:CreateTag(string.format("tag %02d", index))) end
 assert(app.store:CreateTag("melee"))
 assert(app.store:CreateTag("ranged"))
@@ -115,7 +113,7 @@ h:Tick(2)
 assert(app.shownTag == nil and layout.selectedTag == nil and guidance == "not_all_items")
 layout.nativeViewAll, layout.DetectNativeViewAll, layout.ShowPageGuidance = true, detect, showGuidance
 
--- Scroll the list so a row is at its top, as the player would, and point at that row
+-- Scroll a row to the top of the list and point at it
 local function pointAtRow(entryID)
     list = tab.controls.list
     local row = nil
@@ -127,8 +125,7 @@ local function pointAtRow(entryID)
     return row
 end
 
--- A row far down the list is found where it is drawn once scrolled, not where it would
--- be unscrolled
+-- A scrolled row is found where it is drawn
 local melee = pointAtRow("melee")
 assert(melee.root.y > list.list.root.height, "melee starts below the visible list")
 

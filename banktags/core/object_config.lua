@@ -1,4 +1,4 @@
--- Bridge durable config names, display names, and the native object IDs the client uses
+-- Map config names, display names, and client object IDs
 
 local ObjectConfig = {}
 

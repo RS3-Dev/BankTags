@@ -1,7 +1,4 @@
--- Draw the Tags tab Bank Core mounts in its sidebar: the tag list, a status line, the
--- select-mode panel, and the footer with Import/Share, New Tag, and the layout editor.
--- Item drops over the column arrive through Bank Core's mount callbacks; right-clicks over
--- its rows are Bank Tags' own menus
+-- Draw the Tags tab Bank Core mounts in its sidebar
 
 local BankControls = require("banktags/ui/bank_controls")
 local Geometry = require("banktags/ui/geometry")
@@ -21,8 +18,7 @@ local STATUS_HEIGHT = 40
 local PANEL_HEIGHT = 156
 local PANEL_INSET = 10
 
--- Create the tab's mount callbacks for an app; the same functions stay registered, so
--- Bank Core keeps the column mounted across tab updates
+-- Create the tab's mount callbacks, kept registered across updates
 function TagTab.new(app)
     local self = setmetatable({ app = app, ctx = nil, controls = nil, listState = { searchQuery = "" } },
         TagTab)
@@ -43,7 +39,7 @@ function TagTab:IsMounted()
     return self.controls ~= nil
 end
 
--- Describe what decides the column's arrangement, so a refresh rebuilds only when it changes
+-- Describe the column's arrangement so refreshes rebuild only on change
 function TagTab:Arrangement()
     return tostring(self.app.select:Tag()) .. "\n" .. tostring(self.app.status) .. "\n"
         .. tostring(self.app.shownTag ~= nil)
@@ -91,7 +87,7 @@ local function addRectangle(parent, x, y, width, height, colour)
     return value
 end
 
--- Draw the select-mode panel: the tag being filled, how select mode works, and Done
+-- Draw the select-mode panel with its tag, help, and Done
 function TagTab:BuildSelectPanel(controls, top, width)
     local app, parent = self.app, controls.parent
     local tag = app.select:Tag()
@@ -129,7 +125,7 @@ function TagTab:BuildSelectPanel(controls, top, width)
     })
 end
 
--- Draw the footer: Import/Share, New Tag, and the layout editor for the shown tag
+-- Draw the footer with Import/Share, New Tag, and the layout editor
 function TagTab:BuildFooter(controls, height, width)
     local app, parent, owned = self.app, controls.parent, controls.owned
     local top = height - 36
@@ -159,7 +155,7 @@ function TagTab:BuildFooter(controls, height, width)
     end
 end
 
--- Build the whole column inside Bank Core's parent, replacing anything built before
+-- Build the column inside Bank Core's parent
 function TagTab:Build()
     self:DestroyControls()
     local ctx = self.ctx
@@ -169,7 +165,7 @@ function TagTab:Build()
     local parent, overlay = ctx.parent, ctx.overlay
     local width = SidebarRows.ContentWidth(bounds.width)
     local controls = { parent = parent, owned = {}, arrangement = self:Arrangement() }
-    -- Tooltips draw in the window-wide overlay so the column does not clip them
+    -- Tooltips draw in the overlay so the column does not clip them
     prettyui.Tooltip.registerContext(parent, overlay, function(target)
         local x, y = Geometry.absolutePosition(target)
         local originX, originY = Geometry.absolutePosition(overlay)
@@ -203,7 +199,7 @@ function TagTab:Build()
     self:BuildFooter(controls, bounds.height, width)
 end
 
--- Show the store's current tags, rebuilding the column only when its arrangement changed
+-- Show current tags, rebuilding only when the arrangement changed
 function TagTab:Refresh()
     if self.controls == nil then return end
     if self.controls.arrangement ~= self:Arrangement() then
@@ -218,16 +214,15 @@ function TagTab:RowFor(tag)
     return self.controls ~= nil and self.controls.list:RowFor(tag) or nil
 end
 
--- Report whether a point in the column lies on the New Tag button
+-- Check whether a column point lies on the New Tag button
 function TagTab:OnNewTag(x, y)
     local button = self.controls.newTagButton
     local left, top = Geometry.relativePosition(button.root, self.controls.parent)
     return left ~= nil and x >= left and x < left + button.width and y >= top and y < top + button.height
 end
 
--- Add a native item dropped on a tag row to that tag, or start a new tag with it when it
--- lands on New Tag. A drop from All Items tags the copy dragged; a numbered tab's order is
--- its own, so Bank Core names no copy and the drop tags the object's first copy
+-- Tag a dropped item, or start a new tag from New Tag
+-- Numbered tabs name no copy, so those drops tag the first copy
 function TagTab:Drop(item, x, y)
     if self.controls == nil or item.view ~= "native" then return end
     local objectID = type(item.objectID) == "number" and math.tointeger(item.objectID) or nil

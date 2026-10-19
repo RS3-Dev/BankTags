@@ -1,10 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Drive Bank Tags' actions through Bank Core: Remove from the shown tag over a stack, a
--- ghost, and a slot with no stack; entries dropped when the page changed; no entries on
--- native items outside select mode; drops onto tag rows and New Tag from any native tab;
--- select mode from start to every way it ends; and bank snapshots held while Core is
--- still reading the bank
+-- Drive Bank Tags' item menus, drops, select mode, and bank snapshots
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -23,7 +19,7 @@ h:Tick(2)
 
 local ItemIdentity = require("banktags/tags/item_identity")
 local key = ItemIdentity.LayoutKey
--- Save a tag's rows directly, as an earlier session would have
+-- Save a tag's rows directly, as a past session would
 local function item(objectID, copy, source)
     return { kind = "item", objectID = objectID, layoutKey = key(objectID, copy),
         sourceLayoutKey = source ~= nil and key(objectID, source) or nil }
@@ -64,7 +60,7 @@ assert(app:ShowTag("melee"))
 h:Tick(2)
 assert(layout.pageState.view.key == "tag:melee")
 
--- A ghost removes the copy it was drawn for, though the stack beneath is copy 1
+-- A ghost removes its own copy, not the stack beneath
 pointAt(52, 4)
 h:Tick()
 assert(layout.nativeLease:HasInteractionLease())
@@ -73,7 +69,7 @@ Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
 assert(app.store:HasTag("melee", key(4151, 3)))
 h:Tick(2)
 assert(not app.store:HasTag("melee", key(4151, 3)) and app.store:HasTag("melee", key(4151, 1)))
--- The page shows the change in place: the ghost's slot is blank now
+-- The page shows the ghost's slot as blank
 local rows = app.store.data.tags.melee.rows[1].slots
 assert(rows[2].kind == "blank" and rows[3].layoutKey == key(4151, 2))
 
@@ -85,7 +81,7 @@ Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
 h:Tick(2)
 assert(not app.store:HasTag("melee", key(4151, 2)) and app.store:HasTag("melee", key(4151, 1)))
 
--- A slot with no stack in the bank answers too; Cancel stays its left click
+-- A slot with no stack answers too; Cancel stays its left click
 pointAt(140, 4)
 h:Tick()
 menu = h:ContentMenu()
@@ -138,8 +134,7 @@ assert(app.status == nil, tostring(app.status))
 layout:SetNativeViewAll(false)
 h:Tick(2)
 assert(app.status == nil, tostring(app.status))
--- A drop from a numbered tab carries no copy, since that tab's order is its own, so it
--- tags the object's first copy: the second whip joins as copy 1
+-- Numbered tabs carry no copy, so a drop tags copy 1
 assert(app.store:CreateTag("tabbed"))
 app:Changed()
 pointAtRow("tabbed")
@@ -174,7 +169,7 @@ h:Tick(2)
 assert(not app.store:HasTag("tabbed", key(385, 1)))
 assert(app.store:DeleteTag("tabbed") and app.store:DeleteTag("placeholder 2"))
 app:Changed()
--- A copy Bank Core could not number is never guessed by anything but a drop
+-- Only a drop may leave a copy unnumbered
 assert(not app:AddItemToTag("ranged", 4151, nil) and not app.store:HasTag("ranged", key(4151, 1)))
 layout.nativeViewAll, layout.DetectNativeViewAll = true, detect
 app:ShowStatus(nil)
@@ -184,7 +179,7 @@ assert(app.status == nil)
 
 -- Select mode -------------------------------------------------------------------------
 
--- Select items starts select mode: Bank Core outlines the members, and the tab shows the panel
+-- Select items starts select mode, outlining members and showing the panel
 pointAtRow("ranged")
 menu = h:ContentMenu()
 Harness.Choose(menu, "Select items <col=f2c66d>Ranged</col>")
@@ -249,8 +244,7 @@ h:Tick(2)
 
 -- Bank snapshots ---------------------------------------------------------------------
 
--- The editor and search read the last good snapshot; Core holds a new generation while a
--- shown page has not read the bank again, and Bank Tags keeps the old one meanwhile
+-- The editor and search keep the last good snapshot while Core rereads
 assert(app.bankItems ~= nil)
 local before = app.bankItems.generation
 assert(app:ShowTag("fighting"))

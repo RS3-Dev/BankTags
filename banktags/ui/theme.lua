@@ -1,4 +1,4 @@
--- Name the colours shared across the bank sidebar, editor, and panels by purpose
+-- Name shared colours by purpose
 
 local Theme = {}
 

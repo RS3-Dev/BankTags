@@ -17,7 +17,7 @@ local LABEL_DROP_COLOUR = 0xD2A84D40
 
 local LayoutEditorDrag = {}
 
--- Return an expanded drag-capture surface to its normal panel bounds
+-- Return a drag surface to its panel bounds
 function LayoutEditorDrag:RestoreDragSurface(surface, kind)
     if surface == nil then return end
     if kind == "center" then
@@ -34,7 +34,7 @@ function LayoutEditorDrag:RestoreDragSurface(surface, kind)
     surface:MoveToFront()
 end
 
--- Expand the active input surface so a drag continues across editor panels
+-- Expand a drag surface so drags cross editor panels
 function LayoutEditorDrag:CaptureDragSurface(surface, kind)
     if surface == nil then return false end
     self:RestoreDragSurface(surface, kind)
@@ -50,12 +50,12 @@ function LayoutEditorDrag:CaptureDragSurface(surface, kind)
     return true
 end
 
--- Resolve a center-panel pointer to an editable layout slot
+-- Find the layout slot under a center-panel point
 function LayoutEditorDrag:CenterSurfaceSlot(x, y)
     return self:SlotIndexAt(tonumber(x), tonumber(y))
 end
 
--- Resolve a search-panel pointer to a catalog result row
+-- Find the search result under a search-panel point
 function LayoutEditorDrag:SearchSurfaceResult(y)
     y = tonumber(y)
     if y == nil then return nil end
@@ -64,20 +64,20 @@ function LayoutEditorDrag:SearchSurfaceResult(y)
     return self.searchResults[index]
 end
 
--- Route one input surface's press, drag, and release into the editor's gesture
+-- Route a surface's press, drag, and release to the editor
 function LayoutEditorDrag:BindDragSurface(surface, onPress, onScroll)
     surface:Subscribe(ui.Hook.ONCLICK, function(_, x, y)
         if self.drag ~= nil then return false end
         return onPress(x, y)
     end)
-    -- Update the active drag only while this surface owns the gesture
+    -- Update the drag only while this surface owns it
     local function continueDrag()
         if self.drag == nil or self.drag.sourceSurface ~= surface then return false end
         return self:UpdateDragFromMouse()
     end
     surface:Subscribe(ui.Hook.ONHOLD, continueDrag)
     surface:Subscribe(ui.Hook.ONDRAG, continueDrag)
-    -- Commit the drop and restore the normal input surface
+    -- Commit the drop and restore the surface
     local function release()
         if self.drag == nil or self.drag.sourceSurface ~= surface then return false end
         return self:CommitDragFromMouse()
@@ -95,11 +95,11 @@ function LayoutEditorDrag:CreateDragSurface(kind)
     return surface
 end
 
--- Bind persistent input surfaces for moving layout entries and adding catalog results
+-- Bind the surfaces that move entries and add search results
 function LayoutEditorDrag:CreateDragSurfaces()
     self.centerDragSurface = self:CreateDragSurface("center")
     self:BindDragSurface(self.centerDragSurface, function(x, y)
-        -- Label rows sit beneath this surface, so pressing one starts a label drag
+        -- Label rows sit beneath this surface, so pressing one drags it
         local labelRow = self:LabelRowAt(x, y)
         if labelRow ~= nil then
             return self:BeginLabelDrag(labelRow, self.centerDragSurface, "center", x, y)
@@ -125,7 +125,7 @@ function LayoutEditorDrag:CreateDragSurfaces()
     end)
 end
 
--- Create a non-interactive item sprite that follows the editor drag
+-- Create an item sprite that follows the drag
 function LayoutEditorDrag:CreateDragGhost(
     objectID, x, y, layoutKey, absentIsPlaceholder
 )
@@ -142,7 +142,7 @@ function LayoutEditorDrag:CreateDragGhost(
     return ghost, width, height
 end
 
--- Convert the screen pointer into coordinates within the editor content
+-- Convert the screen pointer to editor content coordinates
 function LayoutEditorDrag:ContentPointer()
     local pointerX, pointerY = interfaceMousePosition()
     local context = self.window ~= nil and self.window.tooltipContext or nil
@@ -153,14 +153,14 @@ function LayoutEditorDrag:ContentPointer()
     return pointerX - originX, pointerY - originY
 end
 
--- Move the current drag from the host's latest mouse position
+-- Move the drag to the latest mouse position
 function LayoutEditorDrag:UpdateDragFromMouse()
     local x, y = self:ContentPointer()
     if x == nil then return false end
     return self:UpdateDragAt(x, y)
 end
 
--- Commit the current drop using the host's latest mouse position
+-- Commit the drop at the latest mouse position
 function LayoutEditorDrag:CommitDragFromMouse()
     local x, y = self:ContentPointer()
     local drag = self.drag
@@ -170,7 +170,7 @@ function LayoutEditorDrag:CommitDragFromMouse()
     return self:CommitDragAt(x, y)
 end
 
--- Remember the selected layout entry and begin moving its ghost sprite
+-- Start dragging the selected layout entry
 function LayoutEditorDrag:BeginCenterDrag(index, hit, x, y)
     local slot = index ~= nil and self.centerSlots[index] or nil
     if type(slot) ~= "table" or slot.kind ~= "item" then
@@ -206,7 +206,7 @@ function LayoutEditorDrag:BeginCenterDrag(index, hit, x, y)
     return false
 end
 
--- Preserve a changed drop position while leaving ordinary click-release selection inert
+-- Save a moved item, leaving a plain click as selection
 function LayoutEditorDrag:FinishCenterDrag(x, y)
     if self.drag == nil or self.drag.kind ~= "layout" then return false end
     local drag = self.drag
@@ -229,7 +229,7 @@ function LayoutEditorDrag:FinishCenterDrag(x, y)
     return false
 end
 
--- Convert a result-row pointer into editor content coordinates
+-- Convert a result-row point to editor content coordinates
 function LayoutEditorDrag:SearchPointer(hit, x, y)
     local originX, originY = relativePosition(hit, self.content)
     if originX == nil then return nil, nil end
@@ -238,7 +238,7 @@ function LayoutEditorDrag:SearchPointer(hit, x, y)
             - (tonumber(self.searchList and self.searchList.scrollY) or 0)
 end
 
--- Remember a catalog result and begin dragging it into the editable layout
+-- Start dragging a search result into the layout
 function LayoutEditorDrag:BeginSearchDrag(result, hit, x, y)
     if result == nil then return false end
     if self.selectedTag == nil then
@@ -268,7 +268,7 @@ function LayoutEditorDrag:BeginSearchDrag(result, hit, x, y)
     return false
 end
 
--- Move the ghost and highlight the current destination within the layout grid
+-- Move the ghost and highlight its destination
 function LayoutEditorDrag:UpdateDragAt(x, y)
     if self.drag == nil then return false end
     self.drag.pointerX = tonumber(x) or self.drag.pointerX
@@ -287,7 +287,7 @@ function LayoutEditorDrag:UpdateDragAt(x, y)
     return false
 end
 
--- Find the grid row under an editor-content pointer
+-- Find the grid row under a content point
 function LayoutEditorDrag:RowFromContentPoint(x, y)
     x, y = tonumber(x), tonumber(y)
     if x == nil or y == nil then return nil end
@@ -298,7 +298,7 @@ function LayoutEditorDrag:RowFromContentPoint(x, y)
     return self:RowAt(x - viewX, y - viewY)
 end
 
--- Shade the whole row a dragged label would claim
+-- Shade the row a dragged label would take
 function LayoutEditorDrag:ShowLabelDropRow(row)
     if self.drag == nil then return end
     if row == nil then
@@ -315,7 +315,7 @@ function LayoutEditorDrag:ShowLabelDropRow(row)
     self.drag.highlight:MoveToFront()
 end
 
--- Create a heading-styled ghost that follows a label drag
+-- Create a heading-styled ghost for a label drag
 function LayoutEditorDrag:CreateLabelGhost(text, x, y)
     local ghost = ui.Layer.new(self.content)
     ghost:SetPos(
@@ -339,7 +339,7 @@ function LayoutEditorDrag:CreateLabelGhost(text, x, y)
     return ghost
 end
 
--- Begin dragging an existing label row, or a new label from the right panel
+-- Start dragging a label row or a new label
 function LayoutEditorDrag:BeginLabelDrag(fromRow, hit, kind, x, y)
     if self.selectedTag == nil then
         self:ShowError("Choose a tag before adding a label.")
@@ -355,7 +355,7 @@ function LayoutEditorDrag:BeginLabelDrag(fromRow, hit, kind, x, y)
     local text = fromRow ~= nil and self.store:GetLabel(self.selectedTag, fromRow, Size.CENTER_COLUMNS)
         or "New label"
     local ghost = self:CreateLabelGhost(text, pointX, pointY)
-    -- A press on New label may only be a click, so its ghost waits for a drag
+    -- A press on New label may be a click, so the ghost waits
     ghost.hidden = fromRow == nil
     self.drag = {
         kind = "label",
@@ -372,7 +372,7 @@ function LayoutEditorDrag:BeginLabelDrag(fromRow, hit, kind, x, y)
     return false
 end
 
--- Report whether an editor-content point is over the New label button
+-- Check whether a content point is over New label
 function LayoutEditorDrag:OnLabelButton(x, y)
     x, y = tonumber(x), tonumber(y)
     if x == nil or y == nil then return false end
@@ -381,8 +381,7 @@ function LayoutEditorDrag:OnLabelButton(x, y)
         and y >= top and y < top + Size.FOOTER_HEIGHT
 end
 
--- Choose where a clicked New label goes: above the selected item's row, or
--- after the arranged items when nothing is selected
+-- Pick a new label's row: above the selection, or after the items
 function LayoutEditorDrag:DefaultLabelRow()
     for index, slot in ipairs(self.centerSlots) do
         if type(slot) == "table" and slot.kind == "item" and not slot.unarranged
@@ -390,12 +389,11 @@ function LayoutEditorDrag:DefaultLabelRow()
             return math.floor((index - 1) / Size.CENTER_COLUMNS)
         end
     end
-    -- The store clamps rows past the layout to the first row after it
+    -- The store clamps rows past the layout to its end
     return math.maxinteger
 end
 
--- Drop a label: a new one asks for its text, a moved one saves its new row,
--- and releasing a label where it started opens it for renaming
+-- Drop a label, asking for text, moving it, or renaming in place
 function LayoutEditorDrag:FinishLabelDrag(x, y)
     local drag = self.drag
     if drag == nil or drag.kind ~= "label" then return false end
@@ -418,7 +416,7 @@ function LayoutEditorDrag:FinishLabelDrag(x, y)
     return false
 end
 
--- Find a valid layout slot under an editor-content pointer
+-- Find a layout slot under a content point
 function LayoutEditorDrag:DestinationFromContentPoint(x, y)
     local viewX = Size.CENTER_X + Size.CENTER_VIEW_X
     local viewY = Size.PANEL_TOP + Size.CENTER_VIEW_Y
@@ -427,7 +425,7 @@ function LayoutEditorDrag:DestinationFromContentPoint(x, y)
     return self:SlotIndexAt(x - viewX, y - viewY)
 end
 
--- Add the dragged catalog item only when released onto a valid layout slot
+-- Add the dragged result when dropped on a layout slot
 function LayoutEditorDrag:FinishSearchDrag(x, y)
     if self.drag == nil or self.drag.kind ~= "search" then return false end
     local drag = self.drag
@@ -439,7 +437,7 @@ function LayoutEditorDrag:FinishSearchDrag(x, y)
     return false
 end
 
--- Finish the active drag according to whether its source is the layout or catalog
+-- Finish a layout or search drag
 function LayoutEditorDrag:CommitDragAt(x, y)
     local drag = self.drag
     local kind = drag ~= nil and drag.kind or nil
@@ -452,7 +450,7 @@ function LayoutEditorDrag:CommitDragAt(x, y)
     return false
 end
 
--- Commit or cancel the active gesture according to its source panel
+-- Commit or cancel the active drag
 function LayoutEditorDrag:FinishDrag(commit)
     local drag = self.drag
     self.drag = nil

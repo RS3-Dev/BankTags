@@ -1,7 +1,5 @@
--- Run select mode: "Add to <tag>" is the left click on native bank items, Bank Core
--- outlines the tag's members in gold, and the Tags tab shows the tag being filled, pulses
--- its row, and offers Done. Bank Tags owns the session; Bank Core owns only the outline,
--- which it clears whenever a page or another view needs the bank's own looks
+-- Run select mode, where left-clicking bank items adds them to a tag
+-- Bank Core owns only the gold outline
 
 local Config = require("banktags/core/config")
 local ItemIdentity = require("banktags/tags/item_identity")
@@ -14,7 +12,7 @@ SelectMode.__index = SelectMode
 local PULSE_EVENT = Config.PLUGIN_REF .. "_select_pulse"
 local PULSE_PERIOD = 100
 
--- What the tab says when select mode cannot start or ends without the player
+-- Messages for when select mode cannot start or ends early
 local REFUSALS = {
     not_all_items = 'Select "All Items" before choosing items for a tag.',
     preset_open = 'Select "Return to Bank" before choosing items for a tag.',
@@ -44,14 +42,13 @@ function SelectMode:Label()
     return "Add to " .. Text.plain(Text.titleCase(self.session.tag))
 end
 
--- Report whether Bank Core still shows the session's outline, read now rather than from
--- the last state Bank Tags heard
+-- Check whether Bank Core still shows the outline
 function SelectMode:IsShown()
     local handle = self.app.handle
     return self.session ~= nil and handle ~= nil and handle:GetState().highlighted == true
 end
 
--- List a tag's members as the item copies Bank Core outlines, in a stable order
+-- List a tag's members as the copies Bank Core outlines
 local function highlight(store, tag)
     local keys = {}
     for key in pairs(store:Members(tag) or {}) do keys[#keys + 1] = key end
@@ -64,8 +61,7 @@ local function highlight(store, tag)
     return copies
 end
 
--- Start choosing items for a tag, leaving a shown tag first; a second start for the same
--- tag stops instead
+-- Start choosing items for a tag, or stop if already choosing
 function SelectMode:Toggle(tag)
     if self:Tag() == tag then return self:Stop() end
     return self:Start(tag)
@@ -76,7 +72,7 @@ function SelectMode:Start(tag)
     local app = self.app
     local handle = app.handle
     if handle == nil then return false end
-    -- Select mode works on the bank's own view, so a shown tag closes first
+    -- Select mode needs the bank's own view
     if handle:GetState().openPage ~= nil then handle:LeavePage() end
     local started, reason = handle:SetItemHighlight(highlight(app.store, tag))
     if not started then
@@ -97,8 +93,7 @@ function SelectMode:Picked(session, item)
     if self.app:AddItemToTag(session.tag, item.objectID, item.copy) then self:Refresh() end
 end
 
--- End the session once Bank Core no longer shows its outline, explaining why when the
--- bank cannot show it now; a page that opened ends it quietly
+-- End the session once Bank Core drops its outline
 function SelectMode:Follow(state)
     if self.session == nil or state.highlighted then return end
     self.session = nil
@@ -130,8 +125,7 @@ function SelectMode:Rename(oldTag, newTag)
     self:Refresh()
 end
 
--- Outline the tag's members again after they change, or end the session when Bank Core
--- has cleared the outline since
+-- Outline the tag's members again, or end a cleared session
 function SelectMode:Refresh()
     local handle = self.app.handle
     if self.session == nil or handle == nil then return end
@@ -141,7 +135,7 @@ function SelectMode:Refresh()
     if not updated then debugLog("Bank Tags could not update select mode: ", tostring(reason)) end
 end
 
--- Pulse the tag's row while the session runs, so the tag being filled stays obvious
+-- Pulse the tag's row while the session runs
 function SelectMode:StartPulse()
     self:StopPulse()
     Event.Logic.Subscribe(PULSE_EVENT, function() self:Pulse() end)
@@ -162,7 +156,7 @@ function SelectMode:Pulse()
     self:SetRowAlpha(0.62 + wave * 0.38, 0.4 + wave * 0.6)
 end
 
--- Set the selected row's fill and frame opacity, when the Tags tab shows it
+-- Set the selected row's fill and frame opacity
 function SelectMode:SetRowAlpha(backgroundAlpha, borderAlpha)
     local row = self.session ~= nil and self.app.tab:RowFor(self.session.tag) or nil
     if row == nil then return end

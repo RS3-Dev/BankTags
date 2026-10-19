@@ -1,5 +1,4 @@
--- Describe one saved tag as the Bank Core page that shows it. Every tag is shown through a
--- single page whose key names the tag, so Bank Core keeps one page however many tags exist
+-- Describe a saved tag as the single Bank Core page that shows it
 
 local Text = require("banktags/core/text")
 local TagData = require("banktags/tags/tag_data")
@@ -7,7 +6,7 @@ local ItemIdentity = require("banktags/tags/item_identity")
 
 local TagPage = {}
 
--- The one page ID Bank Tags registers, and the label above Unsorted items
+-- The one page ID Bank Tags registers
 TagPage.PAGE_ID = "tag"
 TagPage.UNSORTED_LABEL = "Unsorted"
 local KEY_PREFIX = "tag:"
@@ -30,9 +29,7 @@ function TagPage.Title(tag)
     return Text.titleCase(tag)
 end
 
--- Turn one saved slot into a page slot: an object ID for a first copy, a table for a later
--- copy or a ghost, and false for a blank or an item this client cannot resolve. A copy the
--- page already shows becomes a blank rather than refusing the whole page
+-- Turn a saved slot into a page slot, blanking repeated copies
 local function pageSlot(slot, seen)
     if slot.kind ~= "item" then return false end
     local objectID, copy = ItemIdentity.ParseKey(slot.layoutKey)
@@ -44,13 +41,12 @@ local function pageSlot(slot, seen)
     return { item = objectID, copy = copy, source = source }
 end
 
--- Lay a tag's rows out as page rows, with its Unsorted items last under their own label.
--- Returns the rows and how many page entries they use
+-- Lay a tag out as page rows, with Unsorted items last
 function TagPage.Rows(record)
     local rows, seen, count = {}, {}, 0
     for _, entry in ipairs(record.rows) do
         if entry.kind == "label" then
-            -- Bank Core refuses control characters, which saved label text may still hold
+            -- Bank Core refuses control characters in label text
             local text = string.gsub(entry.text, "%c", "")
             rows[#rows + 1] = text ~= "" and { label = text } or { slots = {} }
             count = count + 1
@@ -76,8 +72,7 @@ function TagPage.Rows(record)
     return rows, count
 end
 
--- Describe the page that shows a tag, or a notice page when the tag is too large to show.
--- noticeMount draws the notice; the second result is the notice text, if any
+-- Describe a tag's page, or a notice page when it is too large
 function TagPage.Build(store, tag, noticeMount)
     local record = store.data.tags[tag]
     if record == nil then return nil, "The tag no longer exists." end
@@ -86,7 +81,7 @@ function TagPage.Build(store, tag, noticeMount)
     if count <= TagPage.MAX_ENTRIES then
         return { title = title, key = TagPage.Key(tag), layout = rows }, nil
     end
-    -- The saved tag stays whole; it is only too large for Bank Core to draw
+    -- The saved tag stays whole; Bank Core just cannot draw it
     local notice = "This tag has " .. count .. " rows, labels, and items. Bank Core shows at most "
         .. TagPage.MAX_ENTRIES .. ". Remove some in the layout editor to show it."
     return { title = title, key = TagPage.Key(tag), mount = noticeMount,

@@ -1,11 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Click through the Tags tab and the bank the way the live client delivers clicks: a left
--- click on a tag row reaches the row and also runs the menu's default, and a plugin's
--- menu entries land just above Cancel rather than where the API documents. Choosing a
--- shown tag again leaves it; another tag replaces it; a native tab or another extension's
--- tab leaves it. Select mode started from a shown tag tags several native items in a row
--- with plain left clicks and withdraws none, across a bank rebuild, and stops on Done
+-- Click tag rows and bank items the way the live client delivers clicks
+-- Covers showing and leaving tags and select mode's plain left clicks
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -26,7 +22,7 @@ assert(app.store:AddTag("melee", 4151, key(4151, 1)))
 assert(app.store:AddTag("ranged", 385, key(385, 1)))
 app:Changed()
 
--- Left-click a tag row: the row hears the click and the host runs the menu's default
+-- Left-click a tag row, which also runs the menu's default
 local function clickRow(tag)
     local row = app.tab:RowFor(tag)
     app.tab.controls.list.list.scrollY = row.root.y
@@ -34,7 +30,7 @@ local function clickRow(tag)
     local default = Harness.LeftClick(h:ContentMenu())
     app.tab.controls.list.list:Click(tag)
     h:Tick(2)
-    -- No row entry is the left click, so no window opens behind the player's back
+    -- No row entry is the left click, so no window opens unasked
     assert(default == "Cancel", tostring(default))
     assert(app.windows.folderChooser == nil and app.windows.tagDeleteConfirm == nil
         and app.windows.tagSettingsEditor == nil)
@@ -62,8 +58,7 @@ h:Tick(2)
 clickRow("melee")
 assert(app.shownTag == "melee")
 
--- Another extension's tab leaves the shown tag and unmounts the Tags tab; coming back
--- mounts it again
+-- Another extension's tab leaves the shown tag and unmounts the Tags tab
 local other = assert(session.publicAPI.RegisterExtension("other", "Other"))
 assert(other:RegisterTab("notes", { label = "Notes", icon = "STAR", rows = {} }))
 h:Tick(2)

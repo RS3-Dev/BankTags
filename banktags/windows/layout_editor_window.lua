@@ -1,7 +1,4 @@
--- Build the standalone layout editor over the bank: its window, tag column, grid, labels,
--- and item buttons. Drag gestures and catalog search are in layout_editor_drag.lua and
--- layout_editor_search.lua; measurements are shared through layout_editor_parts.lua.
--- The bank's size, columns, and items come from Bank Core's state and item snapshots
+-- Build the layout editor over the bank: tag column, grid, labels, and buttons
 
 local Config = require("banktags/core/config")
 local NativeUi = require("banktags/ui/native_ui")
@@ -24,7 +21,7 @@ LayoutEditorWindow.__index = LayoutEditorWindow
 require("banktags/windows/layout_editor_drag").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_search").install(LayoutEditorWindow)
 
--- Errors show over the bottom of the grid for about four seconds, fading out
+-- Errors show over the grid's bottom for about four seconds
 local ERROR_HEIGHT = 40
 local ERROR_INSET = 8
 local ERROR_SHOW_TICKS = 200
@@ -48,15 +45,14 @@ local DRAG_EVENT = Config.PLUGIN_REF .. "_layout_editor"
 local FOOTER_BUTTON_GAP = 8
 local ICON_BUTTON_SIZE = 28
 
--- Destroy recorded UI nodes in reverse order, allowing host-removed components
+-- Destroy recorded UI nodes in reverse, allowing removed ones
 local function destroyAll(values)
     for index = #(values or {}), 1, -1 do
         pcall(function() values[index]:Destroy() end)
     end
 end
 
--- Create the layout editor over the bank. options: store, settings(), tag, Bank Core's
--- columns and bank bounds, the bank's items, and the app's callbacks
+-- Create the layout editor over the bank
 function LayoutEditorWindow.new(parent, options)
     local self = setmetatable({
         store = options.store,
@@ -112,8 +108,7 @@ function LayoutEditorWindow.new(parent, options)
             if onClose ~= nil then onClose(self) end
         end,
     })
-    -- This is a modal editing surface rather than a floating utility. Remove
-    -- PrettyUI's title-bar drag capture so the bank-sized window remains fixed
+    -- Remove PrettyUI's title-bar drag so the editor stays over the bank
     if self.window.titleDrag ~= nil then
         pcall(function() self.window.titleDrag:Destroy() end)
         self.window.titleDrag = nil
@@ -130,7 +125,7 @@ function LayoutEditorWindow.new(parent, options)
     return self
 end
 
--- Report whether the editor was sized for the bank's current columns and size
+-- Check whether the editor fits the bank's columns and size
 function LayoutEditorWindow:FitsBank(columns, bounds)
     return columns == self.columns and bounds.width == self.bounds.width
         and bounds.height == self.bounds.height
@@ -142,14 +137,14 @@ function LayoutEditorWindow:MoveTo(bounds)
     self:KeepOnTop()
 end
 
--- Remember each bank copy's quantity, and each object's best stack, from Bank Core's items
+-- Remember copy quantities and each object's best stack
 function LayoutEditorWindow:SetBankItems(items)
     local byKey, byObject = {}, {}
     for _, item in ipairs(items or {}) do
         local style = { quantity = item.quantity, placeholder = item.placeholder }
         byKey[ItemIdentity.LayoutKey(item.objectID, item.copy)] = style
         local existing = byObject[item.objectID]
-        -- A real bank stack is a better source than a placeholder for the same object
+        -- A real stack beats a placeholder for the same object
         if existing == nil or (existing.placeholder and not style.placeholder) then
             byObject[item.objectID] = style
         end
@@ -159,7 +154,7 @@ function LayoutEditorWindow:SetBankItems(items)
     if self.centerView ~= nil then self:RefreshCenter() end
 end
 
--- Show changes made outside the editor, keeping the open tag when it still exists
+-- Show outside changes, keeping the open tag if it still exists
 function LayoutEditorWindow:StoreChanged()
     if self.window == nil then return end
     if self.selectedTag ~= nil and self.store.data.tags[self.selectedTag] == nil then
@@ -170,7 +165,7 @@ function LayoutEditorWindow:StoreChanged()
     self:RefreshCenter()
 end
 
--- Create one editor column at its fixed panel offset
+-- Create one editor column at its panel offset
 function LayoutEditorWindow:Panel(x, width)
     local panel = ui.Layer.new(self.content)
     panel:SetPos(x, Size.PANEL_TOP)
@@ -179,7 +174,7 @@ function LayoutEditorWindow:Panel(x, width)
     return panel
 end
 
--- Choose the exact copy's bank quantity before the object's best stack
+-- Prefer the exact copy's quantity over the object's best stack
 function LayoutEditorWindow:RuntimeStyle(objectID, layoutKey)
     local byLayout = type(layoutKey) == "string" and self.styles.byKey[layoutKey] or nil
     if byLayout ~= nil then return byLayout end
@@ -187,14 +182,12 @@ function LayoutEditorWindow:RuntimeStyle(objectID, layoutKey)
     return objectID ~= nil and self.styles.byObject[objectID] or nil
 end
 
--- Draw an item with the client's own object sprite and its bank quantity, showing
--- placeholders and absent layout entries faded. Bank Core does not report a stack's outline
--- or shadow, so editor icons use the client's default look
+-- Draw an item with its client sprite and bank quantity
+-- Placeholders and absent entries are faded
 function LayoutEditorWindow:ApplyRuntimeObjectSprite(sprite, objectID, layoutKey, absentIsPlaceholder)
     local style = self:RuntimeStyle(objectID, layoutKey)
     sprite:SetSize(ITEM_WIDTH, ITEM_HEIGHT)
-    -- SetAssociatedObject asks the client for its live runtime object sprite;
-    -- spriteID-backed icons do not reproduce the native bank rendering
+    -- Only the live object sprite matches the native bank look
     sprite:SetAssociatedObject(math.tointeger(tonumber(objectID)))
     if style ~= nil then
         sprite.associatedObjectQuantity = style.quantity
@@ -213,7 +206,7 @@ function LayoutEditorWindow:ApplyRuntimeObjectSprite(sprite, objectID, layoutKey
     return ITEM_WIDTH, ITEM_HEIGHT
 end
 
--- Align the editor with the bank and keep it above rebuilt native components
+-- Align the editor with the bank and keep it on top
 function LayoutEditorWindow:KeepOnTop()
     if self.window == nil or self.window.root == nil then return end
     pcall(function()
@@ -223,7 +216,7 @@ function LayoutEditorWindow:KeepOnTop()
         end
         self.window.root:MoveToFront()
         if self.window._SyncOverlays ~= nil then self.window:_SyncOverlays(false) end
-        -- A prompt opened from the editor would otherwise sink behind it
+        -- Keep prompts opened from the editor in front of it
         local overlay = self.overlayWindow
         if overlay ~= nil and overlay.root ~= nil and not overlay.root.hidden then
             overlay.root:MoveToFront()
@@ -232,14 +225,13 @@ function LayoutEditorWindow:KeepOnTop()
     end)
 end
 
--- Keep a window opened from the editor, such as the label prompt, in front of it
+-- Keep a window opened from the editor in front of it
 function LayoutEditorWindow:SetOverlay(window)
     self.overlayWindow = window
     self:KeepOnTop()
 end
 
--- Build the tag column: the shared tag list with Import/Share, New Tag, and Close below it.
--- It sits where the bank's own tag column is, beside the space Bank Core's tab rail takes
+-- Build the tag column where the bank's own one sits
 function LayoutEditorWindow:CreateTagColumn()
     local column = ui.Layer.new(self.content)
     column:SetPos(Size.COLUMN_X, Size.PANEL_TOP)
@@ -284,7 +276,7 @@ function LayoutEditorWindow:CreateTagColumn()
     self.columnFrame = frame(column, 0, 0, Size.COLUMN_WIDTH, Size.PANEL_HEIGHT, FRAME)
 end
 
--- Build the tag column, editable grid, and catalog search columns
+-- Build the tag column, grid, and search columns
 function LayoutEditorWindow:CreatePanels()
     self:CreateTagColumn()
     self.centerPanel = self:Panel(Size.CENTER_X, Size.CENTER_WIDTH)
@@ -311,8 +303,7 @@ function LayoutEditorWindow:CreatePanels()
         contentHeight = Size.CENTER_VIEW_HEIGHT,
         scrollStep = Size.GRID_STEP,
     })
-    -- These act on the selected item, in place of the bank's right-click menu, which only
-    -- Bank Core may change
+    -- These replace the right-click menu, which only Bank Core may change
     self.duplicateButton = BankControls.button(
         self.centerPanel, "Create Copy", function() self:DuplicateSelected() end,
         { x = 8, y = Size.FOOTER_Y, width = 104, height = Size.FOOTER_HEIGHT }
@@ -325,7 +316,7 @@ function LayoutEditorWindow:CreatePanels()
         self.centerPanel, "Move to Unsorted", function() self:UnarrangeSelected() end,
         { x = 212, y = Size.FOOTER_Y, width = Size.UNSORT_BUTTON_WIDTH, height = Size.FOOTER_HEIGHT }
     )
-    -- Its drag surface handles both clicks and drags, so the button has no action
+    -- Its drag surface handles clicks too, so the button has no action
     self.newLabelButton = BankControls.button(self.centerPanel, "New label", nil, {
         x = Size.LABEL_BUTTON_X,
         y = Size.FOOTER_Y,
@@ -372,8 +363,8 @@ function LayoutEditorWindow:CreatePanels()
     end
 end
 
--- Show a failure briefly over the bottom of the grid. Saves happen on every
--- change, so successes stay silent and only problems need the player's attention
+-- Show a failure briefly over the grid
+-- Saves happen on every change, so only problems are shown
 function LayoutEditorWindow:ShowError(message)
     self:HideError()
     if self.centerPanel == nil then return end
@@ -402,7 +393,7 @@ function LayoutEditorWindow:ShowError(message)
     banner:MoveToFront()
 end
 
--- Count the error message down, fading it before it goes
+-- Count the error down, fading it out
 function LayoutEditorWindow:TickError()
     local banner = self.errorBanner
     if banner == nil then return end
@@ -421,12 +412,12 @@ function LayoutEditorWindow:HideError()
     if banner ~= nil then pcall(function() banner.root:Destroy() end) end
 end
 
--- Show the selected tag in the tag column and rebuild its rows
+-- Show the selected tag and rebuild the tag rows
 function LayoutEditorWindow:RefreshTags()
     if self.tagList ~= nil then self.tagList:Refresh() end
 end
 
--- Open a tag draft and select it only after its editor saves successfully
+-- Open a tag draft, selecting it once its editor saves
 function LayoutEditorWindow:CreateNewTag()
     if self.onCreateTag == nil then return false end
     self.onCreateTag(function(tag)
@@ -436,7 +427,7 @@ function LayoutEditorWindow:CreateNewTag()
     return true
 end
 
--- End current drags and load the selected tag's saved layout
+-- End drags and load the selected tag's layout
 function LayoutEditorWindow:SelectTag(tag)
     if type(tag) ~= "string" or tag == "" then
         self.selectedTag = nil
@@ -448,13 +439,13 @@ function LayoutEditorWindow:SelectTag(tag)
     self:RefreshCenter()
 end
 
--- Destroy recorded grid decorations and release their references
+-- Destroy grid decorations and release their references
 function LayoutEditorWindow:DestroyCenterNodes()
     destroyAll(self.centerNodes)
     self.centerNodes = {}
 end
 
--- Rebuild editable slots and native-looking item sprites from the saved layout
+-- Rebuild slots and item sprites from the saved layout
 function LayoutEditorWindow:RefreshCenter()
     self:FinishDrag(false)
     self:DestroyCenterNodes()
@@ -471,9 +462,7 @@ function LayoutEditorWindow:RefreshCenter()
     local visibleRows = math.ceil((Size.CENTER_VIEW_HEIGHT - Size.GRID_TOP) / Size.GRID_STEP)
     local occupiedRows = math.ceil(#slots / Size.CENTER_COLUMNS)
     for _, label in ipairs(labels) do occupiedRows = math.max(occupiedRows, label.row + 1) end
-    -- Always leave one complete drop row after the final occupied row. If the
-    -- existing viewport already contains that space this does not make the
-    -- editor scroll; it only extends the canvas when items reach its bottom
+    -- Keep one empty drop row after the last occupied row
     local rowCount = math.max(visibleRows,
         occupiedRows + (occupiedRows > 0 and 1 or 0))
     local contentHeight = BankGrid.LabelledContentHeight(
@@ -484,7 +473,7 @@ function LayoutEditorWindow:RefreshCenter()
         labelRows[label.row] = true
         self:CreateLabelHeader(label)
     end
-    -- Unsorted items sit beneath their own heading, drawn like a label but fixed
+    -- Unsorted items sit under a fixed heading drawn like a label
     self.centerUnsortedRow = BankGrid.UnsortedRow(slots, boundary, Size.CENTER_COLUMNS)
     if self.centerUnsortedRow ~= nil then
         labelRows[self.centerUnsortedRow] = true
@@ -540,7 +529,7 @@ function LayoutEditorWindow:CreateGridCell(x, y, slot)
     end
 end
 
--- Draw a label row with the live bank's heading treatment
+-- Draw a label row like the bank's own headings
 function LayoutEditorWindow:CreateLabelHeader(label)
     local width = Size.CENTER_COLUMNS * Size.GRID_STEP - (Size.GRID_STEP - Size.GRID_SLOT_SIZE)
     local header = ui.Layer.new(self.centerView.content)
@@ -576,13 +565,13 @@ function LayoutEditorWindow:LabelRowAt(x, y)
     return nil
 end
 
--- Refresh after a label edit when its tag is still open, and tell the app either way
+-- Refresh after a label edit if its tag is open, then tell the app
 function LayoutEditorWindow:LabelChanged(tag)
     if self.window ~= nil and self.selectedTag == tag then self:RefreshCenter() end
     self:NotifyChanged()
 end
 
--- Rename or delete an existing label through the shared text prompt
+-- Rename or delete a label through the text prompt
 function LayoutEditorWindow:EditLabel(row)
     local tag = self.selectedTag
     local current = tag ~= nil and self.store:GetLabel(tag, row, Size.CENTER_COLUMNS) or nil
@@ -605,7 +594,7 @@ function LayoutEditorWindow:EditLabel(row)
     return true
 end
 
--- Ask for a new label's text, adding its row only once the text is saved
+-- Ask for a new label's text, adding it once saved
 function LayoutEditorWindow:PromptNewLabel(row)
     local tag = self.selectedTag
     if tag == nil or self.onPromptLabel == nil then return false end
@@ -620,7 +609,7 @@ function LayoutEditorWindow:PromptNewLabel(row)
     return true
 end
 
--- Convert content coordinates into a one-based grid slot, skipping heading rows
+-- Convert content coordinates to a grid slot, skipping headings
 function LayoutEditorWindow:SlotIndexAt(x, y)
     local row = self:RowAt(x, y)
     if row == nil or row == self.centerUnsortedRow
@@ -630,18 +619,18 @@ function LayoutEditorWindow:SlotIndexAt(x, y)
     return row * Size.CENTER_COLUMNS + column + 1
 end
 
--- Keep the editor above native bank redraws on its logic listener
+-- Keep the editor above native bank redraws
 function LayoutEditorWindow:PollDrag()
     self:KeepOnTop()
     self:TickError()
 end
 
--- Stop the editor listener that keeps its window above native bank redraws
+-- Stop the listener that keeps the editor on top
 function LayoutEditorWindow:StopDragPolling()
     Event.Logic.Unsubscribe(DRAG_EVENT)
 end
 
--- Find the displayed layout entry matching the current selection
+-- Find the layout entry matching the selection
 function LayoutEditorWindow:SelectedEntry()
     if self.selectedLayoutKey == nil then return nil end
     for _, slot in ipairs(self.centerSlots) do
@@ -651,7 +640,7 @@ function LayoutEditorWindow:SelectedEntry()
     return nil
 end
 
--- Return the selected item to the flowing tag-only section without removing its tag
+-- Move the selected item to Unsorted, keeping it tagged
 function LayoutEditorWindow:UnarrangeSelected()
     local entry = self:SelectedEntry()
     if entry == nil or self.selectedTag == nil then
@@ -670,7 +659,7 @@ function LayoutEditorWindow:UnarrangeSelected()
     return true
 end
 
--- Create a ghost occurrence linked to the selected stack and refresh after saving
+-- Add a ghost copy of the selected item
 function LayoutEditorWindow:DuplicateSelected()
     local entry = self:SelectedEntry()
     if entry == nil or self.selectedTag == nil then
@@ -688,7 +677,7 @@ function LayoutEditorWindow:DuplicateSelected()
     return true
 end
 
--- Remove the selected occurrence's tag membership and retain the other grid positions
+-- Untag the selected item, keeping other grid positions
 function LayoutEditorWindow:RemoveSelected()
     local entry = self:SelectedEntry()
     if entry == nil or self.selectedTag == nil then
@@ -706,18 +695,18 @@ function LayoutEditorWindow:RemoveSelected()
     return true
 end
 
--- Tell the app the store changed, so the bank and other lists show it
+-- Tell the app the store changed
 function LayoutEditorWindow:NotifyChanged()
     if self.onChanged ~= nil then self.onChanged() end
 end
 
--- Show the existing editor window
+-- Show the editor window
 function LayoutEditorWindow:Show()
     self.window:Show()
     self:KeepOnTop()
 end
 
--- Remove editor controls and release callbacks and stores retained by them
+-- Remove the editor controls and release their callbacks
 function LayoutEditorWindow:DestroyControls()
     for _, surface in ipairs({
         self.centerDragSurface,
@@ -759,7 +748,7 @@ function LayoutEditorWindow:DestroyControls()
     self.centerView = nil
 end
 
--- Stop events and gestures before destroying the editor and all child controls
+-- Stop events and drags, then destroy the editor
 function LayoutEditorWindow:Destroy()
     self:StopDragPolling()
     self:FinishDrag(false)

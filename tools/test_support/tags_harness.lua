@@ -1,6 +1,5 @@
--- Load the real Bank Core beside the built Bank Tags in Bank Core's own stand-in host, so
--- tests drive Bank Tags only through Bank Core's public API and what a player does.
--- Bank Core is read, never changed, from BANKCORE_ROOT, or ../bank-utilities by default.
+-- Load the real Bank Core beside the built Bank Tags in a stand-in host
+-- Bank Core is read, never changed, from BANKCORE_ROOT or ../bank-utilities
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 -- Kept outside tests/ so tools/check.lua does not count it as a test program
 
@@ -23,8 +22,7 @@ local function readText(path)
     return text
 end
 
--- Find Bank Core's checkout and let tests require its stand-in host modules. An older
--- checkout without the API Bank Tags uses is refused rather than tested against
+-- Find Bank Core's checkout, refusing one without the needed API
 function Harness.CoreRoot()
     local root = os.getenv("BANKCORE_ROOT") or "../bank-utilities"
     root = string.gsub(root, "\\", "/")
@@ -39,15 +37,14 @@ function Harness.CoreRoot()
                 .. "to a checkout with the extension API Bank Tags uses", 0)
         end
     end
-    -- Bank Tags' own modules come first; Bank Core's tools fill in what Bank Tags lacks
+    -- Bank Tags' modules come first; Bank Core's tools fill gaps
     if not string.find(package.path, root .. "/?.lua", 1, true) then
         package.path = package.path .. ";" .. root .. "/?.lua"
     end
     return root
 end
 
--- Give the stand-in PrettyUI list rows real positions, as PrettyUI draws them, so tests can
--- point at a row by where it is
+-- Give stand-in list rows real positions so tests can point at them
 local function placeListRows()
     local newList = prettyui.List.new
     prettyui.List.new = function(parent, options)
@@ -67,9 +64,7 @@ local function placeListRows()
     end
 end
 
--- Install the stand-in host and widgets, build Bank Tags into dist/test/<name>, and create a
--- loader. options.separateGlobals gives each plugin its own _G; options.cloneExports injects
--- an ordinary data clone of each export, as a host that clones exports would
+-- Install the stand-in host, build Bank Tags, and create a loader
 function Harness.new(name, options)
     options = options or {}
     local coreRoot = Harness.CoreRoot()
@@ -98,8 +93,7 @@ function Harness.new(name, options)
         "InventoryAdded", "InventoryRemoved", "InventoryUpdated" }) do
         Event[event] = { Subscribe = function() end, Unsubscribe = function() end }
     end
-    -- Each plugin's MiniMenuReady handler, by subscription ID; the host documents no order
-    -- across plugins, so tests choose one
+    -- MiniMenuReady handlers by subscription ID; tests choose the order
     local menuSubscriptions = {}
     Event.MiniMenuReady = {
         Subscribe = function(key, action) menuSubscriptions[key] = action end,
@@ -127,7 +121,7 @@ function Harness.new(name, options)
         databases = databases,
         contentSubscriptions = contentSubscriptions,
         menuSubscriptions = menuSubscriptions,
-        -- Where the host adds a plugin's menu entry, and which plugin hears a menu first
+        -- Where the host adds a plugin's entry, and who hears a menu first
         placement = "above_cancel",
         menuOrder = "core_first",
         coreRoot = coreRoot,
@@ -165,7 +159,7 @@ function Harness:Session()
     return rawget(self.core.env._G, "__bankcore_session")
 end
 
--- Mount a bank window and open the bank for the running Core session in View All
+-- Open the bank in View All for the running Core session
 function Harness:OpenBank(width, height)
     if self.bankHost.window == nil then
         local window = self.bankHost:MountBankWindow(width or 714, height or 650)
@@ -196,7 +190,7 @@ function Harness:OpenContentPanel()
     return panel
 end
 
--- Find a component under a parent whose text or content matches, searching depth first
+-- Find a component by text or content, depth first
 function Harness.Find(parent, text)
     for _, child in ipairs(parent.children or {}) do
         if not child.destroyed and not child.hidden then
@@ -209,8 +203,7 @@ function Harness.Find(parent, text)
     return nil
 end
 
--- Where the host puts a plugin's entry: at the end as the API documents, just above
--- Cancel, or just below the native default, as live clients have
+-- Where hosts put a plugin's menu entry
 Harness.PLACEMENTS = {
     documented = function(menu) return menu.entryCount + 1 end,
     above_cancel = function(menu)
@@ -222,9 +215,7 @@ Harness.PLACEMENTS = {
     below_default = function(menu) return math.max(1, menu.entryCount) end,
 }
 
--- Build a menu from its native entries, lowest priority first, and let every subscribed
--- plugin answer it in the chosen order. A plugin's entry goes where the chosen placement
--- puts it and shows its label as overrideText; silent entries report no text
+-- Build a menu and let each plugin answer in the chosen order
 function Harness:HostMenu(natives, silent)
     local menu = { entries = { { verbText = "Cancel", actionType = MiniMenuActionType.CANCEL } } }
     for _, native in ipairs(natives) do menu.entries[#menu.entries + 1] = native end
@@ -246,8 +237,7 @@ function Harness:HostMenu(natives, silent)
     return menu
 end
 
--- Open a native or page item's menu as the host would: Examine, then Withdraw-1 as the
--- native default
+-- Open an item's menu with Withdraw-1 as the native default
 function Harness:MenuFor(component, silent)
     local natives = {}
     for index, verb in ipairs({ "Examine", "Withdraw-1" }) do
@@ -262,8 +252,7 @@ function Harness:ContentMenu(silent)
     return self:HostMenu({}, silent)
 end
 
--- Left-click as the host does: run the highest-priority entry, and return its label. A
--- native default only names itself, so a test can see that it would have run
+-- Left-click a menu, returning the highest-priority label
 function Harness.LeftClick(menu)
     local entry = menu.entries[menu.entryCount]
     if entry.action ~= nil then entry.action(table.unpack(entry.arguments or {})) end

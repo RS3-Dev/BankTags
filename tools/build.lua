@@ -1,6 +1,5 @@
--- Build the Bank Tags plugin folder from the canonical source: its entry, manifest, and
--- exactly the modules the entry's require graph loads. The entry's eviction list is
--- generated from that graph. Tests, tools, and reference material never ship.
+-- Build the plugin folder from the entry's require graph
+-- Tests, tools, and reference material never ship
 -- Usage, from the repository root:
 --   lua54 tools/build.lua [--out dist]
 
@@ -12,10 +11,9 @@ local Build = {}
 Build.DEFAULT_OUT = "dist"
 Build.MANIFEST = "build_manifest.lua"
 Build.PLUGIN = { name = "banktags", entry = "plugins/banktags/main", manifest = "plugins/banktags/plugin.json" }
--- The line in the entry that the built main.lua replaces with the entry's modules
+-- The entry line the build replaces with module names
 Build.EVICTION_MARKER = "-- build: every module this plugin loads, except the debug log"
--- The debug log stays loaded on purpose, so the debug preference survives a reload whose
--- previous run failed to stop
+-- The debug log stays loaded so its preference survives a failed stop
 Build.KEPT_LOADED = "banktags/core/debug_log"
 -- Top-level source directories an output may never be placed in
 local SOURCE_DIRECTORIES = {
@@ -47,7 +45,7 @@ local function shellPath(path)
     return '"' .. path .. '"'
 end
 
--- Run shell commands in order, stopping at the first failure; returns success and output
+-- Run shell commands until one fails, returning success and output
 local function shell(commands)
     if #commands == 0 then return true, "" end
     local handle = io.popen("(" .. table.concat(commands, " && ") .. ") 2>&1")
@@ -66,9 +64,7 @@ local function listDirectory(path)
     return names
 end
 
--- Refuse an output path that could reach the source tree or anything outside the repository:
--- it must be relative, use only letters, digits, _, and -, sit outside every source
--- directory, and be ignored by git
+-- Refuse an output path that could reach source or leave the repository
 function Build.CheckOutput(out)
     if type(out) ~= "string" or string.match(out, "^[%w_%-][%w_%-/]*$") == nil
         or string.find(out, "//", 1, true) ~= nil or string.sub(out, -1) == "/" then
@@ -83,8 +79,7 @@ function Build.CheckOutput(out)
     return true
 end
 
--- Return the entry's built bytes: the marker line becomes one quoted name per module the
--- entry loads, at the marker's indent
+-- Return the entry with its marker replaced by module names
 function Build.Entry()
     local plugin = Build.PLUGIN
     local marker = "\n([ \t]*)" .. string.gsub(Build.EVICTION_MARKER, "%p", "%%%0") .. "(\r?)%f[\n]"
@@ -99,7 +94,7 @@ function Build.Entry()
     return bytes
 end
 
--- List the files the plugin folder holds, sorted so the output is the same every time
+-- List the plugin folder's files in a stable order
 function Build.Plan()
     local plugin = Build.PLUGIN
     local files = {
@@ -136,8 +131,7 @@ local function isRelativePath(path)
     return type(path) == "string" and string.gsub(string.gsub(path, "[%w_%-]+", "x"), "/x", "") == "x"
 end
 
--- Read the previous build's manifest from the output, or nil when there is none. It must
--- name only .lua and .json files under relative paths before anything is deleted
+-- Read and validate the previous build's manifest, or nil
 local function previousManifest(out)
     local path = out .. "/" .. Build.MANIFEST
     local file = io.open(path, "rb")
@@ -158,7 +152,7 @@ local function previousManifest(out)
     return manifest
 end
 
--- Remove only what the previous build wrote: its files, then its now empty directories
+-- Remove only the previous build's files and empty folders
 local function cleanOutput(out)
     local manifest = previousManifest(out)
     if manifest == nil then
@@ -201,7 +195,7 @@ function Build.Run(options)
     local allowed, reason = Build.CheckOutput(out)
     if not allowed then error(reason, 0) end
 
-    -- Read every source before touching the output, so a bad source changes nothing
+    -- Read every source first, so a bad one changes nothing
     local files = Build.Plan()
     for _, file in ipairs(files) do
         file.bytes = file.entry and Build.Entry() or readFile(file.source)

@@ -7,7 +7,7 @@ local BankControls = {}
 local NativeButton = {}
 NativeButton.__index = NativeButton
 
--- Build a native-style button with separate decorative children and one action callback
+-- Build a native-style button with one action
 function BankControls.button(parent, content, action, options)
     options = options or {}
     local self = setmetatable({
@@ -39,8 +39,8 @@ function BankControls.button(parent, content, action, options)
         }
     )
 
-    -- ui.Button is an input component, not a ComponentCollectionBase. Keep
-    -- decorative children beside it on the rail and make them click-through
+    -- ui.Button holds no children, so decorations sit beside it
+    -- and stay click-through
     if self.spriteName ~= nil then
         self.sprites = prettyui.Sprites.SPRITE_BUTTONS[self.spriteName]
         self.icon = ui.Sprite.new(parent)
@@ -69,7 +69,7 @@ function BankControls.button(parent, content, action, options)
     return self
 end
 
--- Refresh button input, label, icon, and selection appearance from its current state
+-- Refresh the button's input and appearance from its state
 function NativeButton:_UpdateState()
     if self.root == nil then return end
     self.root.enabled = not self.disabled
@@ -104,35 +104,35 @@ function NativeButton:SetSize(width, height)
     end
 end
 
--- Update visibility and refresh the control's own appearance
+-- Show or hide the button
 function NativeButton:SetHidden(hidden)
     self.hidden = hidden == true
     self:_UpdateState()
 end
 
--- Update selection state and refresh the control's own appearance
+-- Set whether the button is selected
 function NativeButton:SetActive(active)
     self.active = active == true
     self:_UpdateState()
 end
 
--- Use the existing active-state setter for callers that use selection terminology
+-- Alias SetActive for selection wording
 function NativeButton:SetSelected(selected)
     self:SetActive(selected)
 end
 
--- Update input availability and refresh the control's own appearance
+-- Enable or disable the button
 function NativeButton:SetDisabled(disabled)
     self.disabled = disabled == true
     self:_UpdateState()
 end
 
--- Update the tooltip through the shared PrettyUI binding
+-- Update the button's tooltip
 function NativeButton:SetTooltip(value)
     return prettyui.Tooltip.set(self, value)
 end
 
--- Unbind the tooltip and destroy the button and its decorative siblings
+-- Destroy the button and its decorations
 function NativeButton:Destroy()
     prettyui.Tooltip.unbind(self)
     if self.icon ~= nil then self.icon:Destroy() end

@@ -1,5 +1,4 @@
--- Render Bank Tags' preferences in its section of Bank Core's bank settings window: tag
--- sprites, where new tagged items go, and debug logging
+-- Draw Bank Tags' preferences in Bank Core's settings window
 
 local Settings = require("banktags/core/settings")
 
@@ -10,7 +9,7 @@ local MAX_WIDTH = 280
 local TEXT = 0xD7C9ADFF
 local GOLD = 0xF2C66DFF
 
--- Add a compact label without creating a separate input target
+-- Add a label that takes no input
 local function label(parent, value, x, y, width, height, colour)
     local text = prettyui.Text.new(parent, {
         text = value, x = x, y = y, width = width, height = height,
@@ -21,7 +20,7 @@ local function label(parent, value, x, y, width, height, colour)
     return text
 end
 
--- Mount the preferences in the section's parent. options: settings and onChange(key, value)
+-- Mount the preferences in the section's parent
 function SettingsSection.new(parent, options)
     local self = setmetatable({
         options = options, settings = Settings.copy(options.settings),
@@ -75,7 +74,7 @@ function SettingsSection:AddToggle(parent, key, text, x, y, width, tooltip)
     self.controls[key] = control
 end
 
--- Save a change at once and restore the control if the host refuses it
+-- Save a change at once, restoring the control if refused
 function SettingsSection:Change(key, enabled)
     if self.destroyed then return false end
     local saved, reason = self.options.onChange(key, enabled)
@@ -91,7 +90,7 @@ function SettingsSection:Change(key, enabled)
     return saved, reason
 end
 
--- Release the controls before Bank Core closes the section
+-- Release the section controls
 function SettingsSection:Destroy()
     if self.destroyed then return end
     self.destroyed = true

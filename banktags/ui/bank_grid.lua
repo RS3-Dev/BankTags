@@ -1,4 +1,4 @@
--- Measure the rendered bank grid shared by the engine, scrolling, and editor
+-- Measure the bank grid shared by pages, scrolling, and the editor
 
 local BankGrid = {}
 
@@ -13,7 +13,7 @@ BankGrid.SLOT_SIZE = 40
 -- Columns in a bank at its default size; players can resize it wider
 BankGrid.DEFAULT_COLUMNS = 10
 
--- Headings draw their text above a separator this far below the heading's top
+-- Heading text sits above a separator this far down the row
 BankGrid.LABEL_LINE_OFFSET = 22
 BankGrid.UNSORTED_LABEL = "Unsorted"
 
@@ -23,7 +23,7 @@ local GRID_STEP = BankGrid.STEP
 local GRID_SLOT_SIZE = BankGrid.SLOT_SIZE
 local LABEL_LINE_OFFSET = BankGrid.LABEL_LINE_OFFSET
 
--- Fit as many grid columns as the current item-layer width allows
+-- Fit as many columns as the item layer's width allows
 function BankGrid.ColumnCount(itemLayerWidth)
     return math.max(
         1,
@@ -31,7 +31,7 @@ function BankGrid.ColumnCount(itemLayerWidth)
     )
 end
 
--- Return the content y where a grid row begins; label rows share the grid spacing
+-- Return the content y where a grid row begins
 function BankGrid.RowTop(row)
     return row * GRID_STEP
 end
@@ -41,13 +41,12 @@ function BankGrid.RowItemY(row)
     return GRID_TOP + row * GRID_STEP
 end
 
--- Return the content y of a label heading, set low in its row so it sits on
--- the items it introduces
+-- Return a label's content y, set low over its items
 function BankGrid.LabelY(row)
     return BankGrid.RowItemY(row) + GRID_SLOT_SIZE - LABEL_LINE_OFFSET - 2
 end
 
--- Return the Unsorted heading row when items follow the arranged area
+-- Return the Unsorted heading row when items follow the layout
 function BankGrid.UnsortedRow(slots, boundary, columnCount)
     boundary = math.tointeger(tonumber(boundary))
     columnCount = math.max(1, math.tointeger(tonumber(columnCount)) or 1)
@@ -55,7 +54,7 @@ function BankGrid.UnsortedRow(slots, boundary, columnCount)
     return boundary // columnCount
 end
 
--- Convert a one-based slot index into a row and column position
+-- Convert a slot index into a row and column
 function BankGrid.PositionForIndex(index, columnCount)
     local zeroIndex = math.max(0, (math.tointeger(tonumber(index)) or 1) - 1)
     columnCount = math.max(1, math.tointeger(tonumber(columnCount)) or 1)
@@ -72,7 +71,7 @@ function BankGrid.RowAtContentY(contentY)
     return math.floor(contentY / GRID_STEP)
 end
 
--- Measure a labelled page through its last occupied or labelled row
+-- Measure a labelled page through its last used row
 function BankGrid.LabelledContentHeight(slotCount, columnCount, labels)
     columnCount = math.max(1, math.tointeger(tonumber(columnCount)) or 1)
     slotCount = tonumber(slotCount) or 0
@@ -84,7 +83,7 @@ function BankGrid.LabelledContentHeight(slotCount, columnCount, labels)
     return BankGrid.RowItemY(lastRow) + GRID_STEP
 end
 
--- Measure the page from its section bounds or occupied grid rows
+-- Measure the page from its sections or occupied rows
 function BankGrid.ContentHeight(slotCount, columnCount, sectionContentBottom)
     sectionContentBottom = tonumber(sectionContentBottom) or 0
     if sectionContentBottom > 0 then return sectionContentBottom end

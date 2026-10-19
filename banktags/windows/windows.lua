@@ -1,7 +1,4 @@
--- Own Bank Tags' standalone windows: tag settings, delete confirmation, the sprite picker,
--- text prompts, the folder chooser, the layout editor, and Import/Share. Each opens on the
--- game's own window layer and closes with the bank, except Import/Share, which the plugin
--- panel also opens
+-- Own Bank Tags' standalone windows, closing most with the bank
 
 local debugLog = require("banktags/core/debug_log").Write
 local FolderChooser = require("banktags/windows/folder_chooser")
@@ -16,7 +13,7 @@ local TextPrompt = require("banktags/ui/text_prompt")
 local Windows = {}
 Windows.__index = Windows
 
--- Windows that need the open bank, closed when it closes
+-- Windows that close with the bank
 local BANK_WINDOWS = { "textPrompt", "folderChooser", "layoutEditor", "tagSettingsEditor", "tagDeleteConfirm" }
 
 -- Find the layer standalone windows open on
@@ -30,7 +27,7 @@ function Windows.new(app)
     return setmetatable({ app = app }, Windows)
 end
 
--- Close one window by its field name, with the sprite picker it owns
+-- Close one window and the sprite picker it owns
 function Windows:Close(name)
     local window = self[name]
     if window == nil then return end
@@ -41,7 +38,7 @@ function Windows:Close(name)
         self:Close("spritePicker")
     end
     pcall(function() window:Destroy() end)
-    -- A label prompt covers the layout editor while it is open
+    -- A label prompt covers the layout editor while open
     if name == "textPrompt" and self.layoutEditor ~= nil then self.layoutEditor:SetOverlay(nil) end
 end
 
@@ -57,14 +54,14 @@ function Windows:CloseAll()
     self:Close("spritePicker")
 end
 
--- Find the window layer, explaining in the debug log when there is none
+-- Find the window layer, logging when there is none
 local function parentFor(label)
     local parent = windowParent()
     if parent == nil then debugLog("Bank Tags could not find a UI layer for ", label) end
     return parent
 end
 
--- Open a single-field prompt, replacing any prompt that is already open
+-- Open a single-field prompt, replacing any open one
 function Windows:OpenTextPrompt(options)
     self:Close("textPrompt")
     local parent = parentFor("its prompt")
@@ -112,8 +109,7 @@ function Windows:OpenRenameFolderPrompt(folderKey)
     })
 end
 
--- Ask for a label's text over the layout editor that requested it; the editor supplies the
--- save and delete actions for the row being edited
+-- Ask for a label's text over the layout editor
 function Windows:OpenPageLabelPrompt(options)
     self:OpenTextPrompt({
         title = options.text ~= nil and "Edit Label" or "Add Label",
@@ -155,7 +151,7 @@ function Windows:OpenFolderChooser(tag)
     chooser:Show()
 end
 
--- Open the layout editor over the bank, sized to Bank Core's current bank geometry
+-- Open the layout editor sized to the bank
 function Windows:OpenLayoutEditor(tag)
     local app = self.app
     local state = app.state
@@ -182,7 +178,7 @@ function Windows:OpenLayoutEditor(tag)
         onClose = function(value)
             if self.layoutEditor == value then
                 self.layoutEditor = nil
-                -- A label prompt edits this editor's tag, so it closes with it
+                -- A label prompt edits this editor's tag, so it closes too
                 self:Close("textPrompt")
             end
         end,
@@ -191,8 +187,7 @@ function Windows:OpenLayoutEditor(tag)
     editor:Show()
 end
 
--- Follow the bank's geometry: a moved bank moves the editor, and a resized one reopens it
--- at the new size on the same tag
+-- Move the editor with the bank, reopening it after a resize
 function Windows:BankStateChanged(state)
     local editor = self.layoutEditor
     if editor == nil or state.bounds == nil then return end
@@ -208,7 +203,7 @@ function Windows:BankItemsChanged()
     if self.layoutEditor ~= nil then self.layoutEditor:SetBankItems(self.app:BankItems()) end
 end
 
--- Show store changes made elsewhere in the open editor and Import/Share
+-- Show store changes in the open editor and Import/Share
 function Windows:StoreChanged()
     if self.layoutEditor ~= nil then self.layoutEditor:StoreChanged() end
     if self.importShare ~= nil then self.importShare:RefreshExports() end
@@ -232,7 +227,7 @@ function Windows:OpenTagDeleteConfirm(tag)
     self.tagDeleteConfirm:Show()
 end
 
--- Open the sprite picker for the window that asked for it
+-- Open the sprite picker for the window that asked
 function Windows:OpenSpritePicker(owner, onSelected)
     self:Close("spritePicker")
     local parent = parentFor("the sprite picker")
@@ -247,7 +242,7 @@ function Windows:OpenSpritePicker(owner, onSelected)
     self.spritePicker:Show()
 end
 
--- Open tag settings for an existing tag, or for an unsaved new tag named name
+-- Open tag settings for an existing or new tag
 function Windows:OpenTagSettings(tag, isNew, onSaved)
     local app = self.app
     self:Close("tagSettingsEditor")
@@ -279,7 +274,7 @@ function Windows:OpenTagSettings(tag, isNew, onSaved)
     editor:Show()
 end
 
--- Show the current import sources in an open Import/Share window
+-- Show current import sources in an open Import/Share window
 function Windows:RefreshImportSources()
     if self.importShare ~= nil then self.importShare:RefreshSources() end
 end

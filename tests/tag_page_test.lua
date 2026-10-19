@@ -1,9 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Turn saved tags into Bank Core pages and check that the real Bank Core accepts them:
--- copies, ghosts, labels, deliberate empty rows, unresolved items, Unsorted, a full-size
--- tag, and a saved tag too large to show. Also check the store's entry budget, a save that
--- cannot be read, and an import that fails partway, none of which may change saved data
+-- Turn saved tags into pages that the real Bank Core accepts
+-- Also check the entry budget and that failures never change saved data
 -- FAKE HOST: stand-in components and saved data, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -64,7 +62,7 @@ assert(Json.encode(rows) == Json.encode({
     { slots = { { item = 4151, copy = 4 } } },
 }), Json.encode(rows))
 assert(count == 1 + 5 + 1 + 1 + 3 + 2 + 1)
--- Unresolved items keep their place as blanks; an unresolved Unsorted entry is not shown
+-- Unresolved items stay as blanks; unresolved Unsorted entries are hidden
 assert(rows[5].slots[1] == false and #rows[7].slots == 1)
 
 -- A copy repeated, or a ghost naming itself, cannot refuse the page
@@ -79,7 +77,7 @@ assert(#rows == 0 and count == 0)
 assert(TagPage.Key("melee gear") == "tag:melee gear" and TagPage.TagFromKey("tag:melee gear") == "melee gear")
 assert(TagPage.TagFromKey("other") == nil and TagPage.TagFromKey(nil) == nil)
 
--- Core accepts the converted page with an 80-character title and the tag's key
+-- Core accepts the page with an 80-character title and the tag's key
 local store = TagStore.new()
 local longName = string.rep("a", 79) .. "z"
 assert(store:CreateTag(longName))
@@ -99,7 +97,7 @@ store = TagStore.new()
 assert(store:CreateTag("full"))
 local full = store.data.tags.full
 full.rows = {}
--- One row of slots and one Unsorted item: 1 row + slots + 1 Unsorted entry = the edit limit
+-- One row and one Unsorted item add up to the edit limit
 local slots = {}
 for index = 1, TagData.EDIT_ENTRY_LIMIT - 2 do
     slots[index] = index % 2 == 0 and blank() or item(100000 + index, 1)
@@ -114,7 +112,7 @@ local _, pageEntries = TagPage.Rows(full)
 assert(notice == nil and pageEntries == TagPage.MAX_ENTRIES)
 assert(accepts(page))
 
--- An edit cannot grow the tag past the limit, and nothing is saved when it is refused
+-- An edit cannot grow the tag past the limit or save
 local saved = Json.encode(db)
 local added, reason = store:AddTag("full", 385, key(385, 1))
 assert(not added and string.find(reason, "at most", 1, true))
@@ -122,8 +120,7 @@ assert(Json.encode(db) == saved and store.data.tags.full.unsorted[2] == nil)
 -- Removing still works
 assert(store:RemoveTag("full", key(4151, 1)))
 
--- A saved tag at the full save limit loads whole, still saves, and shrinks, but Bank Core
--- cannot draw it: its page explains instead, and its share code keeps every entry
+-- A full-limit saved tag loads and saves whole, but its page explains instead
 full = store.data.tags.full
 full.unsorted = { item(4151, 1), item(4151, 2), item(385, 1), item(385, 2) }
 assert(TagData.EntryCount(full) == TagData.MAX_TAG_ENTRIES + 1)
@@ -171,7 +168,7 @@ assert(not created and createReason == broken.loadError)
 assert(not broken:ImportText(TagData.Encode(store.data, "other")))
 assert(Json.encode(db) == saved)
 
--- An import that fails partway, such as one oversized tag in a backup, saves nothing
+-- A backup with one oversized tag saves nothing
 for name in pairs(db) do db[name] = nil end
 store = TagStore.new()
 assert(store:CreateTag("keep"))

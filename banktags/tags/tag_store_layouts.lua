@@ -10,9 +10,7 @@ local labelText = TagRules.labelText
 
 local TagStoreLayouts = {}
 
--- Lay the rows out at a column count, then an Unsorted heading row and the
--- Unsorted items. Returns the grid slots, the first slot of the heading row
--- (the end of the arranged area), and the labels with the grid rows they land on
+-- Lay out the rows, then the Unsorted heading and items
 function TagStoreLayouts:GetLayout(tag, columnCount)
     local record = self.data.tags[tag]
     local view = TagLayouts.Render(record ~= nil and record.rows or {}, columnCount)
@@ -52,9 +50,7 @@ function TagStoreLayouts:GetTaggedItems(tag)
     return items
 end
 
--- Place an item at a grid index of the layout drawn at a column count, swapping
--- any item already there back to where the moved item came from
--- The third result reports whether anything changed
+-- Place an item at a grid index, swapping out any item there
 function TagStoreLayouts:MoveLayoutItem(tag, layoutKey, destinationIndex, columnCount, forcePreserve)
     destinationIndex = math.tointeger(tonumber(destinationIndex))
     if self.data.tags[tag] == nil or destinationIndex == nil or destinationIndex < 1 then
@@ -112,8 +108,7 @@ function TagStoreLayouts:MoveLayoutItem(tag, layoutKey, destinationIndex, column
         for position = #row + 1, destination.position - 1 do row[position] = { kind = "blank" } end
         row[destination.position] = source
     else
-        -- Below the arranged rows: add empty rows down to the drop line, then a
-        -- row holding the item at the dropped column
+        -- Below the rows, pad down to the drop line, then add the item
         for _ = view.lines, destinationLine - 1 do rows[#rows + 1] = { kind = "row", slots = {} } end
         local row = {}
         local column = (destinationIndex - 1) % columns + 1
@@ -140,8 +135,7 @@ function TagStoreLayouts:UnarrangeLayoutItem(tag, layoutKey)
     return false, "The item is no longer in the preserved layout."
 end
 
--- Add a ghost copy of an item that opens the copy it was made from. Returns
--- the ghost's layout key
+-- Add a ghost copy that opens its source item, returning its key
 function TagStoreLayouts:DuplicateLayoutItem(tag, sourceLayoutKey)
     local record = self.data.tags[tag]
     local items = self:GetTaggedItems(tag)
@@ -177,8 +171,7 @@ function TagStoreLayouts:DuplicateLayoutItem(tag, sourceLayoutKey)
         layoutKey = nextKey,
         sourceLayoutKey = interactionKey,
     }
-    -- A copy fills the next open slot after its source, then any earlier one,
-    -- then the end of its source's row so it stays beside the original
+    -- Place a copy after its source, earlier, or at its row's end
     local targetEntry, targetPosition = TagLayouts.FirstOpenSlot(rows, sourceEntry, sourcePosition)
     if targetEntry ~= nil then
         rows[targetEntry].slots[targetPosition] = ghost
@@ -223,8 +216,7 @@ function TagStoreLayouts:GetLabel(tag, row, columnCount)
     return nil
 end
 
--- Add a label so it starts on a grid row. A wholly empty row there becomes the
--- label; otherwise the label goes before whatever starts on or spans that row
+-- Add a label starting on a grid row
 function TagStoreLayouts:InsertLabel(tag, row, text, columnCount)
     local value = labelText(text)
     if value == nil then return false, "Enter the label text." end
@@ -241,7 +233,7 @@ function TagStoreLayouts:InsertLabel(tag, row, text, columnCount)
     return self:Commit(nextData, "Could not save the label.")
 end
 
--- Rename the label on a grid row, adding it when missing and removing it when the text is empty
+-- Set the label on a grid row, removing it when text is empty
 function TagStoreLayouts:SetLabel(tag, row, text, columnCount)
     local nextData, rows, view = labelEdit(self, tag, columnCount)
     if nextData == nil then return false, "The label position is invalid." end
@@ -259,7 +251,7 @@ function TagStoreLayouts:SetLabel(tag, row, text, columnCount)
     return self:Commit(nextData, "Could not save the label.")
 end
 
--- Delete the label on a grid row; the entries below move up
+-- Delete the label on a grid row, moving entries up
 function TagStoreLayouts:RemoveLabel(tag, row, columnCount)
     local nextData, rows, view = labelEdit(self, tag, columnCount)
     local entry = nextData ~= nil and labelEntryAt(view, row) or nil
@@ -268,8 +260,7 @@ function TagStoreLayouts:RemoveLabel(tag, row, columnCount)
     return self:Commit(nextData, "Could not save the label.")
 end
 
--- Move only a label to start on another grid row; the rows keep their order
--- The third result reports whether anything changed
+-- Move only a label to another grid row
 function TagStoreLayouts:MoveLabel(tag, fromRow, toRow, columnCount)
     local nextData, rows, view = labelEdit(self, tag, columnCount)
     toRow = math.tointeger(tonumber(toRow))

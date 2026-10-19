@@ -1,4 +1,4 @@
--- Collect one short name for folder and page-label actions through app callbacks
+-- Ask for one short name for folder and label actions
 
 local Theme = require("banktags/ui/theme")
 
@@ -13,7 +13,7 @@ local CONTROL_WIDTH = CONTENT_WIDTH - MARGIN * 2
 local BUTTON_GAP = 8
 local ERROR_COLOUR = Theme.ERROR_TEXT
 
--- Create the prompt; onSave and the optional onDelete return success and a reason
+-- Create the prompt; callbacks return success and a reason
 function TextPrompt.new(parent, options)
     options = options or {}
     local self = setmetatable({
@@ -90,14 +90,14 @@ function TextPrompt.new(parent, options)
     return self
 end
 
--- Display a rejected save or delete reason beneath the field
+-- Show a rejected save or delete reason under the field
 function TextPrompt:ShowError(reason, fallback)
     self.status.content = tostring(reason or fallback)
     self.status.rgba = ERROR_COLOUR
     self.status.hidden = false
 end
 
--- Submit the entered text and close only when the callback accepts it
+-- Submit the text, closing only when accepted
 function TextPrompt:Save(value)
     if self.onSave == nil then return end
     local success, reason = self.onSave(tostring(value or ""))
@@ -108,7 +108,7 @@ function TextPrompt:Save(value)
     end
 end
 
--- Run the delete callback and close only when it succeeds
+-- Run the delete callback, closing only when it succeeds
 function TextPrompt:Delete()
     if self.onDelete == nil then return end
     local success, reason = self.onDelete()
@@ -119,12 +119,12 @@ function TextPrompt:Delete()
     end
 end
 
--- Show the existing prompt window
+-- Show the prompt window
 function TextPrompt:Show()
     self.window:Show()
 end
 
--- Destroy prompt controls and release the callbacks
+-- Destroy the prompt and release its callbacks
 function TextPrompt:Destroy()
     local controls = {}
     for _, button in ipairs(self.buttons or {}) do controls[#controls + 1] = button end

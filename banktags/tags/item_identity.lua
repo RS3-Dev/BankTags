@@ -1,18 +1,17 @@
--- Convert between this client's object IDs and the stable references saved for them, and
--- name one copy of an object the way Bank Core numbers copies
+-- Convert between object IDs, saved references, and copy keys
 
 local ObjectConfig = require("banktags/core/object_config")
 
 local ItemIdentity = {}
 
--- Object IDs can change between game updates, so saved data names items by
--- config name. An ID the client cannot name is saved as "#<id>" until it can
+-- Saved data names items by config name since IDs can change
+-- Unnamed IDs save as "#<id>"
 local ID_PREFIX = "#"
 
 local namesByID = {}
 local idsByName = {}
 
--- Identify one copy of an object: its place among the bank's stacks of that object
+-- Identify one copy of an object among the bank's stacks
 function ItemIdentity.LayoutKey(objectID, copy)
     objectID = math.tointeger(tonumber(objectID))
     copy = math.tointeger(tonumber(copy)) or 1

@@ -1,10 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Load Bank Core, the built Bank Tags, and a small import-source plugin where every injected
--- export is an ordinary data clone and no plugin sees another's globals, so each has only
--- its clone to use: Bank Tags connects to Core's and shows a tag, and the source plugin adds
--- an import source through Bank Tags' that the Import window lists. Reloads inject fresh
--- clones. How the live client copies an export is not shown here, only that a plain copy works
+-- Run every plugin on plain data clones of the others' exports
+-- Bank Tags connects through Core's clone, and an importer through Bank Tags'
 -- FAKE HOST: stand-in loader, clone, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -12,7 +9,7 @@ local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("cloned_exports", { separateGlobals = true, cloneExports = true })
 h.bankHost:SetItems({ { 1944, 3, "Egg" }, { 1927, 1, "Milk" } })
 
--- Bank Tags has only the injected clone of Core's API: no published copy is in reach
+-- Bank Tags has only the injected clone of Core's API
 local core = h:LoadCore()
 local tags = h:LoadTags()
 local app = h:App()
@@ -30,7 +27,7 @@ local tabParent = h:TabParent()
 assert(tabParent ~= nil and Harness.Find(tabParent, "Melee") ~= nil)
 assert(app:ShowTag("melee") and layout.pageState.view.key == "tag:melee")
 
--- Core reloads and the host injects a fresh clone, which Bank Tags reconnects through
+-- Core reloads and Bank Tags reconnects through a fresh clone
 h.host:Reload("bankcore", { shutdown = true, notify = true, reinject = true })
 assert(tabParent.destroyed and not coreClone.GetState().running)
 local freshClone = rawget(tags.env, "bankcore")
@@ -90,7 +87,7 @@ assert(sourceKeys() == "builtin:code example.importer/guide")
 assert(second:Dispose() and not second:GetState().live)
 assert(sourceKeys() == "builtin:code")
 
--- Bank Tags reloads; the source plugin, told so, gets a fresh clone of the new API
+-- Bank Tags reloads; the source plugin gets a fresh clone of the new API
 h.host:Reload("banktags", { shutdown = true, freshEnvironment = true, notify = true,
     reinject = true, notifyRequired = true })
 local reloadedClone = rawget(importer.env, "banktags")

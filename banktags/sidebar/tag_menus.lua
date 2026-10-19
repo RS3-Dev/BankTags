@@ -1,8 +1,5 @@
--- Add Bank Tags' right-click entries to bank menus from its own MiniMenuReady subscription:
--- tag and folder actions over the Tags tab's rows, Remove from the shown tag over its items,
--- and select mode's "Add to" as the left click on native items. Bank Core describes the
--- bank item beneath the pointer; a chosen entry runs on the next logic tick, and only while
--- what it was offered over still holds both when chosen and when it runs
+-- Add Bank Tags' entries to bank menus
+-- Chosen entries run next tick, only while their target still holds
 
 local Config = require("banktags/core/config")
 local Geometry = require("banktags/ui/geometry")
@@ -48,8 +45,7 @@ function TagMenus:Stop()
     self.pending = {}
 end
 
--- Wrap an entry's action to run on the next logic tick, unless current() stops holding
--- before it is chosen or before it runs
+-- Defer an action to the next tick while current() holds
 function TagMenus:Defer(current, action)
     return function()
         if not current() then return end
@@ -68,8 +64,7 @@ function TagMenus:Defer(current, action)
     end
 end
 
--- Check that the handle and the bank view an item was described in are still current; an
--- item described without a view is never current
+-- Check that an item's handle and bank view are still current
 function TagMenus:ItemCheck(item, extra)
     local app, handle = self.app, self.app.handle
     return function()
@@ -91,10 +86,8 @@ function TagMenus:HandleMenu(menu)
     end
 end
 
--- In select mode a native item's left click adds it to the tag. Without a known copy or
--- with the highlight gone, Cancel is the left click, so a click never withdraws while the
--- player is choosing items. On the shown tag, its items and ghosts offer Remove from,
--- which removes the copy the slot was drawn for, not the stack beneath
+-- Add select mode's Add to and the shown tag's Remove from
+-- Without a known copy or outline, Cancel stays the left click
 function TagMenus:AddItemEntries(menu, item)
     local app = self.app
     local select = app.select
@@ -137,9 +130,7 @@ function TagMenus:RowAtPointer()
     return controls.list:EntryAt(x, y), ctx
 end
 
--- Add the actions for the Tags row under the pointer: a tag's Select, Edit, select mode,
--- Remove, and folder moves, or a folder's Expand or Collapse, Rename, and Ungroup. Each
--- runs only while the same column stays mounted
+-- Add actions for the tag or folder row under the pointer
 function TagMenus:AddRowEntries(menu)
     local entry, ctx = self:RowAtPointer()
     if entry == nil then return end

@@ -1,17 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Drive Bank Tags' own menus beside Bank Core's guard with each plugin hearing the menu
--- first, under each place a host has put a plugin's entry: at the end as documented, just
--- above Cancel, or just below the native default. Under every combination select mode,
--- started from a shown tag, leaves it and tags consecutive native clicks without
--- withdrawing; Remove takes the exact slot's copy on a stack, a borrowed slot, and a ghost;
--- rows keep Cancel the left click; an entry the host does not report leaves Cancel the
--- left click; a preset view seen opening ends select mode, a native click staying Cancel
--- until Bank Tags hears it; and an entry offered or chosen before the bank view changed,
--- including a preset view opened and closed again, writes nothing.
--- Also covers select mode started while the native tab reads All Items before Bank Core
--- recorded it, followed by a native tab and back. This exercises the path behind a
--- reported tab-switch error, whose exact message is unknown; it does not confirm a fix
+-- Drive Bank Tags' menus beside Bank Core's guard under every entry placement
+-- Covers select mode, Remove on each slot kind, rows, and stale entries
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -42,8 +32,7 @@ local function pointAtRow(tag)
     app.tab.controls.list.list.scrollY = row.root.y
     h:PointAt(row.root, 20, 10 - row.root.y)
 end
--- Give the melee tag a stack, a borrowed slot naming copy 3 from copy 1, copy 2, and a
--- ghost, as an earlier session saved them
+-- Give melee a stack, a borrowed copy 3 slot, copy 2, and a ghost
 local function resetTags()
     for _, tag in ipairs({ "melee", "ranged" }) do
         if app.store.data.tags[tag] ~= nil then assert(app.store:DeleteTag(tag)) end
@@ -70,19 +59,17 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         h.menuOrder, h.placement = order, placement
         resetTags()
 
-        -- Rows: Cancel stays the left click, the entries follow it in order, and a chosen
-        -- entry runs on the next tick
+        -- Rows keep Cancel the left click; chosen entries run next tick
         pointAtRow("ranged")
         local menu = h:ContentMenu()
         local labels = Harness.Labels(menu)
         assert(labels[1] == "Select <col=f2c66d>Ranged</col>" and labels[#labels] == "Cancel",
             table.concat(labels, "|") .. where)
         assert(leftClick(menu) == "Cancel")
-        -- An entry the host does not report cannot be placed, so Cancel is the left click
+        -- An unreported entry cannot be placed, so Cancel is the left click
         assert(leftClick(h:ContentMenu(true)) == "Cancel", where)
 
-        -- Remove from the shown tag over a stack, a borrowed slot, and a ghost, each the
-        -- slot's own copy; Withdraw stays a leased stack's left click
+        -- Remove targets each slot's own copy; Withdraw stays a stack's left click
         assert(app:ShowTag("melee"))
         h:Tick(2)
         pointAt(52, 4)
@@ -123,7 +110,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         h:Tick(2)
         assert(app.store:HasTag("melee", key(4151, 1)), "stale after reopening" .. where)
 
-        -- Select mode from the shown tag leaves it; consecutive left clicks tag and never withdraw
+        -- Select mode leaves the shown tag; left clicks tag, never withdraw
         pointAtRow("ranged")
         Harness.Choose(h:ContentMenu(), "Select items <col=f2c66d>Ranged</col>")
         h:Tick(2)
@@ -138,9 +125,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
             and app.store:HasTag("ranged", key(385, 1)), where)
         -- An entry the host does not report leaves Cancel the left click
         assert(leftClick(h:MenuFor(host.items[1], true)) == "Cancel", where)
-        -- A preset view seen at a bank action ends select mode: Bank Core restores the
-        -- items' own looks, a native click is Cancel until Bank Tags hears it, and then
-        -- the tab says why and the left click returns to the bank
+        -- A preset view ends select mode, pausing native clicks until heard
         presetOpen = true
         layout:Changed(false)
         assert((host.items[2].outlineWidth or 0) == 0 and leftClick(h:MenuFor(host.items[1])) == "Cancel", where)
@@ -149,7 +134,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         presetOpen = false
         layout:Changed(false)
         assert(leftClick(h:MenuFor(host.items[1])) == "Withdraw-1", where)
-        -- An Add offered before a preset view opened and closed again writes nothing
+        -- An Add offered across a preset view opening writes nothing
         assert(app.store:RemoveTag("ranged", key(4151, 1)) and app.select:Toggle("ranged"))
         h:Tick(2)
         assert(host.items[2].outlineWidth == 2, where)
@@ -179,8 +164,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
     end
 end
 
--- Select mode started while the native tab reads All Items before Core recorded it, then
--- a native tab and back
+-- Start select mode before Core records All Items, then switch tabs
 h.menuOrder, h.placement = "core_first", "above_cancel"
 resetTags()
 layout.nativeViewAll = false
@@ -193,7 +177,7 @@ h:Tick(2)
 assert(app.store:HasTag("ranged", key(385, 1)))
 layout.DetectNativeViewAll = function() return false end
 layout:SetNativeViewAll(false)
--- Before Bank Tags hears the change, a native click is paused rather than a withdraw
+-- Until Bank Tags hears the change, a native click is paused
 assert(leftClick(h:MenuFor(host.items[1])) == "Cancel")
 h:Tick(2)
 assert(app.select:Tag() == nil and app.status == 'Select "All Items" before choosing items for a tag.')

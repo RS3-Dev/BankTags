@@ -5,7 +5,7 @@ local trim = Text.trim
 
 local TagRules = {}
 
--- Saving drops longer tag names, so every entry point must refuse them
+-- Saving drops longer tag names, so refuse them everywhere
 TagRules.MAX_TAG_NAME = 80
 TagRules.MAX_FOLDER_NAME = 40
 TagRules.MAX_LABEL_TEXT = 60
@@ -48,15 +48,14 @@ function TagRules.folderName(value)
     return string.lower(name), name
 end
 
--- Clean page-label text, dropping angle brackets the client treats as markup
+-- Clean label text, dropping markup angle brackets
 function TagRules.labelText(value)
     local text = trim((tostring(value or ""):gsub("[<>]", ""))):gsub("%s+", " ")
     if text == "" then return nil end
     return string.sub(text, 1, TagRules.MAX_LABEL_TEXT)
 end
 
--- Remove empty slots only at the end so interior grid positions stay stable
--- A blank holding an unresolved item is not empty and is kept
+-- Remove trailing empty slots, keeping unresolved item blanks
 function TagRules.trimTrailingLayoutBlanks(slots)
     if type(slots) ~= "table" then return {} end
     while #slots > 0 do

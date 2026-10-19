@@ -1,6 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Saved strings, and a client catalog where only the whip and shark have config names
+-- Saved strings, and a catalog naming only the whip and shark
 local db, writes, failWrites = {}, 0, false
 PersistentDB = {
     GetString = function(_, key) return db[key] end,
@@ -38,7 +38,7 @@ end
 local store = TagStore.new()
 assert(store:CreateTag("melee", 4151))
 assert(store:AddTag("melee", 4151, key(4151)))
--- Only the listed copy is in the tag; a second stack of the same item is not
+-- Only the listed copy is in the tag, not a second stack
 assert(store:HasTag("melee", key(4151)) and not store:HasTag("melee", key(4151, 2)))
 assert(not store:HasTag("ranged", key(4151)))
 -- Adding a listed copy again changes nothing
@@ -71,14 +71,13 @@ assert(store:RemoveTag("melee", key(103)) and store:RemoveTag("melee", key(101))
 assert(store:MoveLayoutItem("melee", key(4151), 3, 10))
 assert(#store.data.tags.melee.rows[1].slots == 3 and objectAt(store, "melee", 2) == nil)
 
--- A ghost copy takes the next open slot after its source, then an earlier one,
--- and opens the source
+-- A ghost takes the next open slot after its source and opens it
 local copied, ghost = store:DuplicateLayoutItem("melee", key(4151))
 assert(copied and ghost == key(4151, 2))
 local ghostSlot = TagLayouts.Render(store.data.tags.melee.rows, 10).slots[2]
 assert(ghostSlot.layoutKey == ghost and ghostSlot.sourceLayoutKey == key(4151))
--- With no open slot, a copy goes at the end of its source's row. A copy of a
--- ghost opens the original item
+-- With no open slot, a copy ends its source's row
+-- A copy of a ghost opens the original
 local _, ghostOfGhost = store:DuplicateLayoutItem("melee", ghost)
 assert(ghostOfGhost == key(4151, 3))
 assert(TagLayouts.Render(store.data.tags.melee.rows, 10).slots[4].sourceLayoutKey == key(4151))
@@ -216,7 +215,7 @@ assert(labelRows() == "0,3,4")
 -- In a narrower bank the full row wraps onto three lines, pushing labels down
 assert(labelRows(4) == "0,5,6")
 
--- Items cannot be dropped onto a label, and the arranged area ends after the last label
+-- Items cannot drop onto labels; the layout ends after the last label
 assert(not store:MoveLayoutItem("gear", key(1), 5, 10))
 local _, boundary = store:GetLayout("gear", 10)
 assert(boundary == 50)

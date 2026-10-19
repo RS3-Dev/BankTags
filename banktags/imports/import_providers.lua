@@ -1,7 +1,4 @@
--- Hold import sources other plugins register, and run their requests for the Import window
--- Providers return plain tag drafts; they never receive the tag store or any window.
--- Bank Tags supplies the draft reader; without one, sources can register but no draft is
--- ever accepted
+-- Hold other plugins' import sources and run their draft requests
 
 local Config = require("banktags/core/config")
 local debugLog = require("banktags/core/debug_log").Write
@@ -23,7 +20,7 @@ ImportProviders.LIMITS = {
     importProviders = 16,
     importProvidersPerOwner = 4,
     importMessageLength = 120,
-    -- The tag draft reader's published bounds; a test keeps them equal to its own
+    -- The tag draft reader's limits, checked by a test
     draftTags = 32,
     draftEntries = 2000,
 }
@@ -75,8 +72,7 @@ local function failureMessage(message)
     return PlainData.Text(message, LIMITS.importMessageLength) or FAILED
 end
 
--- Create an empty registry; owner liveness comes from the import API's owners, and
--- readDraft(draft) returns share text, or nil and a reason, for an accepted draft
+-- Create an empty import source registry
 function ImportProviders.new(options)
     local self = setmetatable({
         isLive = options.isLive,
@@ -89,7 +85,7 @@ function ImportProviders.new(options)
         listening = false,
         closed = false,
     }, ImportProviders)
-    -- Each registry listens under its own name, so a reload never shares a listener
+    -- Give each registry its own listener so reloads never share one
     self.workEvent = WORK_EVENT .. ":" .. string.match(tostring(self), "%x+$")
     return self
 end
@@ -104,7 +100,7 @@ function ImportProviders:Changed()
     if self.onChange ~= nil then self.onChange() end
 end
 
--- Whether a source description is still the registered one, from a live owner
+-- Check that a source is still registered to a live owner
 function ImportProviders:Current(record)
     return not self.closed and self.records[record.key] == record and self.isLive(record.owner)
 end
@@ -129,7 +125,7 @@ function ImportProviders:ProviderIDs(owner)
     return providerIDs
 end
 
--- Describe every source for the Import window, ordered by owner ID and then registration
+-- Describe every source for the Import window in a stable order
 function ImportProviders:Sources()
     local records = {}
     for _, record in pairs(self.records) do records[#records + 1] = record end
@@ -179,7 +175,7 @@ function ImportProviders:Register(owner, providerID, input)
     return true
 end
 
--- Replace a source's description, keeping the last good one when the update is invalid
+-- Replace a source's description, keeping it if the update is invalid
 function ImportProviders:Update(owner, providerID, input)
     local current, reason = self:Owned(owner, providerID)
     if current == nil then return false, reason end
@@ -215,8 +211,7 @@ function ImportProviders:RemoveOwner(owner)
     self:Changed()
 end
 
--- Forget registered sources and invalidate their requests before telling any provider, so a
--- cancel callback that registers, updates, or removes sources cannot revive or skip one
+-- Forget sources first so cancel callbacks cannot revive or skip one
 function ImportProviders:Drop(records)
     local cancels = {}
     for _, record in ipairs(records) do
@@ -227,8 +222,7 @@ function ImportProviders:Drop(records)
     self:RunCancels(cancels)
 end
 
--- Mark every outstanding request a source description issued as stale, collecting the
--- unanswered ones whose provider asked to be told
+-- Mark a source's requests stale, collecting ones to cancel
 function ImportProviders:Invalidate(record, cancels)
     for token in pairs(record.tokens) do
         token.live = false
@@ -238,14 +232,13 @@ function ImportProviders:Invalidate(record, cancels)
     return cancels
 end
 
--- Tell providers their requests are no longer wanted, once the registry is consistent,
--- in the order the requests were made
+-- Tell providers their requests are cancelled, in request order
 function ImportProviders:RunCancels(tokens)
     table.sort(tokens, function(left, right) return left.sequence < right.sequence end)
     for _, token in ipairs(tokens) do self:RunCancel(token) end
 end
 
--- Run deferred provider work on the next logic tick, outside any window or bank event
+-- Run provider work on the next logic tick
 function ImportProviders:Schedule(work)
     self.queue[#self.queue + 1] = work
     if self.listening then return end
@@ -266,7 +259,7 @@ function ImportProviders:RunQueue()
     Event.Logic.Unsubscribe(self.workEvent)
 end
 
--- Ask a source for a draft; the answer arrives once, on a later tick, unless cancelled
+-- Ask a source for a draft, answered once on a later tick
 function ImportProviders:Begin(key, input, onResult)
     local record = self.records[key]
     if record == nil or not self:Current(record) or record.unavailable ~= nil then return nil end
@@ -296,11 +289,11 @@ function ImportProviders:Start(token, request)
     end
     if type(result) ~= "function" then return end
     token.cancel = result
-    -- The request went stale while the provider ran, so it is told at once
+    -- The request went stale while the provider ran
     if not token.live and not token.settled then self:RunCancel(token) end
 end
 
--- Record a request's single answer and deliver it on the next tick if still wanted
+-- Record a request's answer and deliver it next tick
 function ImportProviders:Settle(token, state, value)
     if not token.live or token.settled or not self:Current(token.record) then return false end
     token.settled = true
@@ -313,7 +306,7 @@ function ImportProviders:Settle(token, state, value)
     return true
 end
 
--- Accept a provider's draft once, copied and checked before anything sees it
+-- Accept a provider's draft once, copied and checked
 function ImportProviders:Resolve(token, draft)
     if not token.live or token.settled or not self:Current(token.record) then
         return false, "stale_request"
@@ -350,7 +343,7 @@ function ImportProviders:RunCancel(token)
     if not ok then debugLog("Bank Tags import source ", token.record.key, " cancel raised: ", message) end
 end
 
--- Drop a request so no later answer reaches the window; repeating it changes nothing
+-- Drop a request so its answer never reaches the window
 function ImportProviders:Cancel(token)
     if token == nil or not token.live then return end
     token.live = false
@@ -361,7 +354,7 @@ end
 -- Drop every source and request, stop listening, and refuse all later calls
 function ImportProviders:Close()
     if self.closed then return end
-    -- Closing first refuses anything a provider's cancel callback tries to register
+    -- Close first so cancel callbacks cannot register anything
     self.closed = true
     local records = {}
     for _, record in pairs(self.records) do records[#records + 1] = record end

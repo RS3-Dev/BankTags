@@ -1,5 +1,5 @@
--- Present the import-source host and tag sharing controls
--- Sources supply drafts; this window owns preview, destination choices, and the explicit import
+-- Show the import and sharing pages
+-- Sources supply drafts; this window previews and imports them
 
 local CodeImportSource = require("banktags/windows/code_import_source")
 local Config = require("banktags/core/config")
@@ -13,13 +13,13 @@ ImportShare.__index = ImportShare
 local WIDTH = 520
 local HEIGHT = 520
 local CONTENT_WIDTH = WIDTH - 16
--- The tabs fill the window now that the title-bar X is the only close control
+-- The tabs fill the window below the title bar
 local TABS_HEIGHT = 466
 local SHARE_PAGE_MIN_HEIGHT = TABS_HEIGHT - 42
 local IMPORT_NO_FOLDER = "none"
 local IMPORT_NEW_FOLDER = "new"
 local IMPORT_FOLDER_PREFIX = "folder:"
--- The source picker leaves room for the selected source's 30px icon
+-- Leave room for the selected source's 30px icon
 local SOURCE_WIDTH = 414
 local INPUT_Y = 122
 local FOLDER_NAME_Y = 302
@@ -27,14 +27,14 @@ local STATUS_SUCCESS = 0x78C47CFF
 local STATUS_ERROR = 0xE57373FF
 local STATUS_NEUTRAL = 0xC9BEA4FF
 
--- Look up an imported tag's icon, allowing unavailable object definitions
+-- Look up an imported tag's icon object
 local function objectFromID(objectID)
     if objectID == nil then return nil end
     local ok, object = pcall(function() return config.Obj.FromID(objectID) end)
     return ok and object or nil
 end
 
--- Create a settings label with the requested bounds and appearance
+-- Create a settings label
 local function text(parent, value, y, options)
     options = options or {}
     return prettyui.Text.new(parent, {
@@ -50,7 +50,7 @@ local function text(parent, value, y, options)
     })
 end
 
--- Count a single tag's items, and those this client cannot resolve
+-- Count a tag's items and those this client cannot resolve
 local function countItems(tag)
     local items, unknown = 0, 0
     -- Count one list of slots
@@ -67,7 +67,7 @@ local function countItems(tag)
     return items, unknown
 end
 
--- Describe a readable draft before anything is saved
+-- Describe a readable draft before saving
 local function previewMessage(source, imported)
     local tagCount = #imported.order
     if tagCount ~= 1 then
@@ -80,7 +80,7 @@ local function previewMessage(source, imported)
     return message .. ". Not saved until you import."
 end
 
--- Create the standalone import and sharing pages
+-- Create the import and sharing pages
 function ImportShare.new(parent, options)
     options = options or {}
     local self = setmetatable({
@@ -104,7 +104,7 @@ function ImportShare.new(parent, options)
         minHeight = HEIGHT,
         maxHeight = HEIGHT,
         scrollable = false,
-        -- A closed window takes no further answers from import sources
+        -- A closed window ignores later source answers
         onClose = function()
             self:CancelImportRequest()
             self.closed = true
@@ -130,7 +130,7 @@ function ImportShare.new(parent, options)
         colour = 0xF2C66DFF,
         font = id.Font.CINZEL_13PT_BOLD,
     })
-    -- The source comes first because it decides what the input below it means
+    -- The source decides what the input below means
     self.controls.importSourceLabel = text(importPage.content, "Source", 32, {
         height = 20, maxLines = 1,
     })
@@ -139,13 +139,13 @@ function ImportShare.new(parent, options)
         entries = { { id = CodeImportSource.key, label = CodeImportSource.label, order = 1 } },
         selectedID = CodeImportSource.key,
         maxVisibleEntries = 6,
-        -- Replacing the entries can report the same selection again, which keeps the input
+        -- Replacing entries may repeat the selection, which keeps the input
         onChange = function()
             local key = self.importSourcePicker:GetSelectedID()
             if key ~= self.source.key then self:SelectSource(key) end
         end,
     })
-    -- The input comes next because it fills in the name, sprite, and folder below it
+    -- The input fills in the name, sprite, and folder below
     self.controls.importCodeLabel = text(importPage.content, CodeImportSource.prompt, 98, {
         height = 20, maxLines = 1,
     })
@@ -241,7 +241,7 @@ function ImportShare:FindSource(key)
     return nil
 end
 
--- List the share code first, then registered sources, keeping the selection when it remains
+-- List the share code, then registered sources, keeping the selection
 function ImportShare:RefreshSources()
     if self.closed or self.window == nil then return end
     local sources = { CodeImportSource }
@@ -249,7 +249,7 @@ function ImportShare:RefreshSources()
     for _, source in ipairs(providers ~= nil and providers:Sources() or {}) do
         sources[#sources + 1] = source
     end
-    -- The picker needs distinct labels, so a repeated label names its owner
+    -- Repeated labels name their owner so entries stay distinct
     local entries, used = {}, {}
     for index, source in ipairs(sources) do
         local label = source.label
@@ -270,7 +270,7 @@ function ImportShare:RefreshSources()
     end
 end
 
--- Show one source's input, dropping any outstanding request and the previous draft
+-- Show a source's input, dropping any pending request and draft
 function ImportShare:SelectSource(key, input)
     if self.closed then return end
     local source = self:FindSource(key) or CodeImportSource
@@ -305,7 +305,7 @@ function ImportShare:SelectSource(key, input)
     self:RefreshImportPreview(input)
 end
 
--- Read the current input through the selected source without saving anything
+-- Preview the current input without saving
 function ImportShare:RefreshImportPreview(input)
     input = tostring(input or "")
     if self.closed or input == self.importSource then return end
@@ -323,15 +323,14 @@ function ImportShare:RefreshImportPreview(input)
     end
 end
 
--- Ask an action source to run its own flow and answer with a draft
+-- Ask an action source to run its flow and answer with a draft
 function ImportShare:RequestImport()
     if self.closed or self.source.input ~= "action" or self.source.unavailable ~= nil then return end
     self:CancelImportRequest()
     self:BeginImportRequest(nil)
 end
 
--- Ask the selected registered source for a draft. Every change of source or input and
--- closing the window cancel it, and a cancelled request never answers
+-- Ask the selected source for a draft, cancelled by any change
 function ImportShare:BeginImportRequest(input)
     local token = self.options.importProviders:Begin(self.source.key, input, function(state, value)
         self.importRequest = nil
@@ -345,14 +344,14 @@ function ImportShare:BeginImportRequest(input)
     self:ShowImportResult("loading")
 end
 
--- Drop the outstanding source request so its answer is ignored
+-- Drop the pending source request so its answer is ignored
 function ImportShare:CancelImportRequest()
     local token = self.importRequest
     self.importRequest = nil
     if token ~= nil then self.options.importProviders:Cancel(token) end
 end
 
--- Show one import state; only a readable draft fills the destination and enables Import
+-- Show one import state, enabling Import only for a readable draft
 function ImportShare:ShowImportResult(state, value)
     local imported, reason = nil, value
     if state == "ready" then
@@ -386,7 +385,7 @@ function ImportShare:ShowImportResult(state, value)
     end
 end
 
--- List saved folders and any folder supplied by the single-tag import
+-- List saved folders plus any folder the import supplies
 function ImportShare:RefreshImportFolders(selectedID)
     selectedID = selectedID or self.importFolder:GetSelectedID() or IMPORT_NO_FOLDER
     local entries = { { id = IMPORT_NO_FOLDER, label = "No folder", order = 1 } }
@@ -410,7 +409,7 @@ function ImportShare:RefreshImportFolders(selectedID)
     self:UpdateImportFolderControls()
 end
 
--- Show a new-folder draft only when requested and keep the import action below it
+-- Show the new-folder field only when requested
 function ImportShare:UpdateImportFolderControls()
     if self.importFolderName == nil then return end
     local creating = self.importSingleTag ~= nil
@@ -422,13 +421,13 @@ function ImportShare:UpdateImportFolderControls()
     self.importStatus:SetPos(18, buttonY + 36)
 end
 
--- Change only the imported draft's icon and its preview
+-- Change the imported draft's icon and preview
 function ImportShare:SetImportSprite(objectID)
     self.importSpriteObjectID = math.tointeger(tonumber(objectID))
     self.importSpriteSlot:SetObject(objectFromID(self.importSpriteObjectID))
 end
 
--- Ignore picker results when the draft has changed since the picker opened
+-- Ignore picker results once the draft has changed
 function ImportShare:ChooseImportSprite()
     if self.closed or self.importSingleTag == nil or self.options.onChooseImportSprite == nil then return end
     local revision = self.importRevision
@@ -437,14 +436,14 @@ function ImportShare:ChooseImportSprite()
     end)
 end
 
--- Display feedback in green for success, red for failure, or a given colour
+-- Show feedback in green, red, or a given colour
 function ImportShare:SetPageStatus(control, value, success)
     control.content = tostring(value or "")
     control.rgba = success == true and STATUS_SUCCESS or success == false and STATUS_ERROR or success
     control.hidden = value == nil or value == ""
 end
 
--- Remove export-row controls before rebuilding the sharing list
+-- Remove the share rows before rebuilding them
 function ImportShare:DestroyShareRows()
     for index = #self.shareRows, 1, -1 do
         local row = self.shareRows[index]
@@ -454,7 +453,7 @@ function ImportShare:DestroyShareRows()
     self.shareRows = {}
 end
 
--- Create rows that let the user copy each tag's export text
+-- Create a row to copy each tag's share code
 function ImportShare:RebuildShareRows(exports)
     self:DestroyShareRows()
     local startY = 74
@@ -511,20 +510,20 @@ function ImportShare:RebuildShareRows(exports)
         startY + #self.shareRows * rowHeight + 8))
 end
 
--- Reload export text and refresh the sharing controls
+-- Reload share codes and refresh the sharing rows
 function ImportShare:RefreshExports()
     if self.options.onGetTagExports == nil then return end
     self:RebuildShareRows(self.options.onGetTagExports())
 end
 
--- Save the current readable draft with the chosen destination and display the result
+-- Save the readable draft to the chosen destination
 function ImportShare:Import()
     if self.closed or self.options.onImport == nil then return end
     if self.source.builtin then
         local source = self.importField:GetText()
         if source ~= self.importSource then self:RefreshImportPreview(source) end
     end
-    -- Only a readable draft from the current source and input can be saved
+    -- Only a readable draft from the current input can be saved
     if self.importState ~= "ready" then return end
     local overrides = self.importSingleTag ~= nil and {
         name = self.importNameField:GetText(),
@@ -552,17 +551,17 @@ function ImportShare:Import()
     self:SetPageStatus(self.importStatus, message, true)
 end
 
--- Retain the previous save entry point as a close action; imports commit independently
+-- Close the window; imports save on their own
 function ImportShare:Save()
     self.window:Close()
 end
 
--- Show the existing editor window
+-- Show the window
 function ImportShare:Show()
     self.window:Show()
 end
 
--- Destroy settings pages and controls before releasing the window
+-- Destroy the pages and controls before the window
 function ImportShare:Destroy()
     self:CancelImportRequest()
     self.closed = true

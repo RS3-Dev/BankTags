@@ -1,10 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Drive import providers through Bank Tags' public API and the real Import/Share window: the
--- built-in share code beside two external sources, previews that save nothing, one commit per
--- Import, stale and duplicate answers, provider failures and bad drafts, removal,
--- replacement, and shutdown. Ported from the preserved Bank Utilities test; Bank Core takes
--- no part. The game host is a stand-in; nothing here shows how the live client behaves
+-- Drive import providers through the public API and the Import/Share window
+-- The game host is a stand-in, not the live client
 
 local db, writes = {}, 0
 PersistentDB = {
@@ -16,7 +13,7 @@ PersistentDB = {
     end,
 }
 
--- Logic listeners run only when the test ticks, as the host runs them between frames
+-- Logic listeners run only when the test ticks
 local listeners, ticking = {}, false
 Event = { Logic = {
     Subscribe = function(name, action) listeners[name] = action end,
@@ -102,7 +99,7 @@ prettyui = {
         local value = control(options)
         value.label, value.action = label, action
         function value:SetDisabled(disabled) self.disabled = disabled end
-        -- A disabled button ignores presses, as the PrettyUI button does
+        -- A disabled button ignores presses, like PrettyUI's
         function value:Press() if not self.disabled then self.action() end end
         return value
     end },
@@ -115,7 +112,7 @@ prettyui = {
         local value = control(options)
         value.entries, value.selectedID, value.disabled = options.entries, options.selectedID, options.disabled
         function value:GetSelectedID() return self.selectedID end
-        -- The client's combo box may report its selection again when entries are replaced
+        -- The client's combo box may repeat its selection when entries change
         function value:SetEntries(entries, selectedID)
             self.entries, self.selectedID = entries, selectedID
             if options.onChange then options.onChange(self, selectedID) end
@@ -138,7 +135,7 @@ local TagDraft = require("banktags/imports/tag_draft")
 local Windows = require("banktags/windows/windows")
 
 local store = TagStore.new()
--- Count every store commit so previews can be shown to save nothing
+-- Count store commits so previews can be shown to save nothing
 local commits = 0
 local commit = TagStore.Commit
 store.Commit = function(...)
@@ -165,7 +162,7 @@ local function sourceKeys(settings)
     return table.concat(keys, " ")
 end
 
--- A one-tag draft naming items by config name and object ID, with a repeat and an unknown item
+-- A one-tag draft with a repeated and an unknown item
 local function gearDraft(name)
     return { tags = { {
         name = name,
@@ -187,7 +184,7 @@ end
 -- The published limits include the import sources and drafts
 assert(api.LIMITS.importProviders == 16 and api.LIMITS.importProvidersPerOwner == 4)
 assert(api.LIMITS.draftTags == 32 and api.LIMITS.draftEntries == 2000)
--- The registry publishes the reader's bounds without loading the tag reader itself
+-- The registry publishes the reader's bounds without loading it
 assert(api.LIMITS.draftTags == TagDraft.LIMITS.tags and api.LIMITS.draftEntries == TagDraft.LIMITS.entries)
 
 app.windows:OpenImportShare()
@@ -196,7 +193,7 @@ assert(sourceKeys(settings) == "builtin:code" and settings.source.key == "builti
 assert(settings.controls.importCodeLabel.content == "Import code")
 assert(settings.importButton.disabled and settings.importStatus.hidden)
 
--- Two owners register sources; registration never changes the selected source
+-- Two owners register sources without changing the selection
 local wiki = assert(api.RegisterExtension("example.wiki", "Wiki"))
 local pvme = assert(api.RegisterExtension("example.pvme", "PVME"))
 local wikiCalls, wikiRequests, wikiCancels = 0, {}, 0
@@ -284,7 +281,7 @@ assert(settings.importState == "empty" and wikiCalls == 0)
 settings.importField:SetText("guide/rotation", true)
 assert(settings.importState == "loading" and wikiCalls == 0 and settings.importButton.disabled)
 assert(settings.importStatus.content == "Loading from Wiki gear...")
--- Import does nothing while no current draft is ready, even if pressed past the disabled state
+-- Import does nothing until a draft is ready, even past the disabled state
 settings:Import()
 assert(commits == 1 and settings.importStatus.content == "Loading from Wiki gear...")
 tick()
@@ -306,7 +303,7 @@ assert(settings.importFolder:GetSelectedID() == "folder:guides")
 assert(settings.importStatus.content == "Preview: 3 items, 1 not recognized. Not saved until you import.")
 assert(writes == 1 and commits == 1 and listenerCount() == 0)
 
--- Import commits the current draft exactly once, through the store's own validation
+-- Import commits the current draft once, through the store's checks
 settings.importButton:Press()
 assert(writes == 2 and commits == 2)
 assert(store:GetTagFolder("rotation gear") == "guides")
@@ -317,7 +314,7 @@ assert(store:GetLabel("rotation gear", 0, 10) == "Bars")
 assert(string.find(TagData.Encode(store.data, "rotation gear"), "mystery_item", 1, true))
 assert(settings.importStatus.content == "Imported 1 tag.")
 
--- Changing the input invalidates the outstanding request; only the newest answers
+-- Changing the input makes the old request stale
 settings.importField:SetText("guide/one", true)
 tick()
 local first = wikiRequests[2]
@@ -330,7 +327,7 @@ assert(second.input == "guide/two" and second:Resolve(gearDraft("Two")))
 tick()
 assert(settings.importNameField.text == "two" and writes == 2)
 
--- Another owner's registration keeps the selected source, its input, and its request
+-- Another owner registering keeps the selected source and its request
 settings.importField:SetText("guide/kept-while-registering", true)
 tick()
 local kept = wikiRequests[#wikiRequests]
@@ -345,7 +342,7 @@ assert(other:Dispose() and kept:IsCurrent())
 assert(kept:Resolve(gearDraft("Two")))
 tick()
 
--- An answer recorded before the window closes is never delivered to it
+-- An answer recorded before the window closes is never delivered
 settings.importField:SetText("guide/three", true)
 tick()
 local beforeClose = wikiRequests[#wikiRequests]
@@ -356,7 +353,7 @@ tick()
 assert(settings.importStatus.content == status and settings.importNameField.text == "")
 assert(not beforeClose:IsCurrent() and listenerCount() == 0)
 
--- A pending request is cancelled when the window closes, and a late answer is refused
+-- Closing the window cancels a pending request
 app.windows:OpenImportShare()
 settings = app.windows.importShare
 assert(settings.source.key == "builtin:code")
@@ -371,7 +368,7 @@ assert(select(2, pending:Resolve(gearDraft("Four"))) == "stale_request")
 tick()
 assert(listenerCount() == 0 and writes == 2)
 
--- An action source runs its own flow; a synchronous answer still arrives on the tick
+-- An action source runs its own flow, answering on the tick
 app.windows:OpenImportShare()
 settings = app.windows.importShare
 settings.importSourcePicker:Select("example.pvme/preset", true)
@@ -393,8 +390,7 @@ assert(settings.importNameField.disabled and writes == 2)
 settings.importButton:Press()
 assert(writes == 3 and store:GetTagFolder("melee") == "presets" and store.data.tags.ranged ~= nil)
 
--- Updating an action source cancels its request and waits for the next press; it never
--- starts the source's own flow by itself
+-- Updating an action source cancels its request without restarting it
 pvmeAnswer = nil
 settings.importActionButton:Press()
 tick()
@@ -415,7 +411,7 @@ settings.importSourcePicker:Select("example.wiki/guide", true)
 assert(not orphan:IsCurrent() and select(2, orphan:Resolve(gearDraft("Orphan"))) == "stale_request")
 assert(settings.importActionButton == nil and not settings.importField.root.hidden)
 
--- A source that raises shows a bounded message; the share code still imports afterwards
+-- A raising source shows a bounded message; the share code still works
 assert(wiki:UpdateImportProvider("guide", wikiProvider({
     request = function() error("internal parser detail at line 12") end,
 })))
@@ -452,7 +448,7 @@ assert(failing:Fail())
 tick()
 assert(settings.importStatus.content == "The source could not load this import.")
 
--- Malformed drafts are refused without running metamethods, and nothing is saved
+-- Malformed drafts are refused without running metamethods
 local touched = false
 local trap = setmetatable({}, { __index = function() touched = true end,
     __pairs = function() touched = true end, __len = function() touched = true return 1 end })
@@ -497,7 +493,7 @@ for index, draft in ipairs(badDrafts) do
 end
 assert(not touched and writes == 4)
 
--- An update re-asks the selected source with the same input; the old request goes stale
+-- An update re-asks the selected source and stales the old request
 local beforeUpdate = ask("guide/kept")
 assert(wiki:UpdateImportProvider("guide", wikiProvider({ label = "Wiki gear lists" })))
 assert(not beforeUpdate:IsCurrent() and settings.importField.text == "guide/kept")
@@ -517,7 +513,7 @@ tick()
 assert(wikiCalls == callsBefore and settings.importButton.disabled)
 assert(wiki:UpdateImportProvider("guide", wikiProvider()))
 
--- Removing the selected source falls back to the share code and cancels its request
+-- Removing the selected source falls back to the share code
 local removed = ask("guide/removed")
 assert(wiki:RemoveImportProvider("guide"))
 assert(settings.source.key == "builtin:code" and settings.importField.text == "")
@@ -526,7 +522,7 @@ assert(not removed:IsCurrent() and sourceKeys(settings) == "builtin:code example
 tick()
 assert(settings.importState == "empty" and writes == 4)
 
--- Replacing an owner removes its sources and makes the old handle stale
+-- Replacing an owner removes its sources and stales its handle
 assert(wiki:RegisterImportProvider("guide", wikiProvider()))
 settings.importSourcePicker:Select("example.wiki/guide", true)
 local replaced = ask("guide/replaced")
@@ -554,8 +550,7 @@ local function consistent()
     return count == app.importProviders.count
 end
 
--- An owner with three requests in flight whose cancel callbacks register another owner's
--- sources; by the time any callback runs, every one of the owner's requests is stale
+-- An owner whose cancel callbacks register another owner's sources
 local host = assert(api.RegisterExtension("example.host", "Host"))
 local deliveries = 0
 local function doomedOwner()
@@ -590,7 +585,7 @@ local function doomedOwner()
     assert(#requests == 3)
     return doomed, requests, cancelled
 end
--- The doomed owner left completely, while the host's late sources stay usable
+-- The doomed owner leaves fully; the host's late sources still work
 local function leftCleanly(requests, cancelled)
     assert(cancelled.peersStale and cancelled[1] and cancelled[2] and cancelled[3])
     assert(sourceKeys(settings) == "builtin:code example.host/late1 example.host/late2 "
@@ -609,7 +604,7 @@ local function leftCleanly(requests, cancelled)
     settings.importSourcePicker:Select("builtin:code", true)
 end
 
--- Replacing the owner, then disposing it, each finish the owner's whole cleanup
+-- Replacing then disposing the owner each finish its cleanup
 local doomed, doomedRequests, doomedCancels = doomedOwner()
 local replacement = assert(api.RegisterExtension("example.doomed", "Doomed"))
 assert(replacement:GetState().live and not doomed:GetState().live)
@@ -618,8 +613,7 @@ doomed, doomedRequests, doomedCancels = doomedOwner()
 assert(doomed:Dispose() and not replacement:GetState().live)
 leftCleanly(doomedRequests, doomedCancels)
 
--- A cancel callback may remove the source an update just installed, or register the ID a
--- removal just freed; the registry keeps only the newest and counts each source once
+-- Cancel callbacks that edit sources leave each counted once
 local function selfEditing(onCancel)
     return wikiProvider({ request = function() return onCancel end })
 end
@@ -640,7 +634,7 @@ assert(host:GetState().providers[1] == "edit" and consistent())
 assert(app.importProviders.records["example.host/edit"].label == "Edit again")
 assert(host:RemoveImportProvider("edit"))
 
--- A dead owner's sources cannot start, answer, or deliver, even before they are removed
+-- A dead owner's sources cannot start, answer, or deliver
 local soloAlive = true
 local solo = ImportProviders.new({ isLive = function() return soloAlive end,
     readDraft = TagDraft.Read })
@@ -656,7 +650,7 @@ tick()
 assert(wikiCalls == soloCalls and deliveries == 0 and soloLate ~= nil and solo:Begin("example.solo/s", "z", function() end) == nil)
 solo:Close()
 
--- Without a draft reader, sources still register but every draft fails closed once
+-- Without a draft reader, sources register but drafts fail once
 local unread = ImportProviders.new({ isLive = function() return true end })
 local unreadOwner = { id = "example.unread", label = "Unread" }
 local unreadResults = {}
@@ -681,8 +675,7 @@ tick()
 assert(unreadResults[2] == "ready")
 unread:Close()
 
--- Shutdown cancels requests, falls back to the share code, and refuses old handles; a
--- cancel callback that registers during shutdown is refused, leaving nothing behind
+-- Shutdown cancels requests, falls back to the share code, and refuses handles
 local closingResult
 assert(host:RegisterImportProvider("closing", selfEditing(function()
     closingResult = select(2, host:RegisterImportProvider("during_close", wikiProvider()))

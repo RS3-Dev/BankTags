@@ -4,7 +4,7 @@ local Geometry = {}
 
 local MAX_PARENT_DEPTH = 32
 
--- Add parent offsets to locate a component within the requested ancestor
+-- Locate a component relative to an ancestor
 function Geometry.relativePosition(value, ancestor)
     local x, y, current, depth = 0, 0, value, 0
     while current ~= nil and current ~= ancestor and depth < MAX_PARENT_DEPTH do
@@ -17,7 +17,7 @@ function Geometry.relativePosition(value, ancestor)
     return x, y
 end
 
--- Add every parent offset to locate a component on the screen
+-- Locate a component on the screen
 function Geometry.absolutePosition(value)
     local x, y, current, depth = 0, 0, value, 0
     while current ~= nil and depth < MAX_PARENT_DEPTH do
@@ -29,7 +29,7 @@ function Geometry.absolutePosition(value)
     return x, y
 end
 
--- Convert the mouse position to the coordinates used by the scaled interface
+-- Convert the mouse position to interface coordinates
 function Geometry.interfaceMousePosition()
     if Mouse == nil or Mouse.GetPosition == nil then return nil, nil end
     local position = Mouse.GetPosition()

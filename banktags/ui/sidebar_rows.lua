@@ -1,5 +1,4 @@
--- Build the tag column's search field and row list, and the row decorations they share.
--- Sizes come from the column the caller was given, such as Bank Core's tab bounds
+-- Build the tag column's search field, row list, and row decorations
 
 local Theme = require("banktags/ui/theme")
 
@@ -14,7 +13,7 @@ SidebarRows.ENTRY_HEIGHT = 32
 SidebarRows.ROW_TEXT = 0xE7D7B0FF
 SidebarRows.ROW_LEFT = 6
 
--- Width of the controls inside a column of the given width
+-- Width of the controls inside a column
 function SidebarRows.ContentWidth(columnWidth)
     return math.max(1, columnWidth - SidebarRows.CONTENT_X * 2)
 end
