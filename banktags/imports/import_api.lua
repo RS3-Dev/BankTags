@@ -79,7 +79,7 @@ function ImportAPI:Handle(owner)
     })
 end
 
--- Build the plain, clone-safe table other plugins receive
+-- Build the plain table other plugins get, safe for the host to copy
 function ImportAPI:Root()
     local limits = {}
     for key, value in pairs(LIMITS) do limits[key] = value end

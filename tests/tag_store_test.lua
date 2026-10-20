@@ -160,7 +160,7 @@ assert(store:SetTagFolder("food", nil))
 assert(store:SetFolderCollapsed(folderKey, true))
 assert(TagStore.new():GetFolder(folderKey).collapsed == true)
 
--- Renaming a tag keeps its folder; renaming the folder re-keys its members
+-- Renaming a tag keeps its folder; renaming the folder keeps its tags in it
 assert(store:UpdateTag("mining", "mining gear"))
 assert(store:GetTagFolder("mining gear") == folderKey)
 local renamed, renamedKey = store:RenameFolder(folderKey, "Skilling")

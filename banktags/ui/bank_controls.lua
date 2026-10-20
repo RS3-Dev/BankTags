@@ -116,7 +116,7 @@ function NativeButton:SetActive(active)
     self:_UpdateState()
 end
 
--- Alias SetActive for selection wording
+-- Same as SetActive, named for selection
 function NativeButton:SetSelected(selected)
     self:SetActive(selected)
 end

@@ -18,7 +18,7 @@ if previous ~= nil and rawget(_G, API_KEY) == previous.publicAPI then _G[API_KEY
 previous = nil
 pcall(function() collectgarbage("collect") end)
 
--- Evict this plugin's cached modules so reloads run fresh code
+-- Clear this plugin's cached modules so a reload runs the new code
 -- tools/build.lua fills in the list, so run the built folder
 if package ~= nil and package.loaded ~= nil then
     for _, moduleName in ipairs({
@@ -34,7 +34,7 @@ local app = App.new()
 _G[SESSION_KEY] = app
 app:Start()
 
--- Import-source plugins read the injected global first, then this copy
+-- Import-source plugins use the API passed to them first, then this global copy
 local api = app.publicAPI
 _G[API_KEY] = api
 

@@ -31,17 +31,17 @@ function BankGrid.ColumnCount(itemLayerWidth)
     )
 end
 
--- Return the content y where a grid row begins
+-- Return how far down the content a grid row begins
 function BankGrid.RowTop(row)
     return row * GRID_STEP
 end
 
--- Return the content y of a row's item cells
+-- Return how far down the content a row's item cells sit
 function BankGrid.RowItemY(row)
     return GRID_TOP + row * GRID_STEP
 end
 
--- Return a label's content y, set low over its items
+-- Return how far down the content a label sits, low over its items
 function BankGrid.LabelY(row)
     return BankGrid.RowItemY(row) + GRID_SLOT_SIZE - LABEL_LINE_OFFSET - 2
 end

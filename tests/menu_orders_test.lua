@@ -275,7 +275,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
             and app.store:HasTag("ranged", key(385, 1)), where)
         -- An entry the host does not report leaves Cancel the left click
         assert(leftClick(h:MenuFor(host.items[1], true)) == "Cancel", where)
-        -- A preset view ends select mode, pausing native clicks until heard
+        -- A preset view ends select mode; native clicks pause until Bank Tags notices
         presetOpen = true
         layout:Changed(false)
         assert((host.items[2].outlineWidth or 0) == 0 and leftClick(h:MenuFor(host.items[1])) == "Cancel", where)
@@ -284,7 +284,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         presetOpen = false
         layout:Changed(false)
         assert(leftClick(h:MenuFor(host.items[1])) == "Withdraw-1", where)
-        -- An Add offered across a preset view opening writes nothing
+        -- An Add offered before a preset view opens writes nothing
         assert(app.store:RemoveTag("ranged", key(4151, 1)) and app.select:Toggle("ranged"))
         h:Tick(2)
         assert(host.items[2].outlineWidth == 2, where)

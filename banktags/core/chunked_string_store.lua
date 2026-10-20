@@ -1,17 +1,17 @@
--- Save large strings in chunks, publishing only complete saves
+-- Save large strings in chunks, switching over only once a save is complete
 
 local ChunkedStringStore = {}
 
 local CHUNK_SIZE = 12000
 
--- Read a stored string, allowing missing keys or rejected host reads
+-- Read a stored string, or nil when it is missing or the read fails
 local function readString(key)
     if PersistentDB == nil or PersistentDB.GetString == nil then return nil end
     local ok, value = pcall(function() return PersistentDB:GetString(key) end)
     return ok and type(value) == "string" and value or nil
 end
 
--- Read the published generation and chunk count from the save marker
+-- Read which save copy is current and how many chunks it has
 local function manifest(options)
     local value = readString(options.manifestKey)
     if value == nil then return nil, nil end
@@ -21,7 +21,7 @@ local function manifest(options)
     return generation, count
 end
 
--- Write a string and confirm it when the host reports a possible rejection
+-- Write a string, reading it back if the host says the write may have failed
 local function writeVerified(key, value)
     local ok, result = pcall(function()
         return PersistentDB:SetString(key, value)
@@ -33,7 +33,7 @@ local function writeVerified(key, value)
     return true, nil
 end
 
--- Join every chunk from the published save, rejecting incomplete generations
+-- Join the current save's chunks, or nil if any chunk is missing
 function ChunkedStringStore.Read(options)
     local generation, count = manifest(options)
     if generation == nil then return nil end
@@ -49,7 +49,7 @@ function ChunkedStringStore.Read(options)
     return table.concat(chunks)
 end
 
--- Write the spare generation, then publish it once complete
+-- Write the spare save copy, then switch to it once complete
 function ChunkedStringStore.Write(options, value)
     local activeGeneration = manifest(options)
     local generation = activeGeneration == "a" and "b" or "a"

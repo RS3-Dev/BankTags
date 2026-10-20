@@ -27,9 +27,9 @@ local SETTINGS_IN_BANK = "Bank Tags' settings are in the bank: open your bank an
     .. "at the bottom of the sidebar."
 local NEEDS_ALL_ITEMS = 'Select "All Items" before adding items to tags.'
 
--- Find a running Bank Core API: the injected dependency first, the published copy second
+-- Find a running Bank Core API, trying the one passed in before the global copy
 local function findBank()
-    -- Either may be nil, so check them by position
+    -- Loop by index since either one may be missing
     local candidates = { bankcore, rawget(_G, Config.CORE_API_KEY) }
     for index = 1, 2 do
         local candidate = candidates[index]
@@ -41,7 +41,7 @@ local function findBank()
     return nil
 end
 
--- Build the store, windows, tab, and import API, unconnected
+-- Build the store, windows, tab, and import API before connecting to Bank Core
 function App.new()
     local settings = Settings.load()
     DebugLog.SetEnabled(settings.enableDebug)

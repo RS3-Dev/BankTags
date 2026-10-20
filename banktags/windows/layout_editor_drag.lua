@@ -17,7 +17,7 @@ local LABEL_DROP_COLOUR = 0xD2A84D40
 
 local LayoutEditorDrag = {}
 
--- Return a drag surface to its panel bounds
+-- Shrink a drag surface back over its own panel
 function LayoutEditorDrag:RestoreDragSurface(surface, kind)
     if surface == nil then return end
     if kind == "center" then
@@ -34,7 +34,7 @@ function LayoutEditorDrag:RestoreDragSurface(surface, kind)
     surface:MoveToFront()
 end
 
--- Expand a drag surface so drags cross editor panels
+-- Stretch a drag surface over the editor so drags can cross panels
 function LayoutEditorDrag:CaptureDragSurface(surface, kind)
     if surface == nil then return false end
     self:RestoreDragSurface(surface, kind)
@@ -64,7 +64,7 @@ function LayoutEditorDrag:SearchSurfaceResult(y)
     return self.searchResults[index]
 end
 
--- Route a surface's press, drag, and release to the editor
+-- Pass a surface's press, drag, and release to the editor
 function LayoutEditorDrag:BindDragSurface(surface, onPress, onScroll)
     surface:Subscribe(ui.Hook.ONCLICK, function(_, x, y)
         if self.drag ~= nil then return false end
@@ -77,7 +77,7 @@ function LayoutEditorDrag:BindDragSurface(surface, onPress, onScroll)
     end
     surface:Subscribe(ui.Hook.ONHOLD, continueDrag)
     surface:Subscribe(ui.Hook.ONDRAG, continueDrag)
-    -- Commit the drop and restore the surface
+    -- Finish the drop and shrink the surface back
     local function release()
         if self.drag == nil or self.drag.sourceSurface ~= surface then return false end
         return self:CommitDragFromMouse()

@@ -19,7 +19,7 @@ end
 -- Find RuneQL's catalog search when the optional plugin is loaded
 local function runeqlFind()
     if not runeqlEnabled then return nil end
-    -- Either may be nil, so check them by position
+    -- Loop by index since either one may be missing
     local candidates = { runeql, rawget(_G, Config.RUNEQL_API_KEY) }
     for index = 1, 2 do
         local candidate = candidates[index]

@@ -1,4 +1,4 @@
--- Own the saved tags; layouts and folders live in companion modules
+-- Hold the saved tags; layouts and folders have their own files
 
 local Config = require("banktags/core/config")
 local ChunkedStringStore = require("banktags/core/chunked_string_store")
@@ -52,7 +52,7 @@ function TagStore:SetLayoutPlacement(preserve)
     self.preserveTagLayout = preserve ~= false
 end
 
--- Save changed data and adopt it only once the save succeeds
+-- Save changed data, using it only once the save works
 function TagStore:Commit(nextData, failureMessage)
     if self.loadError ~= nil then return false, self.loadError end
     local used = {}

@@ -1,10 +1,10 @@
--- Keep optional diagnostics behind the single saved debug preference
+-- Log debug messages only when the saved debug setting is on
 
 local DebugLog = {}
 
 local enabled = false
 
--- Enable optional console output only when the saved debug preference is true
+-- Turn debug logging on or off from the saved setting
 function DebugLog.SetEnabled(value)
     enabled = value == true
 end
@@ -14,7 +14,7 @@ function DebugLog.IsEnabled()
     return enabled
 end
 
--- Forward diagnostics to the host log only while debugging is enabled
+-- Send a message to the host log while debugging is on
 local function debugLog(...)
     if enabled and type(log) == "function" then log(...) end
 end

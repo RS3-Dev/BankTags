@@ -6,7 +6,7 @@ local folderName = TagRules.folderName
 
 local TagStoreFolders = {}
 
--- Flatten sibling groups into the saved tag order
+-- Turn the folder tree back into a flat tag order
 local function treeTagOrder(nodes)
     local order = {}
     for _, node in ipairs(nodes) do
@@ -60,7 +60,7 @@ function TagStoreFolders:TagTree()
     return nodes
 end
 
--- Move one sibling step, keeping folder members together
+-- Move a tag or folder one place, keeping folder members together
 function TagStoreFolders:MoveSidebarEntry(tag, folderKey, offset)
     if offset ~= -1 and offset ~= 1 then return false, "Choose up or down." end
     local tree = self:TagTree()
@@ -91,7 +91,7 @@ function TagStoreFolders:MoveSidebarEntry(tag, folderKey, offset)
     return self:SaveTagOrder(treeTagOrder(tree))
 end
 
--- Order tags for filing without disturbing existing tiers
+-- Work out the tag order after filing a tag, leaving the rest in place
 function TagStoreFolders:FolderTagOrder(tag, folderKey)
     local tree = self:TagTree()
     local destination, source
@@ -165,7 +165,7 @@ function TagStoreFolders:CreateFolder(folder, tag)
     return true, key, nil
 end
 
--- Rename a folder and re-key its members when the name changes
+-- Rename a folder, moving its tags to the new name's key
 function TagStoreFolders:RenameFolder(key, folder)
     local current = type(key) == "string" and self.data.folders[key] or nil
     if type(current) ~= "table" then return false, nil, "The folder no longer exists." end

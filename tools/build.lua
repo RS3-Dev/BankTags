@@ -1,4 +1,4 @@
--- Build the plugin folder from the entry's require graph
+-- Build the plugin folder from every module the entry loads
 -- Tests, tools, and reference material never ship
 -- Usage, from the repository root:
 --   lua54 tools/build.lua [--out dist]

@@ -1,4 +1,4 @@
--- Walk the require graph from the plugin entry
+-- Find every module the plugin entry loads
 -- Adapted from Bank Core's build tools
 -- Run from the repository root; module names are paths without ".lua"
 
@@ -14,7 +14,7 @@ function ModuleGraph.Source(moduleName)
 end
 
 -- List a module's required names in source order
--- Unsupported require forms raise, so no module is silently missed
+-- Unusual require calls raise an error, so no module is quietly missed
 function ModuleGraph.Requires(moduleName)
     local source = ModuleGraph.Source(moduleName)
     if source == nil then error("module " .. moduleName .. " has no file", 2) end

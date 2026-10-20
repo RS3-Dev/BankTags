@@ -1,5 +1,5 @@
 -- Run select mode, where left-clicking bank items adds them to a tag
--- Bank Core owns only the gold outline
+-- Bank Core only draws the gold outline; Bank Tags runs the rest
 
 local Config = require("banktags/core/config")
 local ItemIdentity = require("banktags/tags/item_identity")

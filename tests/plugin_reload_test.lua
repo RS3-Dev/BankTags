@@ -93,7 +93,7 @@ assert(h:TabParent() ~= nil and Harness.Find(h:TabParent(), "Melee") ~= nil)
 rawget(tags.env, "PluginDependencyUpdate")({ pluginIdentifier = "bankcore", enabled = true })
 assert(reloaded:IsConnected() and not app:IsConnected())
 
--- A hot reload with a kept module cache still runs fresh modules
+-- A reload that keeps the module cache still runs the new modules
 local cachedApp = h:TagsModule("banktags/app")
 h.host:Reload("banktags")
 local hotReloaded = h:App()

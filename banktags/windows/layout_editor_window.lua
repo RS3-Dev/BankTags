@@ -45,7 +45,7 @@ local DRAG_EVENT = Config.PLUGIN_REF .. "_layout_editor"
 local FOOTER_BUTTON_GAP = 8
 local ICON_BUTTON_SIZE = 28
 
--- Destroy recorded UI nodes in reverse, allowing removed ones
+-- Destroy saved UI parts newest first, skipping ones already gone
 local function destroyAll(values)
     for index = #(values or {}), 1, -1 do
         pcall(function() values[index]:Destroy() end)

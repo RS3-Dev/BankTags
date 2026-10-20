@@ -49,7 +49,7 @@ id = { Component = { TOPLEVEL_V2__BANK_LAYER = 1 }, Sprite = {},
     Font = { CINZEL_13PT_BOLD = 1, MUSEO_SANS_11PT_REGULAR = 2 } }
 ui = { AlignMode = { CENTRE = 1 }, Hook = { ONCLICK = 1 }, ObjectQuantityDisplayMode = {},
     Interfaces = { GetComponent = function() return {} end }, Layer = { new = node } }
--- Durable config names this client resolves; anything else is unknown
+-- Config names this client knows; anything else is unknown
 local objects = { [101] = "iron_bar", [104] = "rune_bar" }
 config = { Obj = {
     FromID = function(value)
@@ -184,7 +184,7 @@ end
 -- The published limits include the import sources and drafts
 assert(api.LIMITS.importProviders == 16 and api.LIMITS.importProvidersPerOwner == 4)
 assert(api.LIMITS.draftTags == 32 and api.LIMITS.draftEntries == 2000)
--- The registry publishes the reader's bounds without loading it
+-- The registry shares the draft reader's limits without loading the reader
 assert(api.LIMITS.draftTags == TagDraft.LIMITS.tags and api.LIMITS.draftEntries == TagDraft.LIMITS.entries)
 
 app.windows:OpenImportShare()
@@ -411,7 +411,7 @@ settings.importSourcePicker:Select("example.wiki/guide", true)
 assert(not orphan:IsCurrent() and select(2, orphan:Resolve(gearDraft("Orphan"))) == "stale_request")
 assert(settings.importActionButton == nil and not settings.importField.root.hidden)
 
--- A raising source shows a bounded message; the share code still works
+-- A source that errors shows a short message; the share code still works
 assert(wiki:UpdateImportProvider("guide", wikiProvider({
     request = function() error("internal parser detail at line 12") end,
 })))
@@ -434,7 +434,7 @@ local function ask(input)
 end
 settings.importSourcePicker:Select("example.wiki/guide", true)
 
--- Failures show the provider's message as one plain, bounded line
+-- Failures show the provider's message as one short, plain line
 local failing = ask("guide/fail")
 assert(failing:Fail("Guide <b>not</b> found\n(404)"))
 tick()
@@ -448,7 +448,7 @@ assert(failing:Fail())
 tick()
 assert(settings.importStatus.content == "The source could not load this import.")
 
--- Malformed drafts are refused without running metamethods
+-- Broken drafts are refused without running any of their code
 local touched = false
 local trap = setmetatable({}, { __index = function() touched = true end,
     __pairs = function() touched = true end, __len = function() touched = true return 1 end })
@@ -493,7 +493,7 @@ for index, draft in ipairs(badDrafts) do
 end
 assert(not touched and writes == 4)
 
--- An update re-asks the selected source and stales the old request
+-- An update asks the selected source again and drops the old request
 local beforeUpdate = ask("guide/kept")
 assert(wiki:UpdateImportProvider("guide", wikiProvider({ label = "Wiki gear lists" })))
 assert(not beforeUpdate:IsCurrent() and settings.importField.text == "guide/kept")
@@ -522,7 +522,7 @@ assert(not removed:IsCurrent() and sourceKeys(settings) == "builtin:code example
 tick()
 assert(settings.importState == "empty" and writes == 4)
 
--- Replacing an owner removes its sources and stales its handle
+-- Replacing an owner removes its sources and retires its old handle
 assert(wiki:RegisterImportProvider("guide", wikiProvider()))
 settings.importSourcePicker:Select("example.wiki/guide", true)
 local replaced = ask("guide/replaced")
@@ -550,7 +550,7 @@ local function consistent()
     return count == app.importProviders.count
 end
 
--- An owner whose cancel callbacks register another owner's sources
+-- Set up an owner whose cancel callbacks register another owner's sources
 local host = assert(api.RegisterExtension("example.host", "Host"))
 local deliveries = 0
 local function doomedOwner()
@@ -585,7 +585,7 @@ local function doomedOwner()
     assert(#requests == 3)
     return doomed, requests, cancelled
 end
--- The doomed owner leaves fully; the host's late sources still work
+-- The doomed owner is fully removed; the host's late sources still work
 local function leftCleanly(requests, cancelled)
     assert(cancelled.peersStale and cancelled[1] and cancelled[2] and cancelled[3])
     assert(sourceKeys(settings) == "builtin:code example.host/late1 example.host/late2 "

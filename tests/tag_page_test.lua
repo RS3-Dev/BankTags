@@ -65,7 +65,7 @@ assert(count == 1 + 5 + 1 + 1 + 3 + 2 + 1)
 -- Unresolved items stay as blanks; unresolved Unsorted entries are hidden
 assert(rows[5].slots[1] == false and #rows[7].slots == 1)
 
--- A copy repeated, or a ghost naming itself, cannot refuse the page
+-- A repeated copy, or a ghost of itself, can't make Core refuse the page
 rows = TagPage.Rows({ rows = { row(item(4151, 1), item(4151, 1)), row(item(385, 2, 2)) }, unsorted = {} })
 assert(rows[1].slots[2] == false and rows[2].slots[1].source == nil and rows[2].slots[1].copy == 2)
 

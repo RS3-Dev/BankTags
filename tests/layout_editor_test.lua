@@ -1,7 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
 -- Drive the layout editor over a bank Bank Core reports
--- Moves it saves land where the page draws them
+-- Moves it saves show up where the page draws them
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")

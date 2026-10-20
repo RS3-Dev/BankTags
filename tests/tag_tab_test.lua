@@ -57,7 +57,7 @@ assert(app.store:GetFolder("combat").collapsed and tagRows() == 70)
 list.list:Click("__banktags_folder:combat")
 assert(not app.store:GetFolder("combat").collapsed and tagRows() == 72)
 
--- Sorting shows arrows that move an entry one step within its tier
+-- Sorting shows arrows that move an entry one step within its own group
 local sortButton = list.sortButton.root
 sortButton.hooks.pressed()
 assert(list.sortMode and #list.sortButtons > 0)

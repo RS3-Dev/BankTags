@@ -1,4 +1,4 @@
--- Validate tag names, folder names, labels, and layouts for storage and sharing
+-- Check tag names, folder names, labels, and layouts before saving or sharing
 
 local Text = require("banktags/core/text")
 local trim = Text.trim
@@ -10,7 +10,7 @@ TagRules.MAX_TAG_NAME = 80
 TagRules.MAX_FOLDER_NAME = 40
 TagRules.MAX_LABEL_TEXT = 60
 
--- Deep-copy tag data so an edit cannot reach the live data before it saves
+-- Copy tag data fully so an edit can't touch the real data before it saves
 function TagRules.copy(value)
     if type(value) ~= "table" then return value end
     local result = {}
@@ -26,7 +26,7 @@ function TagRules.normalizeTag(value)
     return name
 end
 
--- Parse comma-separated tags into a sorted list of unique normalized names
+-- Split comma-separated tags into a sorted list of cleaned names without repeats
 function TagRules.parseTagList(text)
     local values = {}
     local seen = {}
@@ -41,7 +41,7 @@ function TagRules.parseTagList(text)
     return values
 end
 
--- Collapse spacing in a folder name and derive its case-insensitive key
+-- Tidy a folder name's spaces and return it with its lowercase key
 function TagRules.folderName(value)
     local name = trim(value):gsub("%s+", " ")
     if name == "" or #name > TagRules.MAX_FOLDER_NAME then return nil, nil end

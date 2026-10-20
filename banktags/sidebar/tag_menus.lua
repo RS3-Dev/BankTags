@@ -1,6 +1,6 @@
 -- Add Bank Tags' entries to bank menus
--- Chosen entries run next tick, only while their target still holds
--- A Tags row answers its own left click, so its entries act only when chosen from the opened menu
+-- Chosen entries run on the next tick, and only if their target is still there
+-- A Tags row handles its own left click, so its entries only act when picked from the open menu
 
 local Config = require("banktags/core/config")
 local Geometry = require("banktags/ui/geometry")
@@ -58,7 +58,7 @@ function TagMenus:Stop()
     self.pending = {}
 end
 
--- Defer an action to the next tick while current() holds
+-- Run an action next tick if current() still returns true
 function TagMenus:Defer(current, action)
     return function()
         if not current() then return end
@@ -145,8 +145,8 @@ function TagMenus:RowAtPointer()
 end
 
 -- Add actions for the tag or folder row under the pointer, the first shown as the left click
--- The row answers a left click itself, whenever the client runs this menu's default
--- Chosen from the opened menu, one entry acts once, unless a row click since made the menu stale
+-- The row handles left clicks itself, no matter when the client runs this menu's default
+-- An entry picked from the open menu acts once, unless a row click has made the menu out of date
 function TagMenus:AddRowEntries(menu)
     local entry, ctx = self:RowAtPointer()
     if entry == nil then return end

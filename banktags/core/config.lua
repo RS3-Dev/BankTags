@@ -4,7 +4,7 @@ local Config = {
     -- The owner ID Bank Core knows this plugin by, and the prefix for its event names
     PLUGIN_REF = "banktags",
     OWNER_LABEL = "Bank Tags",
-    -- Where Bank Core and RuneQL publish APIs when injection is missing
+    -- Globals where Bank Core and RuneQL leave their APIs when none is passed in
     CORE_API_KEY = "__bankcore_api",
     RUNEQL_API_KEY = "__runeql_api",
     -- The tag save, written as chunked share-code text

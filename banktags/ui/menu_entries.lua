@@ -1,5 +1,5 @@
 -- Add Bank Tags' entries to native menus without changing the default
--- Live clients place added entries inconsistently, so each one is found and moved
+-- The game client doesn't always put added entries in the same place, so each one is found and moved
 
 local MenuEntries = {}
 
@@ -26,7 +26,7 @@ local function signature(entry)
         tostring(entry.fullText), tostring(entry.verbText), tostring(entry.subjectText) }, "\n")
 end
 
--- Normalize menu text for comparison
+-- Tidy menu text so it can be compared
 local function normalize(value)
     return string.lower((tostring(value or ""):gsub("<[^>]->", "")):match("^%s*(.-)%s*$"))
 end
@@ -61,7 +61,7 @@ local function move(menu, from, to)
     for current = from, to - step, step do menu:Swap(current, current + step) end
 end
 
--- Add entries at the lowest priority, keeping the default
+-- Add entries at the bottom of the menu, keeping the left click
 -- If placement fails, Cancel becomes the default
 function MenuEntries.AddLow(menu, entries)
     if #entries == 0 then return end
@@ -82,7 +82,7 @@ function MenuEntries.AddLow(menu, entries)
     if now == nil or signature(now) ~= topSignature then MenuEntries.PromoteCancel(menu) end
 end
 
--- Add entries at the highest priority, shown in order with the first as the left click
+-- Add entries at the top of the menu, in order, with the first as the left click
 -- If placement fails, Cancel becomes the default
 function MenuEntries.AddTop(menu, entries)
     for index = #entries, 1, -1 do

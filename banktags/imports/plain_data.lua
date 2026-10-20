@@ -1,4 +1,4 @@
--- Read plain data from other plugins without running their metamethods
+-- Read plain data from other plugins without running any of their code
 
 local PlainData = {}
 

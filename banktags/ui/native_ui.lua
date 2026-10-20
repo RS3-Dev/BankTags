@@ -10,7 +10,7 @@ local STYLE_FALLBACK_IDS = {
     BUTTON_PANEL = 318,
 }
 
--- Resolve a native style ID by name
+-- Look up a native style ID by name
 function NativeUi.styleID(styleName)
     if id ~= nil and id.StyleSheet ~= nil and id.StyleSheet[styleName] ~= nil then
         return id.StyleSheet[styleName]
@@ -34,7 +34,7 @@ function NativeUi.makeButton(parent, x, y, width, height, options)
     return button
 end
 
--- Set sprite rotation through each variant the host supports
+-- Rotate a sprite using every rotation field the host might support
 function NativeUi.setSpriteRotation(sprite, rotationRadians, rotationDegrees)
     if sprite.SetRotation ~= nil then
         pcall(function() sprite:SetRotation(rotationRadians) end)

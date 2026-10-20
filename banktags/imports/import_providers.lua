@@ -28,7 +28,7 @@ local LIMITS = ImportProviders.LIMITS
 local ID_LENGTH = 64
 local TEXT_LENGTH = 64
 
--- Validate a provider description and copy it into data this module owns
+-- Check a provider's description and keep our own copy of it
 local function readProvider(input)
     if type(input) ~= "table" or getmetatable(input) ~= nil
         or not PlainData.HasOnlyFields(input, PROVIDER_FIELDS) then
@@ -85,12 +85,12 @@ function ImportProviders.new(options)
         listening = false,
         closed = false,
     }, ImportProviders)
-    -- Give each registry its own listener so reloads never share one
+    -- Give each registry its own event name so a reload never shares one
     self.workEvent = WORK_EVENT .. ":" .. string.match(tostring(self), "%x+$")
     return self
 end
 
--- Use a new draft reader, or none; requests already answered keep their result
+-- Set the draft reader, or none; answered requests keep their result
 function ImportProviders:SetDraftReader(readDraft)
     self.readDraft = readDraft
 end
@@ -200,7 +200,7 @@ function ImportProviders:Remove(owner, providerID)
     return true
 end
 
--- Remove every source an owner registered, as its handle is disposed or replaced
+-- Remove all of an owner's sources when its handle is closed or replaced
 function ImportProviders:RemoveOwner(owner)
     local records = {}
     for _, record in pairs(self.records) do
@@ -222,7 +222,7 @@ function ImportProviders:Drop(records)
     self:RunCancels(cancels)
 end
 
--- Mark a source's requests stale, collecting ones to cancel
+-- Mark a source's requests out of date and collect ones to cancel
 function ImportProviders:Invalidate(record, cancels)
     for token in pairs(record.tokens) do
         token.live = false
