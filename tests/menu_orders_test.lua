@@ -104,6 +104,53 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         assert(leftClickRow(folderRow) == "Expand <col=f2c66d>Combat</col>", where)
         assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == "ranged", where)
         assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == nil, where)
+        -- The row answering first leaves the menu's left click nothing to do
+        local function rowThenMenu(id)
+            pointAtRow(id)
+            local menu = h:ContentMenu()
+            app.tab.controls.list.list:Click(id)
+            leftClick(menu)
+            h:Tick(2)
+        end
+        rowThenMenu("ranged")
+        assert(app.shownTag == "ranged", where)
+        rowThenMenu("ranged")
+        assert(app.shownTag == nil, where)
+        -- A left click only the menu hears toggles too: open, close, open
+        local pages = session.extensionPages
+        local leave, leaves = pages.LeavePage, 0
+        pages.LeavePage = function(...)
+            leaves = leaves + 1
+            return leave(...)
+        end
+        local function menuOnly(id)
+            pointAtRow(id)
+            local default = leftClick(h:ContentMenu())
+            h:Tick(4)
+            return default
+        end
+        assert(menuOnly("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == "ranged", where)
+        assert(menuOnly("ranged") == "Select <col=f2c66d>Ranged</col>", where)
+        assert(leaves == 1 and app.shownTag == nil and layout.selectedTag == nil, where)
+        h:Tick(4)
+        assert(app.shownTag == nil and layout.selectedTag == nil, where)
+        assert(menuOnly("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == "ranged", where)
+        -- A Select built under another shown tag leaves the current page alone
+        pointAtRow("ranged")
+        menu = h:ContentMenu()
+        assert(app:ShowTag("melee"))
+        leftClick(menu)
+        h:Tick(2)
+        assert(app.shownTag == "melee" and leaves == 1, where)
+        pages.LeavePage = nil
+        -- Row clicks alone still toggle
+        app.tab.controls.list.list:Click("melee")
+        assert(app.shownTag == nil, where)
+        app.tab.controls.list.list:Click("melee")
+        assert(app.shownTag == "melee", where)
+        app.tab.controls.list.list:Click("melee")
+        assert(app.shownTag == nil, where)
+        h:Tick(2)
         -- An entry chosen after a row click, or from a rebuilt tab, does nothing
         pointAtRow("ranged")
         menu = h:ContentMenu()

@@ -163,7 +163,11 @@ function TagMenus:AddRowEntries(menu)
         local tag = entry.tag
         if app.store.data.tags[tag] == nil then return end
         local name = subject(tag)
-        offer("Select", name, function() app:ShowTag(tag) end)
+        -- Toggles like the row, unless the shown tag changed since the menu was built
+        local shownTag = app.shownTag
+        offer("Select", name, function()
+            if app.shownTag == shownTag then app:ToggleTag(tag) end
+        end)
         offer("Edit", name, function() app.windows:OpenTagSettings(tag, false) end)
         offer(app.select:Tag() == tag and "Stop selecting items" or "Select items", name, function()
             app.select:Toggle(tag)
