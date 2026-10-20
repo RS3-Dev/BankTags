@@ -173,6 +173,16 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         assert(app:MoveTagToFolder("ranged", nil) and app.store:GetTagFolder("melee") == "combat", where)
         app:Changed()
         h:Tick(2)
+        -- A folder name made of markup brackets still leaves a usable submenu
+        assert(app.store:CreateFolder("<>", "ranged"))
+        app:Changed()
+        h:Tick(2)
+        pointAtRow("melee")
+        menu = h:ContentMenu()
+        assert(table.concat(Harness.ChildLabels(Harness.Submenu(menu, moveMelee)), "|")
+            == "Folder|Create new folder|Cancel", where)
+        assert(app:MoveTagToFolder("ranged", nil))
+        h:Tick(2)
         local folderRow = "__banktags_folder:combat"
         menu = shows(folderRow, named({ "Collapse", "Rename folder", "Ungroup folder" }, "Combat"))
         assert(#Harness.Submenus(menu) == 0, where)

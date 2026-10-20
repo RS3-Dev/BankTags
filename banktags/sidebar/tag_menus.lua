@@ -225,7 +225,9 @@ function TagMenus:AddFolderSubmenu(menu, tag, position, chosen, isCurrent)
     for _, folder in ipairs(app.store:GetFolders()) do
         local folderKey = folder.key
         if folderKey ~= tagFolder then
-            children[#children + 1] = { label = Text.plain(folder.name),
+            local label = Text.plain(folder.name)
+            if label == "" then label = "Folder" end
+            children[#children + 1] = { label = label,
                 action = chosen("Move to " .. folderKey, function() app:MoveTagToFolder(tag, folderKey) end,
                     function() return isCurrent() and app.store:GetFolder(folderKey) ~= nil end) }
         end
