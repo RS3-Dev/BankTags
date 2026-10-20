@@ -99,6 +99,8 @@ end
 function LayoutEditorDrag:CreateDragSurfaces()
     self.centerDragSurface = self:CreateDragSurface("center")
     self:BindDragSurface(self.centerDragSurface, function(x, y)
+        -- A press here takes focus from any text field
+        self.keysOnGrid = true
         -- Label rows sit beneath this surface, so pressing one drags it
         local labelRow = self:LabelRowAt(x, y)
         if labelRow ~= nil then

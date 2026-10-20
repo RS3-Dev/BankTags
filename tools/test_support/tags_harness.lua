@@ -156,12 +156,26 @@ function Harness.new(name, options)
         Subscribe = function(key, action) openSubscriptions[key] = action end,
         Unsubscribe = function(key) openSubscriptions[key] = nil end,
     }
+    -- Key events, and the menu and keybind state the editor's shortcuts read
+    local keySubscriptions = {}
+    for _, event in ipairs({ "KeyDown", "KeyUp", "WindowFocusChanged" }) do
+        local listeners = {}
+        keySubscriptions[event] = listeners
+        Event[event] = {
+            Subscribe = function(key, action) listeners[key] = action end,
+            Unsubscribe = function(key) listeners[key] = nil end,
+        }
+    end
+    local input = { menuOpen = false, capturing = false }
+    prettyui.KeybindField = { IsCapturing = function() return input.capturing end }
     local Build = require("tools/build")
     local out = "dist/test/" .. name
     local built = Build.Run({ out = out })
     local Loader = require("tools/test_support/fake_plugin_host")
     local globals = { ui = ui, id = id, Event = Event, config = config, Vector4 = Vector4,
         Mouse = Mouse, MiniMenuActionType = MiniMenuActionType, MiniMenuEntryType = MiniMenuEntryType,
+        MiniMenu = { IsOpen = function() return input.menuOpen end },
+        GameKey = { BACKSPACE = 85, DELETE = 101, C = 67, CONTROL = 82 },
         Player = { IsAvailable = function() return true end }, GameState = { GAME = 30 },
         log = function() end }
     local databases = {}
@@ -174,6 +188,8 @@ function Harness.new(name, options)
         databases = databases,
         menuSubscriptions = menuSubscriptions,
         openSubscriptions = openSubscriptions,
+        keySubscriptions = keySubscriptions,
+        input = input,
         -- Where the host adds a plugin's entry, and who hears a menu first
         placement = "above_cancel",
         menuOrder = "core_first",

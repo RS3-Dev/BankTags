@@ -13,6 +13,7 @@ local compiler = interpreter:gsub("lua(%d*)%.exe$", "luac%1.exe"):gsub("lua(%d*)
 local ALLOWED = {}
 for name in ([[
 ui id Event prettyui PersistentDB config game Mouse Vector4 log bankcore runeql MiniMenuActionType
+MiniMenu GameKey
 PluginShutdown PluginDependencyUpdate pairs ipairs type tostring tonumber math string table
 pcall error select next setmetatable getmetatable rawget rawset require print os io load
 assert collectgarbage package _G utf8 coroutine debug

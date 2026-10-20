@@ -17,9 +17,10 @@ local Theme = require("banktags/ui/theme")
 
 local LayoutEditorWindow = {}
 LayoutEditorWindow.__index = LayoutEditorWindow
--- Drag gestures and catalog search live in their own files
+-- Drag gestures, catalog search, and shortcut keys live in their own files
 require("banktags/windows/layout_editor_drag").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_search").install(LayoutEditorWindow)
+require("banktags/windows/layout_editor_keys").install(LayoutEditorWindow)
 
 -- Errors show over the grid's bottom for about four seconds
 local ERROR_HEIGHT = 40
@@ -94,6 +95,7 @@ function LayoutEditorWindow.new(parent, options)
         destroyOnClose = true,
         onClose = function()
             self:StopDragPolling()
+            self:StopShortcuts()
             self:FinishDrag(false)
             self:ClearSearchInteractions()
             self:DestroyCenterNodes()
@@ -122,6 +124,7 @@ function LayoutEditorWindow.new(parent, options)
     self:SelectTag(self.selectedTag)
     Event.Logic.Unsubscribe(DRAG_EVENT)
     Event.Logic.Subscribe(DRAG_EVENT, function() self:PollDrag() end)
+    self:StartShortcuts()
     return self
 end
 
@@ -258,6 +261,8 @@ function LayoutEditorWindow:CreateTagColumn()
     local newTagWidth = width - (ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP) * 2
     self.columnButtons = {
         BankControls.button(column, nil, function()
+            -- Import/Share has text fields of its own
+            self.keysOnGrid = false
             if self.onOpenImport ~= nil then self.onOpenImport() end
         end, {
             x = SidebarRows.CONTENT_X, y = top, size = ICON_BUTTON_SIZE, iconSize = 18,
@@ -306,11 +311,13 @@ function LayoutEditorWindow:CreatePanels()
     -- These replace the right-click menu, which only Bank Core may change
     self.duplicateButton = BankControls.button(
         self.centerPanel, "Create Copy", function() self:DuplicateSelected() end,
-        { x = 8, y = Size.FOOTER_Y, width = 104, height = Size.FOOTER_HEIGHT }
+        { x = 8, y = Size.FOOTER_Y, width = 104, height = Size.FOOTER_HEIGHT,
+            tooltip = "Copy the selected item (Ctrl+C)" }
     )
     self.removeButton = BankControls.button(
         self.centerPanel, "Remove", function() self:RemoveSelected() end,
-        { x = 120, y = Size.FOOTER_Y, width = 84, height = Size.FOOTER_HEIGHT }
+        { x = 120, y = Size.FOOTER_Y, width = 84, height = Size.FOOTER_HEIGHT,
+            tooltip = "Remove the selected item (Delete)" }
     )
     self.unsortButton = BankControls.button(
         self.centerPanel, "Move to Unsorted", function() self:UnarrangeSelected() end,
@@ -420,6 +427,8 @@ end
 -- Open a tag draft, selecting it once its editor saves
 function LayoutEditorWindow:CreateNewTag()
     if self.onCreateTag == nil then return false end
+    -- The tag draft has a name field of its own
+    self.keysOnGrid = false
     self.onCreateTag(function(tag)
         self:SelectTag(tag)
         self:NotifyChanged()
@@ -751,6 +760,7 @@ end
 -- Stop events and drags, then destroy the editor
 function LayoutEditorWindow:Destroy()
     self:StopDragPolling()
+    self:StopShortcuts()
     self:FinishDrag(false)
     self:ClearSearchInteractions()
     self:DestroyCenterNodes()
