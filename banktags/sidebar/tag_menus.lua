@@ -130,13 +130,19 @@ function TagMenus:RowAtPointer()
     return controls.list:EntryAt(x, y), ctx
 end
 
--- Add actions for the tag or folder row under the pointer
+-- Add actions for the tag or folder row under the pointer, the first as the left click
+-- A row click after the menu was built means the row already answered it
 function TagMenus:AddRowEntries(menu)
     local entry, ctx = self:RowAtPointer()
     if entry == nil then return end
     local app = self.app
     local tab = app.tab
-    local current = function() return tab.ctx == ctx and type(ctx:GetBounds()) == "table" end
+    local list = tab.controls.list
+    local clicks = list.clicks
+    local current = function()
+        return tab.ctx == ctx and type(ctx:GetBounds()) == "table"
+            and tab.controls ~= nil and tab.controls.list == list and list.clicks == clicks
+    end
     if entry.kind == "tag" then
         local mounted = current
         current = function() return mounted() and app.store.data.tags[entry.tag] ~= nil end
@@ -172,7 +178,7 @@ function TagMenus:AddRowEntries(menu)
         end
         offer("Move to folder...", name, function() app.windows:OpenFolderChooser(tag) end)
     end
-    MenuEntries.AddLow(menu, entries)
+    MenuEntries.AddTop(menu, entries)
 end
 
 return TagMenus

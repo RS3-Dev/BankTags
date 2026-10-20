@@ -82,6 +82,19 @@ function MenuEntries.AddLow(menu, entries)
     if now == nil or signature(now) ~= topSignature then MenuEntries.PromoteCancel(menu) end
 end
 
+-- Add entries at the highest priority, shown in order with the first as the left click
+-- If placement fails, Cancel becomes the default
+function MenuEntries.AddTop(menu, entries)
+    for index = #entries, 1, -1 do
+        local added = add(menu, entries[index])
+        if added == nil then
+            MenuEntries.PromoteCancel(menu)
+            return
+        end
+        move(menu, added, menu.entryCount)
+    end
+end
+
 -- Make an entry the left-click default
 -- If Cancel already is, add it low instead
 function MenuEntries.AddDefault(menu, entry)

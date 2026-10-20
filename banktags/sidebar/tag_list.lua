@@ -65,6 +65,8 @@ function TagList.new(parent, options)
         entries = {},
         entriesByID = {},
         sortPositions = {},
+        -- Row clicks so far, so a menu can tell one happened after it was built
+        clicks = 0,
     }, TagList)
     local contentWidth = SidebarRows.ContentWidth(self.width)
     self.search = SidebarRows.CreateSearch(parent, contentWidth - SORT_BUTTON_SIZE - SORT_BUTTON_GAP, {
@@ -89,6 +91,7 @@ function TagList.new(parent, options)
     self.emptyLabel = SidebarRows.CreateEmptyLabel(parent, contentWidth,
         "Create a tag, then drag bank items onto it.")
     self.list = SidebarRows.CreateList(parent, contentWidth, options.listHeight, function(_, entryID)
+        self.clicks = self.clicks + 1
         local folderKey = folderKeyOf(entryID)
         if folderKey ~= nil then
             self:ToggleFolder(folderKey)

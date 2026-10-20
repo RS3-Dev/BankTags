@@ -30,8 +30,8 @@ local function clickRow(tag)
     local default = Harness.LeftClick(h:ContentMenu())
     app.tab.controls.list.list:Click(tag)
     h:Tick(2)
-    -- No row entry is the left click, so no window opens unasked
-    assert(default == "Cancel", tostring(default))
+    -- Select is the left click, which the row answers once; no window opens unasked
+    assert(string.sub(tostring(default), 1, 7) == "Select ", tostring(default))
     assert(app.windows.folderChooser == nil and app.windows.tagDeleteConfirm == nil
         and app.windows.tagSettingsEditor == nil)
 end

@@ -31,7 +31,8 @@ function Harness.CoreRoot()
     end
     local contract = readText(root .. "/HOST_CONTRACT.md") or ""
     for _, needed in ipairs({ "PluginDependencyUpdate(event)", "GetMenuItem", "SetItemHighlight", "`columns`",
-        "the root is a plain table", "SetSettings" }) do
+        "the root is a plain table", "SetSettings",
+        "unless a plugin entry is already the left click" }) do
         if not string.find(contract, needed, 1, true) then
             error("Bank Core at " .. root .. " lacks " .. needed .. " in its contract; set BANKCORE_ROOT "
                 .. "to a checkout with the extension API Bank Tags uses", 0)
@@ -108,7 +109,7 @@ function Harness.new(name, options)
     local built = Build.Run({ out = out })
     local Loader = require("tools/test_support/fake_plugin_host")
     local globals = { ui = ui, id = id, Event = Event, config = config, Vector4 = Vector4,
-        Mouse = Mouse, MiniMenuActionType = MiniMenuActionType,
+        Mouse = Mouse, MiniMenuActionType = MiniMenuActionType, MiniMenuEntryType = MiniMenuEntryType,
         Player = { IsAvailable = function() return true end }, GameState = { GAME = 30 },
         log = function() end }
     local databases = {}
@@ -225,7 +226,7 @@ function Harness:HostMenu(natives, silent)
     local place = Harness.PLACEMENTS[self.placement]
     function menu:Add(label, action, ...)
         local entry = { verbText = not silent and label or "", overrideText = not silent and label or nil, action = action,
-            arguments = { ... } }
+            arguments = { ... }, actionEntryType = MiniMenuEntryType.PLUGIN }
         table.insert(self.entries, place(self), entry)
     end
     function menu:Swap(a, b) self.entries[a], self.entries[b] = self.entries[b], self.entries[a] end
@@ -263,6 +264,13 @@ end
 function Harness.Labels(menu)
     local labels = {}
     for _, entry in ipairs(menu.entries) do labels[#labels + 1] = entry.verbText end
+    return labels
+end
+
+-- List a menu's labels as the client shows them, the left click on top
+function Harness.DisplayedLabels(menu)
+    local labels = {}
+    for index = menu.entryCount, 1, -1 do labels[#labels + 1] = menu.entries[index].verbText end
     return labels
 end
 

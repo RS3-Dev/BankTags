@@ -19,6 +19,9 @@ assert(h.menuSubscriptions.banktags_menu ~= nil and h.menuSubscriptions.bankcore
 
 local key = require("banktags/tags/item_identity").LayoutKey
 local presetOpen = false
+local other = assert(session.publicAPI.RegisterExtension("other", "Other"))
+assert(other:RegisterTab("notes", { label = "Notes", icon = "STAR", rows = {} }))
+h:Tick(2)
 layout.IsPresetViewOpen = function() return presetOpen end
 
 -- Point at a content position in the bank's item area
@@ -59,14 +62,68 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         h.menuOrder, h.placement = order, placement
         resetTags()
 
-        -- Rows keep Cancel the left click; chosen entries run next tick
+        -- Rows show their actions top down above Cancel; chosen entries run next tick
+        assert(app.store:CreateFolder("Combat", "melee"))
+        app:Changed()
+        local function shows(id, expected)
+            pointAtRow(id)
+            local menu = h:ContentMenu()
+            local shown = table.concat(Harness.DisplayedLabels(menu), "|")
+            assert(shown == table.concat(expected, "|") .. "|Cancel", shown .. where)
+            return menu
+        end
+        local function named(labels, name)
+            local out = {}
+            for index, label in ipairs(labels) do out[index] = label .. " <col=f2c66d>" .. name .. "</col>" end
+            return out
+        end
+        shows("ranged", named({ "Select", "Edit", "Select items", "Remove", "Move to folder..." }, "Ranged"))
+        local labels = named({ "Select", "Edit", "Select items", "Remove", "Remove from folder", "Move to folder..." },
+            "Melee")
+        labels[5] = "Remove from folder <col=f2c66d>Combat</col>"
+        shows("melee", labels)
+        local folderRow = "__banktags_folder:combat"
+        local menu = shows(folderRow, named({ "Collapse", "Rename folder", "Ungroup folder" }, "Combat"))
+        -- Chosen from the open menu, the default runs once
+        Harness.Choose(menu, "Collapse <col=f2c66d>Combat</col>")
+        h:Tick(2)
+        assert(app.store:GetFolder("combat").collapsed, where)
+        menu = shows(folderRow, named({ "Expand", "Rename folder", "Ungroup folder" }, "Combat"))
+        -- A left click runs the default and the row's own click; the row answers it once
+        local function leftClickRow(id)
+            pointAtRow(id)
+            local default = leftClick(h:ContentMenu())
+            app.tab.controls.list.list:Click(id)
+            h:Tick(2)
+            return default
+        end
+        assert(leftClickRow(folderRow) == "Expand <col=f2c66d>Combat</col>"
+            and not app.store:GetFolder("combat").collapsed, where)
+        assert(leftClickRow(folderRow) == "Collapse <col=f2c66d>Combat</col>"
+            and app.store:GetFolder("combat").collapsed, where)
+        assert(leftClickRow(folderRow) == "Expand <col=f2c66d>Combat</col>", where)
+        assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == "ranged", where)
+        assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == nil, where)
+        -- An entry chosen after a row click, or from a rebuilt tab, does nothing
         pointAtRow("ranged")
-        local menu = h:ContentMenu()
-        local labels = Harness.Labels(menu)
-        assert(labels[1] == "Select <col=f2c66d>Ranged</col>" and labels[#labels] == "Cancel",
-            table.concat(labels, "|") .. where)
-        assert(leftClick(menu) == "Cancel")
+        menu = h:ContentMenu()
+        app.tab.controls.list.list:Click("melee")
+        Harness.Choose(menu, "Edit <col=f2c66d>Ranged</col>")
+        h:Tick(2)
+        assert(app.shownTag == "melee" and app.windows.tagSettingsEditor == nil, where)
+        assert(app:ToggleTag("melee") and app.shownTag == nil)
+        h:Tick(2)
+        pointAtRow("ranged")
+        menu = h:ContentMenu()
+        layout:SetSidebarMode("__bankutils_ext_tab:other/notes")
+        h:Tick(2)
+        layout:SetSidebarMode("__bankutils_ext_tab:banktags/tags")
+        h:Tick(2)
+        Harness.Choose(menu, "Select <col=f2c66d>Ranged</col>")
+        h:Tick(2)
+        assert(app.shownTag == nil and app.tab.controls ~= nil, where)
         -- An unreported entry cannot be placed, so Cancel is the left click
+        pointAtRow("ranged")
         assert(leftClick(h:ContentMenu(true)) == "Cancel", where)
 
         -- Remove targets each slot's own copy; Withdraw stays a stack's left click
