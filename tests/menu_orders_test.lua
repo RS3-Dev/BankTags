@@ -35,7 +35,7 @@ local function pointAtRow(tag)
     app.tab.controls.list.list.scrollY = row.root.y
     h:PointAt(row.root, 20, 10 - row.root.y)
 end
--- Give melee a stack, a borrowed copy 3 slot, copy 2, and a ghost
+-- Give melee two bank stacks, a reused stack, and an item missing from the bank
 local function resetTags()
     for _, tag in ipairs({ "melee", "ranged" }) do
         if app.store.data.tags[tag] ~= nil then assert(app.store:DeleteTag(tag)) end

@@ -1,4 +1,4 @@
--- Add Bank Tags' entries to native menus without changing the default
+-- Place Bank Tags' actions in bank menus
 -- The game client doesn't always put added entries in the same place, so each one is found and moved
 
 local MenuEntries = {}
