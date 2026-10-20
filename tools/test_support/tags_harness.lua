@@ -5,6 +5,9 @@
 
 local Harness = {}
 
+-- How to open each menu a test built, heard by MiniMenuOpened handlers
+local openers = setmetatable({}, { __mode = "k" })
+
 -- Report whether a file exists
 local function exists(path)
     local file = io.open(path, "rb")
@@ -100,6 +103,12 @@ function Harness.new(name, options)
         Subscribe = function(key, action) menuSubscriptions[key] = action end,
         Unsubscribe = function(key) menuSubscriptions[key] = nil end,
     }
+    -- MiniMenuOpened handlers, heard when a test opens a menu to choose from it
+    local openSubscriptions = {}
+    Event.MiniMenuOpened = {
+        Subscribe = function(key, action) openSubscriptions[key] = action end,
+        Unsubscribe = function(key) openSubscriptions[key] = nil end,
+    }
     Event.ContentLayerReady = {
         Subscribe = function(key, action) contentSubscriptions[key] = action end,
         Unsubscribe = function(key) contentSubscriptions[key] = nil end,
@@ -122,6 +131,7 @@ function Harness.new(name, options)
         databases = databases,
         contentSubscriptions = contentSubscriptions,
         menuSubscriptions = menuSubscriptions,
+        openSubscriptions = openSubscriptions,
         -- Where the host adds a plugin's entry, and who hears a menu first
         placement = "above_cancel",
         menuOrder = "core_first",
@@ -235,6 +245,11 @@ function Harness:HostMenu(natives, silent)
     table.sort(keys)
     if self.menuOrder == "tags_first" then table.sort(keys, function(a, b) return a > b end) end
     for _, key in ipairs(keys) do self.menuSubscriptions[key]({ miniMenu = menu }) end
+    -- The client stops rebuilding the menu once opened, so this one is what opens
+    local subscriptions = self.openSubscriptions
+    openers[menu] = function()
+        for _, action in pairs(subscriptions) do action({ miniMenu = menu }) end
+    end
     return menu
 end
 
@@ -274,8 +289,16 @@ function Harness.DisplayedLabels(menu)
     return labels
 end
 
+-- Open a menu by right click, once, as choosing from it needs
+function Harness.Open(menu)
+    local open = openers[menu]
+    openers[menu] = nil
+    if open ~= nil then open() end
+end
+
 -- Choose an entry by its label, failing when it is missing
 function Harness.Choose(menu, label)
+    Harness.Open(menu)
     for _, entry in ipairs(menu.entries) do
         if entry.verbText == label then return entry.action(table.unpack(entry.arguments or {})) end
     end

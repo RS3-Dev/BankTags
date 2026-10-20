@@ -90,10 +90,11 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         assert(app.store:GetFolder("combat").collapsed, where)
         menu = shows(folderRow, named({ "Expand", "Rename folder", "Ungroup folder" }, "Combat"))
         -- A left click runs the default and the row's own click; the row answers it once
+        local function click(id) app.tab.controls.list.list:Click(id) end
         local function leftClickRow(id)
             pointAtRow(id)
             local default = leftClick(h:ContentMenu())
-            app.tab.controls.list.list:Click(id)
+            click(id)
             h:Tick(2)
             return default
         end
@@ -104,51 +105,96 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         assert(leftClickRow(folderRow) == "Expand <col=f2c66d>Combat</col>", where)
         assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == "ranged", where)
         assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == nil, where)
-        -- The row answering first leaves the menu's left click nothing to do
-        local function rowThenMenu(id)
+        -- The row may hear the click first, with the default from that menu or one rebuilt after it
+        local function rowThenMenu(id, rebuilt)
             pointAtRow(id)
             local menu = h:ContentMenu()
-            app.tab.controls.list.list:Click(id)
+            click(id)
+            if rebuilt then
+                h:Tick()
+                pointAtRow(id)
+                menu = h:ContentMenu()
+            end
             leftClick(menu)
             h:Tick(2)
         end
-        rowThenMenu("ranged")
+        for _, rebuilt in ipairs({ false, true }) do
+            rowThenMenu("ranged", rebuilt)
+            assert(app.shownTag == "ranged", where)
+            rowThenMenu("ranged", rebuilt)
+            assert(app.shownTag == nil, where)
+            rowThenMenu(folderRow, rebuilt)
+            assert(app.store:GetFolder("combat").collapsed, where)
+            rowThenMenu(folderRow, rebuilt)
+            assert(not app.store:GetFolder("combat").collapsed, where)
+        end
+        -- The default may run ticks before the row hears the click, or more than once
+        local function menuThenLateRow(id, repeats)
+            pointAtRow(id)
+            local menu = h:ContentMenu()
+            for _ = 1, repeats do
+                leftClick(menu)
+                h:Tick(2)
+            end
+            click(id)
+            h:Tick(2)
+        end
+        menuThenLateRow("ranged", 1)
         assert(app.shownTag == "ranged", where)
-        rowThenMenu("ranged")
+        menuThenLateRow("ranged", 2)
         assert(app.shownTag == nil, where)
-        -- A left click only the menu hears toggles too: open, close, open
+        menuThenLateRow(folderRow, 2)
+        assert(app.store:GetFolder("combat").collapsed, where)
+        menuThenLateRow(folderRow, 1)
+        assert(not app.store:GetFolder("combat").collapsed, where)
+        -- Repeated left clicks each toggle once, whenever their menus were built
+        for count = 1, 4 do
+            pointAtRow("ranged")
+            local before = h:ContentMenu()
+            click("ranged")
+            leftClick(before)
+            h:Tick()
+            pointAtRow("ranged")
+            leftClick(h:ContentMenu())
+            h:Tick()
+            assert(app.shownTag == (count % 2 == 1 and "ranged" or nil), count .. where)
+        end
+        -- The row answers the left click, so the default alone does nothing
         local pages = session.extensionPages
         local leave, leaves = pages.LeavePage, 0
         pages.LeavePage = function(...)
             leaves = leaves + 1
             return leave(...)
         end
-        local function menuOnly(id)
-            pointAtRow(id)
-            local default = leftClick(h:ContentMenu())
-            h:Tick(4)
-            return default
-        end
-        assert(menuOnly("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == "ranged", where)
-        assert(menuOnly("ranged") == "Select <col=f2c66d>Ranged</col>", where)
-        assert(leaves == 1 and app.shownTag == nil and layout.selectedTag == nil, where)
-        h:Tick(4)
-        assert(app.shownTag == nil and layout.selectedTag == nil, where)
-        assert(menuOnly("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == "ranged", where)
-        -- A Select built under another shown tag leaves the current page alone
         pointAtRow("ranged")
-        menu = h:ContentMenu()
-        assert(app:ShowTag("melee"))
-        leftClick(menu)
-        h:Tick(2)
-        assert(app.shownTag == "melee" and leaves == 1, where)
+        assert(leftClick(h:ContentMenu()) == "Select <col=f2c66d>Ranged</col>", where)
+        h:Tick(4)
+        assert(app.shownTag == nil and leaves == 0, where)
+        -- Select chosen from the opened menu toggles once, even if heard twice
+        local function chooseSelect(id, label)
+            pointAtRow(id)
+            local menu = h:ContentMenu()
+            Harness.Choose(menu, label)
+            Harness.Choose(menu, label)
+            h:Tick(4)
+        end
+        chooseSelect("ranged", "Select <col=f2c66d>Ranged</col>")
+        assert(app.shownTag == "ranged" and leaves == 0, where)
+        chooseSelect("ranged", "Select <col=f2c66d>Ranged</col>")
+        assert(app.shownTag == nil and layout.selectedTag == nil and leaves == 1, where)
+        chooseSelect(folderRow, "Collapse <col=f2c66d>Combat</col>")
+        assert(app.store:GetFolder("combat").collapsed, where)
+        chooseSelect(folderRow, "Expand <col=f2c66d>Combat</col>")
+        assert(not app.store:GetFolder("combat").collapsed, where)
         pages.LeavePage = nil
         -- Row clicks alone still toggle
-        app.tab.controls.list.list:Click("melee")
-        assert(app.shownTag == nil, where)
-        app.tab.controls.list.list:Click("melee")
+        click("melee")
         assert(app.shownTag == "melee", where)
-        app.tab.controls.list.list:Click("melee")
+        click("melee")
+        assert(app.shownTag == nil, where)
+        click("melee")
+        assert(app.shownTag == "melee", where)
+        click("melee")
         assert(app.shownTag == nil, where)
         h:Tick(2)
         -- An entry chosen after a row click, or from a rebuilt tab, does nothing

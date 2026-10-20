@@ -1,5 +1,6 @@
 -- Add Bank Tags' entries to bank menus
 -- Chosen entries run next tick, only while their target still holds
+-- A Tags row answers its own left click, so its entries act only when chosen from the opened menu
 
 local Config = require("banktags/core/config")
 local Geometry = require("banktags/ui/geometry")
@@ -22,7 +23,8 @@ end
 
 -- Create the menus for an app; nothing is subscribed until Start
 function TagMenus.new(app)
-    return setmetatable({ app = app, pending = {}, started = false }, TagMenus)
+    -- rowMenu is the newest Tags row menu, which is the one shown if the menu opens
+    return setmetatable({ app = app, pending = {}, started = false, rowMenu = nil }, TagMenus)
 end
 
 -- Answer bank menus while Bank Tags is connected to Bank Core
@@ -35,12 +37,23 @@ function TagMenus:Start()
         local ok, message = pcall(function() self:HandleMenu(menu) end)
         if not ok then debugLog("Bank Tags could not add its menu entries: ", message) end
     end)
+    -- The client stops rebuilding an opened menu, so the newest row menu is the one opened
+    Event.MiniMenuOpened.Subscribe(MENU_EVENT, function()
+        local rowMenu = self.rowMenu
+        if rowMenu == nil then return end
+        rowMenu.opened = true
+        debugLog("Bank Tags row menu opened for ", rowMenu.id)
+    end)
 end
 
 -- Stop answering menus and drop chosen entries that have not run
 function TagMenus:Stop()
-    if self.started then Event.MiniMenuReady.Unsubscribe(MENU_EVENT) end
+    if self.started then
+        Event.MiniMenuReady.Unsubscribe(MENU_EVENT)
+        Event.MiniMenuOpened.Unsubscribe(MENU_EVENT)
+    end
     self.started = false
+    self.rowMenu = nil
     Event.Logic.Unsubscribe(ACTION_EVENT)
     self.pending = {}
 end
@@ -76,6 +89,7 @@ end
 
 -- Answer one menu: entries for the bank item beneath the pointer, or for the Tags row
 function TagMenus:HandleMenu(menu)
+    self.rowMenu = nil
     local handle = self.app.handle
     if handle == nil then return end
     local item = handle:GetMenuItem(menu)
@@ -130,8 +144,9 @@ function TagMenus:RowAtPointer()
     return controls.list:EntryAt(x, y), ctx
 end
 
--- Add actions for the tag or folder row under the pointer, the first as the left click
--- A row click after the menu was built means the row already answered it
+-- Add actions for the tag or folder row under the pointer, the first shown as the left click
+-- The row answers a left click itself, whenever the client runs this menu's default
+-- Chosen from the opened menu, one entry acts once, unless a row click since made the menu stale
 function TagMenus:AddRowEntries(menu)
     local entry, ctx = self:RowAtPointer()
     if entry == nil then return end
@@ -147,9 +162,18 @@ function TagMenus:AddRowEntries(menu)
         local mounted = current
         current = function() return mounted() and app.store.data.tags[entry.tag] ~= nil end
     end
+    local rowMenu = { id = tostring(entry.tag or entry.key), opened = false, used = false }
     local entries = {}
     local function offer(label, name, action)
-        entries[#entries + 1] = { label = label, subject = name, action = self:Defer(current, action) }
+        local deferred = self:Defer(current, action)
+        entries[#entries + 1] = { label = label, subject = name, action = function()
+            debugLog("Bank Tags row entry ", label, " for ", rowMenu.id, ": opened ", tostring(rowMenu.opened),
+                ", used ", tostring(rowMenu.used), ", clicks ", clicks, " now ", list.clicks,
+                ", shown ", tostring(app.shownTag))
+            if not rowMenu.opened or rowMenu.used then return end
+            rowMenu.used = true
+            deferred()
+        end }
     end
     if entry.kind == "folder" then
         local folderKey = entry.key
@@ -163,11 +187,7 @@ function TagMenus:AddRowEntries(menu)
         local tag = entry.tag
         if app.store.data.tags[tag] == nil then return end
         local name = subject(tag)
-        -- Toggles like the row, unless the shown tag changed since the menu was built
-        local shownTag = app.shownTag
-        offer("Select", name, function()
-            if app.shownTag == shownTag then app:ToggleTag(tag) end
-        end)
+        offer("Select", name, function() app:ToggleTag(tag) end)
         offer("Edit", name, function() app.windows:OpenTagSettings(tag, false) end)
         offer(app.select:Tag() == tag and "Stop selecting items" or "Select items", name, function()
             app.select:Toggle(tag)
@@ -183,6 +203,7 @@ function TagMenus:AddRowEntries(menu)
         offer("Move to folder...", name, function() app.windows:OpenFolderChooser(tag) end)
     end
     MenuEntries.AddTop(menu, entries)
+    self.rowMenu = rowMenu
 end
 
 return TagMenus

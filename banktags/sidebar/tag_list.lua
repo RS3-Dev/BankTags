@@ -92,6 +92,7 @@ function TagList.new(parent, options)
         "Create a tag, then drag bank items onto it.")
     self.list = SidebarRows.CreateList(parent, contentWidth, options.listHeight, function(_, entryID)
         self.clicks = self.clicks + 1
+        debugLog("Bank Tags row click ", tostring(entryID), ", clicks ", self.clicks)
         local folderKey = folderKeyOf(entryID)
         if folderKey ~= nil then
             self:ToggleFolder(folderKey)
