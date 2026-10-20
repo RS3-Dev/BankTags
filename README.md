@@ -14,12 +14,12 @@ Everything here is checked against Bank Core's stand-in host only. Nothing in th
 - **Layout editor.** A window over the bank, sized and placed from Bank Core's bank bounds, laid out at Bank Core's grid columns so it matches the page. Drag items and labels, add catalog items, Create Copy, Remove, and Move to Unsorted.
 - **Import/Share.** Share codes per tag, import with a preview, renaming, a sprite, and a folder, and import sources other plugins register.
 - **Bank settings.** Show tag sprites, where new items go (Unsorted or the first empty slot), and debug logging, in Bank Tags' section of Bank Core's settings window (the gear at the bottom of the bank sidebar). Bank Tags registers the section with `owner:SetSettings` and saves the values itself.
-- **Plugin panel.** Import/Share, and a note saying where the settings are, or that Bank Core is missing.
+- **No plugin window entry.** Bank Tags has no ribbon icon or panel in the Plugins window; Import/Share opens from the Tags tab's footer.
 
 ## Requirements and load order
 
 - **PrettyUI** is a required dependency.
-- **Bank Core** (`bankcore`) is needed for anything in the bank. It is declared as an optional dependency only because the host reports changes for optional dependencies; required dependencies get no change notification. Without Bank Core, Bank Tags loads, keeps its tags, offers Import/Share from its plugin panel, and the panel says Bank Core is needed.
+- **Bank Core** (`bankcore`) is needed for anything in the bank. It is declared as an optional dependency only because the host reports changes for optional dependencies; required dependencies get no change notification. Without Bank Core, Bank Tags loads, keeps its tags, and waits; other plugins can still register import sources.
 - **RuneQL** (`runeql`) is optional. With it, the sprite picker and the editor's item search cover every item. Without it they find items in the bank by name, an exact item ID, or an exact config name, and say so. Once the host reports RuneQL unloaded, search stops reading it, even if its global remains, until the host reports it loaded again.
 
 Any load order works: Bank Tags connects when Bank Core loads, reconnects when Bank Core reloads, and lets go when Bank Core unloads, through the host's `PluginDependencyUpdate`. Reloading Bank Tags shuts down the previous copy in the same Lua state first; a copy whose owner ID a newer load took stays idle. A typical development reload is Bank Core first, then Bank Tags, but either can reload alone.

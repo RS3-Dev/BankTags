@@ -13,8 +13,6 @@ local app = h:App()
 local session, layout = h:OpenBank()
 h:Tick(2)
 local SETTINGS_KEY = "banktags:settings:v1"
-local IN_BANK = "Bank Tags' settings are in the bank: open your bank and select the gear at the "
-    .. "bottom of the sidebar."
 
 -- Open the settings window from the gear and choose Bank Tags' section
 local function openSection()
@@ -30,11 +28,17 @@ local function sectionLabels()
     return table.concat(labels, " | ")
 end
 
--- The plugin panel points to the settings and keeps Import/Share
-local panel = h:OpenContentPanel()
-assert(Harness.Find(panel, IN_BANK) ~= nil and Harness.Find(panel, "Import / Share tags") ~= nil)
-assert(Harness.Find(panel, "Show tag sprites") == nil and app.panel.controls == nil)
-Harness.Find(panel, "Import / Share tags").parent.hooks.click()
+-- Bank Tags has no plugin panel; Import/Share opens from the Tags tab
+local manifest = assert(io.open(h.tagsFolder .. "/plugin.json", "rb"))
+assert(string.find(manifest:read("a"), '"hasRibbonIcon": false', 1, true))
+manifest:close()
+for _, subscription in ipairs(h.host:SubscriptionsOf("banktags")) do
+    assert(string.sub(subscription, 1, 18) ~= "ContentLayerReady.", subscription .. " is a plugin panel")
+end
+assert(app.windows.importShare == nil)
+for _, control in ipairs(app.tab.controls.owned) do
+    if control.spriteName == "EXPORT" then control.action(control, false) end
+end
 assert(app.windows.importShare ~= nil)
 app.windows:Close("importShare")
 

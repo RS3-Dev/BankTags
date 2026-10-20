@@ -6,7 +6,7 @@ This describes what Bank Tags offers other plugins, what it uses from Bank Core 
 
 - Plugin name `banktags`. PrettyUI is required; `bankcore` and `runeql` are optional dependencies (see the README for why Bank Core is optional).
 - The entry returns the public API below as the injected `banktags` global and publishes it as `_G.__banktags_api`. The running session is `_G.__banktags_session`; a new load shuts it down first. Both are cleared only while they still hold this load's values.
-- Event and hook names start with `banktags_`. Saved data uses `banktags:tags:v3:manifest`, `banktags:tags:v3:<a|b>:<n>` chunks, and `banktags:settings:v1`.
+- Event and hook names start with `banktags_`. The manifest sets `hasRibbonIcon` to `false`, and Bank Tags does not subscribe to `Event.ContentLayerReady`. Saved data uses `banktags:tags:v3:manifest`, `banktags:tags:v3:<a|b>:<n>` chunks, and `banktags:settings:v1`.
 
 ## Public API: import sources
 

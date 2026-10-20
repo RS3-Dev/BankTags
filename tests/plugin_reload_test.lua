@@ -8,7 +8,7 @@ local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("plugin_reload")
 h.bankHost:SetItems({ { 1944, 3, "Egg" }, { 1927, 1, "Milk" } })
 
--- Bank Tags loads without Bank Core and says Core is needed
+-- Bank Tags loads without Bank Core and waits for it
 local tags = h:LoadTags()
 local app = h:App()
 assert(app ~= nil and not app:IsConnected())
@@ -17,8 +17,6 @@ assert(rawget(tags.env, "PluginOptionalDependencyChanged") == nil)
 local api = tags.result
 assert(type(api.RegisterExtension) == "function" and api.GetState().running)
 assert(rawget(tags.env._G, "__banktags_api") == api)
-local panel = h:OpenContentPanel()
-assert(Harness.Find(panel, "Bank Tags needs Bank Core. Enable Bank Core to use tags in your bank.") ~= nil)
 -- Another plugin can add an import source without Bank Core; the window lists it
 local importer = assert(api.RegisterExtension("example.guides", "Guides"))
 assert(importer:RegisterImportProvider("guide", { label = "Guide", input = "text",
@@ -32,7 +30,6 @@ end
 -- Core arrives late, and the dependency update connects Bank Tags
 local core = h:LoadCore()
 assert(app:IsConnected() and app.bank == core.result)
-assert(Harness.Find(panel, "Bank Tags needs Bank Core. Enable Bank Core to use tags in your bank.") == nil)
 local session, layout = h:OpenBank()
 h:Tick(2)
 local tabParent = h:TabParent()
@@ -68,7 +65,6 @@ assert(h:TabParent() ~= nil)
 -- Core unloads; Bank Tags lets go and its tags stay saved
 h.host:Unload("bankcore")
 assert(not app:IsConnected() and app.handle == nil)
-assert(Harness.Find(panel, "Bank Tags needs Bank Core. Enable Bank Core to use tags in your bank.") ~= nil)
 assert(app.store.data.tags.melee ~= nil)
 h:LoadCore()
 assert(app:IsConnected())
@@ -128,10 +124,7 @@ rawget(first.env, "PluginDependencyUpdate")({ pluginIdentifier = "bankcore", ena
 assert(firstApp.retired and not firstApp:IsConnected() and secondApp:IsConnected())
 rawget(second.env, "PluginDependencyUpdate")({ pluginIdentifier = "bankcore", enabled = true })
 assert(secondApp:IsConnected())
-local firstPanel = ui.Layer.new(nil)
-firstPanel:SetSize(300, 400)
-firstApp:CreatePanel(firstPanel)
-assert(Harness.Find(firstPanel, "A newer copy of Bank Tags took over; this copy is idle.") ~= nil)
+assert(not firstApp:IsConnected() and select(2, firstApp:Connect()) == "replaced")
 
 -- Without RuneQL the catalog is limited; with it RuneQL is searched
 local Catalog = split.tags.env.package.loaded["banktags/tags/catalog"]

@@ -2,7 +2,7 @@
   "name": "banktags",
   "version": "0.1.0",
   "description": "Bank Tags: tags, folders, layouts, select mode, and Import/Share for the bank. Requires Bank Core.",
-  "hasRibbonIcon": true,
+  "hasRibbonIcon": false,
   "dependencies": {
     "prettyui": 6398181
   },

@@ -92,8 +92,8 @@ function Harness.new(name, options)
         return slot
     end
     ui.ObjectQuantityDisplayMode.MULTIPLE = 1
-    local contentSubscriptions = {}
-    for _, event in ipairs({ "GameStateChanged", "MiniMenuEntrySelected",
+    -- Bank Core still listens for its own plugin panel
+    for _, event in ipairs({ "GameStateChanged", "MiniMenuEntrySelected", "ContentLayerReady",
         "InventoryAdded", "InventoryRemoved", "InventoryUpdated" }) do
         Event[event] = { Subscribe = function() end, Unsubscribe = function() end }
     end
@@ -108,10 +108,6 @@ function Harness.new(name, options)
     Event.MiniMenuOpened = {
         Subscribe = function(key, action) openSubscriptions[key] = action end,
         Unsubscribe = function(key) openSubscriptions[key] = nil end,
-    }
-    Event.ContentLayerReady = {
-        Subscribe = function(key, action) contentSubscriptions[key] = action end,
-        Unsubscribe = function(key) contentSubscriptions[key] = nil end,
     }
     local Build = require("tools/build")
     local out = "dist/test/" .. name
@@ -129,7 +125,6 @@ function Harness.new(name, options)
         bankHost = bankHost,
         host = host,
         databases = databases,
-        contentSubscriptions = contentSubscriptions,
         menuSubscriptions = menuSubscriptions,
         openSubscriptions = openSubscriptions,
         -- Where the host adds a plugin's entry, and who hears a menu first
@@ -191,14 +186,6 @@ end
 -- Run logic ticks
 function Harness:Tick(count)
     for _ = 1, count or 1 do self.bankHost:Tick() end
-end
-
--- Show the plugin's content panel, as selecting its ribbon icon does
-function Harness:OpenContentPanel()
-    local panel = ui.Layer.new(nil)
-    panel:SetSize(300, 400)
-    self.contentSubscriptions.banktags_content({ component = panel })
-    return panel
 end
 
 -- Find a component by text or content, depth first

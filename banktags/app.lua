@@ -4,7 +4,6 @@ local Config = require("banktags/core/config")
 local DebugLog = require("banktags/core/debug_log")
 local ImportAPI = require("banktags/imports/import_api")
 local ItemIdentity = require("banktags/tags/item_identity")
-local PluginPanel = require("banktags/windows/plugin_panel")
 local SelectMode = require("banktags/sidebar/select_mode")
 local Settings = require("banktags/core/settings")
 local SettingsSection = require("banktags/windows/settings_section")
@@ -19,12 +18,7 @@ local debugLog = DebugLog.Write
 local App = {}
 App.__index = App
 
-local CONTENT_EVENT = Config.PLUGIN_REF .. "_content"
 local TAB_ID = "tags"
-local NOT_CONNECTED = "Bank Tags needs Bank Core. Enable Bank Core to use tags in your bank."
-local REPLACED = "A newer copy of Bank Tags took over; this copy is idle."
-local SETTINGS_IN_BANK = "Bank Tags' settings are in the bank: open your bank and select the gear "
-    .. "at the bottom of the sidebar."
 local NEEDS_ALL_ITEMS = 'Select "All Items" before adding items to tags.'
 
 -- Find a running Bank Core API, trying the one passed in before the global copy
@@ -60,7 +54,6 @@ function App.new()
         pageRegistered = false,
         -- A notice the Tags tab shows
         status = nil,
-        panel = nil,
         -- Preferences shown while their settings section is open
         settingsSection = nil,
         retired = false,
@@ -87,13 +80,10 @@ function App.new()
     return app
 end
 
--- Subscribe to this plugin's panel and connect to Bank Core if it runs
+-- Connect to Bank Core if it runs
 function App:Start()
     if self.shutDown or self.started then return end
     self.started = true
-    Event.ContentLayerReady.Subscribe(CONTENT_EVENT, function(event)
-        self:CreatePanel(event.component)
-    end)
     self:Connect()
 end
 
@@ -138,7 +128,6 @@ function App:Connect()
         return false, failure
     end
     self.menus:Start()
-    self:UpdatePanelNotice()
     debugLog("Bank Tags connected to Bank Core")
     return true
 end
@@ -152,7 +141,6 @@ function App:Disconnect()
     self.handle, self.bank = nil, nil
     self.state, self.shownTag, self.bankItems, self.pageRegistered = nil, nil, nil, false
     if handle ~= nil then pcall(function() handle:Dispose() end) end
-    self:UpdatePanelNotice()
 end
 
 -- Follow Bank Core's state, closing windows with the bank
@@ -381,28 +369,6 @@ function App:SetSetting(key, value)
     return true
 end
 
--- Pick the plugin panel's notice text
-function App:PanelNotice()
-    if self:IsConnected() then return SETTINGS_IN_BANK end
-    return self.retired and REPLACED or NOT_CONNECTED
-end
-
--- Show the current notice on an open plugin panel
-function App:UpdatePanelNotice()
-    if self.panel ~= nil then self.panel:ShowNotice(self:PanelNotice()) end
-end
-
--- Mount the notice and Import/Share on the plugin panel
-function App:CreatePanel(parent)
-    if self.shutDown then return end
-    self:Connect()
-    if self.panel ~= nil then self.panel:Destroy() end
-    self.panel = PluginPanel.new(parent, {
-        notice = self:PanelNotice(),
-        onOpenImport = function() self.windows:OpenImportShare() end,
-    })
-end
-
 -- Draw preferences in Bank Core's settings window
 function App:MountSettings(parent)
     self:DestroySettings()
@@ -427,16 +393,11 @@ function App:Shutdown()
         local ok, message = pcall(action)
         if not ok then debugLog("Bank Tags shutdown could not clean ", label, ": ", message) end
     end
-    if self.started then Event.ContentLayerReady.Unsubscribe(CONTENT_EVENT) end
     cleanup("select mode", function()
         if self.handle ~= nil and self.select:Tag() ~= nil then self.handle:SetItemHighlight(nil) end
         self.select:Forget()
     end)
     cleanup("windows", function() self.windows:CloseAll() end)
-    cleanup("panel", function()
-        if self.panel ~= nil then self.panel:Destroy() end
-        self.panel = nil
-    end)
     cleanup("Bank Core registration", function() self:Disconnect() end)
     cleanup("import sources", function() self.imports:Close() end)
 end
