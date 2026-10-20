@@ -8,7 +8,7 @@ Everything here is checked against Bank Core's stand-in host only. Nothing in th
 
 - **Tags tab.** A sidebar tab Bank Core mounts, drawn by Bank Tags: search, sorting, folders with collapse, tag icons, a status line, and a footer with Import/Share, New Tag, and the layout editor. Any number of tags fits; the list is Bank Tags' own, not Core's row list.
 - **Showing a tag.** Choosing a tag shows it through one Bank Core page, keyed `tag:<name>`, with its saved layout: labels, deliberate empty rows, exact copies, ghost copies that open their source, and Unsorted items under their own heading. Choosing the shown tag again returns to the bank's own view.
-- **Right-click menus.** Tag rows offer Select, Edit, Select items, Remove, Remove from folder, and Move to folder. Folder rows offer Collapse or Expand, Rename folder, and Ungroup folder. Items of the shown tag, including ghosts and items the bank does not hold, offer Remove from the tag, which removes the copy that slot was drawn for.
+- **Right-click menus.** Tag rows offer Select, Edit, Select items, Remove, Remove from folder, and an Add to folder or Move to folder submenu listing the other folders, Create new folder, and Cancel. Folder rows offer Collapse or Expand, Rename folder, and Ungroup folder. Items of the shown tag, including ghosts and items the bank does not hold, offer Remove from the tag, which removes the copy that slot was drawn for.
 - **Drag and drop.** Dragging a bank item onto a tag row adds that copy; dropping it on New Tag creates a tag holding it and opens it for naming.
 - **Select mode.** Select items makes "Add to <tag>" the left click on bank items and outlines the tag's members in gold. The Tags tab shows the tag being filled, pulses its row, and offers Done.
 - **Layout editor.** A window over the bank, sized and placed from Bank Core's bank bounds, laid out at Bank Core's grid columns so it matches the page. Drag items and labels, add catalog items, Create Copy, Remove, and Move to Unsorted.
@@ -36,7 +36,6 @@ Any load order works: Bank Tags connects when Bank Core loads, reconnects when B
 - Drops onto a tag row or New Tag work from any native bank tab. From All Items a drop tags the exact copy dragged; a numbered tab's order is its own, so Bank Core names no copy and the drop tags the object's first copy (with duplicate stacks, that may not be the stack dragged).
 - Select mode works in the bank's All Items view only, where copy numbers are known, and ends on another native tab.
 - Select mode outlines members in gold, Bank Core's highlight, not white. Its status and Done button are in the Tags tab, not a panel over the bank's right column. The left-click entry reads "Add to <tag>" followed by the item's name.
-- Moving a tag to a folder opens a folder chooser instead of a submenu; Bank Core's menus have no submenus.
 - The layout editor's item actions are buttons (Create Copy, Remove, Move to Unsorted), not a right-click menu. Its tag column has no tab rail, and its item icons use the client's default look because Bank Core does not report a stack's outline or shadow.
 - Tag names may be up to 80 characters in the tag settings field, matching what saving always allowed.
 - Cleanup, RuneQL queries, and Advanced Bank Search are not part of Bank Tags.
@@ -69,3 +68,4 @@ The toolchain used locally is a Lua 5.4 interpreter with `luac54` beside it, whi
 - The drop hook's return value and naming, which Bank Core owns.
 - Bank Core's bank bounds as screen coordinates for placing the layout editor, and how 80-character names fit the bank header.
 - PrettyUI's item slot `SetTooltip` and the item grid in the sprite picker, which the stand-in host does not draw.
+- The folder submenu as the client draws it beside a Tags row menu, and that clicking one of its folders moves the tag once and reaches no Tags row beneath; the tests run PrettyUI's real `AddSubmenu` and its clear-then-act order, not its drawn rows.

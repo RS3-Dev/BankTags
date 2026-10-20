@@ -13,6 +13,12 @@ set BANKCORE_ROOT=C:\path\to\bank-utilities
 lua54 tools/check.lua
 ```
 
-The check prints which Bank Core checkout and commit the tests loaded. A checkout whose `HOST_CONTRACT.md` lacks the API Bank Tags uses (`PluginDependencyUpdate(event)`, `GetMenuItem`, `SetItemHighlight`, the reported `columns`, a plain, clonable root, and `SetSettings`) is refused with a message rather than tested against, so an older sibling checkout cannot fail or pass the tests for the wrong reason.
+Menus load PrettyUI's real `src/minimenu.lua`, read-only, from the checkout `PRETTYUI_ROOT` names, so the folder submenu is placed and checked by PrettyUI's own `MiniMenu.AddSubmenu`, and PrettyUI clears its submenu state on each new menu before the plugins answer, as it does as a dependency. Drawing the submenu and hovering its parent need the client, so a test chooses a child by running PrettyUI's close handler and then the child's action, the order PrettyUI's row click uses; PrettyUI's own `tests/minimenu_test.lua` covers the drawn submenu.
+
+```text
+set PRETTYUI_ROOT=C:\path\to\prettyui-checkout
+```
+
+The check prints which Bank Core and PrettyUI checkouts and commits the tests loaded. A checkout whose `HOST_CONTRACT.md` lacks the API Bank Tags uses (`PluginDependencyUpdate(event)`, `GetMenuItem`, `SetItemHighlight`, the reported `columns`, a plain, clonable root, and `SetSettings`) is refused with a message rather than tested against, so an older sibling checkout cannot fail or pass the tests for the wrong reason.
 
 The stand-in host is not the game client: these tests show Bank Tags' behavior against Bank Core's public API under that model, not how the live client draws, scrolls, or delivers input.

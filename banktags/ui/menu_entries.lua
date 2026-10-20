@@ -31,10 +31,15 @@ local function normalize(value)
     return string.lower((tostring(value or ""):gsub("<[^>]->", "")):match("^%s*(.-)%s*$"))
 end
 
+-- Write an entry's label, with its subject in gold
+function MenuEntries.Text(label, subject)
+    if subject == nil then return label end
+    return label .. " <col=" .. NAME_COLOUR .. ">" .. subject .. "</col>"
+end
+
 -- Add one entry and find where the host put it
 local function add(menu, entry)
-    local text = entry.label
-    if entry.subject ~= nil then text = text .. " <col=" .. NAME_COLOUR .. ">" .. entry.subject .. "</col>" end
+    local text = MenuEntries.Text(entry.label, entry.subject)
     local before = {}
     for index, current in ipairs(menu.entries) do before[index] = signature(current) end
     menu:Add(text, entry.action)
@@ -89,10 +94,11 @@ function MenuEntries.AddTop(menu, entries)
         local added = add(menu, entries[index])
         if added == nil then
             MenuEntries.PromoteCancel(menu)
-            return
+            return false
         end
         move(menu, added, menu.entryCount)
     end
+    return true
 end
 
 -- Make an entry the left-click default

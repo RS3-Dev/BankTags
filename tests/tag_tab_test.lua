@@ -132,7 +132,7 @@ assert(melee.root.y > list.list.root.height, "melee starts below the visible lis
 -- Right-clicking a tag row offers its actions; Select shows it on a later tick
 local menu = h:ContentMenu()
 for _, labelText in ipairs({ "Select", "Edit", "Select items", "Remove", "Remove from folder",
-    "Move to folder..." }) do
+    "Move to folder" }) do
     local found = false
     for _, entry in ipairs(menu.entries) do
         if string.sub(entry.verbText, 1, #labelText) == labelText then found = true end
@@ -146,18 +146,29 @@ assert(app.shownTag == "melee" and layout.pageState.view.key == "tag:melee")
 assert(app.handle:LeavePage())
 h:Tick(2)
 
--- The folder chooser files the tag under another folder, or none
+-- The folder submenu files the tag under another folder; Remove from folder files it under none
+local moveMelee = "Move to folder <col=f2c66d>Melee</col> <col=ffffff><gt></col>"
 pointAtRow("melee")
 menu = h:ContentMenu()
-Harness.Choose(menu, "Move to folder... <col=f2c66d>Melee</col>")
+assert(table.concat(Harness.ChildLabels(Harness.Submenu(menu, moveMelee)), ",") == "Numbers,Create new folder,Cancel")
+Harness.ChooseChild(menu, moveMelee, "Numbers")
 h:Tick(1)
-local chooser = app.windows.folderChooser
-assert(chooser ~= nil)
-local choices = {}
-for _, row in ipairs(chooser.list.rows) do choices[#choices + 1] = row.entry.label end
-assert(table.concat(choices, ",") == "Create New Folder...,Remove from folder,Numbers")
-chooser.list:Click("folder:numbers")
-assert(app.store:GetTagFolder("melee") == "numbers" and app.windows.folderChooser == nil)
+assert(app.store:GetTagFolder("melee") == "numbers")
+pointAtRow("melee")
+menu = h:ContentMenu()
+Harness.Choose(menu, "Remove from folder <col=f2c66d>Numbers</col>")
+h:Tick(1)
+assert(app.store:GetTagFolder("melee") == nil)
+assert(app.store:CreateFolder("Numbers", "melee"))
+app:Changed()
+-- Without PrettyUI's MiniMenu the row keeps its other actions
+local MiniMenu = prettyui.MiniMenu
+prettyui.MiniMenu = nil
+pointAtRow("melee")
+menu = h:ContentMenu()
+assert(#Harness.Submenus(menu) == 0 and Harness.LeftClick(menu) == "Select <col=f2c66d>Melee</col>")
+assert(Harness.Has(menu, "Remove from folder <col=f2c66d>Numbers</col>"))
+prettyui.MiniMenu = MiniMenu
 
 -- Folder rows offer collapse, rename, and ungroup
 pointAtRow("__banktags_folder:numbers")

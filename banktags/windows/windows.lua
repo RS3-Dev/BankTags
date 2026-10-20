@@ -1,7 +1,6 @@
 -- Own Bank Tags' standalone windows, closing most with the bank
 
 local debugLog = require("banktags/core/debug_log").Write
-local FolderChooser = require("banktags/windows/folder_chooser")
 local ImportShare = require("banktags/windows/import_share")
 local LayoutEditorWindow = require("banktags/windows/layout_editor_window")
 local SpritePicker = require("banktags/windows/sprite_picker")
@@ -14,7 +13,7 @@ local Windows = {}
 Windows.__index = Windows
 
 -- Windows that close with the bank
-local BANK_WINDOWS = { "textPrompt", "folderChooser", "layoutEditor", "tagSettingsEditor", "tagDeleteConfirm" }
+local BANK_WINDOWS = { "textPrompt", "layoutEditor", "tagSettingsEditor", "tagDeleteConfirm" }
 
 -- Find the layer standalone windows open on
 local function windowParent()
@@ -127,28 +126,6 @@ function Windows:OpenPageLabelPrompt(options)
     if self.layoutEditor ~= nil and self.textPrompt ~= nil then
         self.layoutEditor:SetOverlay(self.textPrompt.window)
     end
-end
-
--- Open the chooser that files a tag under a folder
-function Windows:OpenFolderChooser(tag)
-    local app = self.app
-    if app.store.data.tags[tag] == nil then return end
-    self:Close("folderChooser")
-    local parent = parentFor("the folder chooser")
-    if parent == nil then return end
-    local chooser
-    chooser = FolderChooser.new(parent, {
-        tag = tag,
-        current = app.store:GetTagFolder(tag),
-        folders = app.store:GetFolders(),
-        onMove = function(folderKey) return app:MoveTagToFolder(tag, folderKey) end,
-        onCreate = function() self:OpenCreateFolderPrompt(tag) end,
-        onClose = function()
-            if self.folderChooser == chooser then self.folderChooser = nil end
-        end,
-    })
-    self.folderChooser = chooser
-    chooser:Show()
 end
 
 -- Open the layout editor sized to the bank

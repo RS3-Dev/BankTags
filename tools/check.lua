@@ -1,6 +1,6 @@
 -- Build Bank Tags, run every test, and check the built files
 -- Usage, from the repository root: lua54 tools/check.lua
--- Tests that load Bank Core read it from BANKCORE_ROOT; see tests/README.md
+-- Tests read Bank Core from BANKCORE_ROOT and PrettyUI's MiniMenu from PRETTYUI_ROOT; see tests/README.md
 -- Each test runs in its own process because the tests install different host stand-ins
 
 package.path = "./?.lua;" .. package.path
@@ -68,6 +68,14 @@ end
 local coreRoot = os.getenv("BANKCORE_ROOT") or "../bank-utilities"
 local _, coreHead = run('git -C "' .. coreRoot .. '" log -1 --format="%h %s"')
 print("Bank Core for tests: " .. coreRoot .. " at " .. (coreHead:match("[^\r\n]+") or "unknown"))
+-- Name the PrettyUI checkout the tests load MiniMenu from
+local prettyRoot = os.getenv("PRETTYUI_ROOT")
+if prettyRoot == nil then
+    print("PrettyUI for tests: PRETTYUI_ROOT is not set, so tests that load Bank Tags fail")
+else
+    local _, prettyHead = run('git -C "' .. prettyRoot .. '" log -1 --format="%h %s"')
+    print("PrettyUI for tests: " .. prettyRoot .. " at " .. (prettyHead:match("[^\r\n]+") or "unknown"))
+end
 
 local tests = trackedFiles('"tests/*_test.lua"')
 for _, path in ipairs(tests) do

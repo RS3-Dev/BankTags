@@ -146,7 +146,8 @@ end
 
 -- Add actions for the tag or folder row under the pointer, the first shown as the left click
 -- The row handles left clicks itself, no matter when the client runs this menu's default
--- An entry picked from the open menu acts once, unless a row click has made the menu out of date
+-- An entry picked from the open menu, or its folder submenu, acts once
+-- A row click, a rebuilt tab, or a removed tag makes the menu out of date
 function TagMenus:AddRowEntries(menu)
     local entry, ctx = self:RowAtPointer()
     if entry == nil then return end
@@ -163,17 +164,21 @@ function TagMenus:AddRowEntries(menu)
         current = function() return mounted() and app.store.data.tags[entry.tag] ~= nil end
     end
     local rowMenu = { id = tostring(entry.tag or entry.key), opened = false, used = false }
-    local entries = {}
-    local function offer(label, name, action)
-        local deferred = self:Defer(current, action)
-        entries[#entries + 1] = { label = label, subject = name, action = function()
+    -- Run an action once, next tick, if picked from the opened menu and still current
+    local function chosen(label, action, check)
+        local deferred = self:Defer(check or current, action)
+        return function()
             debugLog("Bank Tags row entry ", label, " for ", rowMenu.id, ": opened ", tostring(rowMenu.opened),
                 ", used ", tostring(rowMenu.used), ", clicks ", clicks, " now ", list.clicks,
                 ", shown ", tostring(app.shownTag))
             if not rowMenu.opened or rowMenu.used then return end
             rowMenu.used = true
             deferred()
-        end }
+        end
+    end
+    local entries = {}
+    local function offer(label, name, action)
+        entries[#entries + 1] = { label = label, subject = name, action = chosen(label, action) }
     end
     if entry.kind == "folder" then
         local folderKey = entry.key
@@ -200,10 +205,36 @@ function TagMenus:AddRowEntries(menu)
                 app:MoveTagToFolder(tag, nil)
             end)
         end
-        offer("Move to folder...", name, function() app.windows:OpenFolderChooser(tag) end)
     end
-    MenuEntries.AddTop(menu, entries)
+    if not MenuEntries.AddTop(menu, entries) then return end
     self.rowMenu = rowMenu
+    if entry.kind == "tag" then self:AddFolderSubmenu(menu, entry.tag, #entries + 1, chosen, current) end
+end
+
+-- Add the folder submenu below the row's other actions
+-- It lists the other folders, Create new folder, and Cancel
+function TagMenus:AddFolderSubmenu(menu, tag, position, chosen, isCurrent)
+    local MiniMenu = prettyui.MiniMenu
+    if MiniMenu == nil then
+        debugLog("Bank Tags needs PrettyUI 1.2 or newer for its folder submenu")
+        return
+    end
+    local app = self.app
+    local tagFolder = app.store:GetTagFolder(tag)
+    local children = {}
+    for _, folder in ipairs(app.store:GetFolders()) do
+        local folderKey = folder.key
+        if folderKey ~= tagFolder then
+            children[#children + 1] = { label = Text.plain(folder.name),
+                action = chosen("Move to " .. folderKey, function() app:MoveTagToFolder(tag, folderKey) end,
+                    function() return isCurrent() and app.store:GetFolder(folderKey) ~= nil end) }
+        end
+    end
+    children[#children + 1] = { label = "Create new folder",
+        action = chosen("Create new folder", function() app.windows:OpenCreateFolderPrompt(tag) end) }
+    children[#children + 1] = { label = "Cancel", action = function() end }
+    local label = tagFolder ~= nil and "Move to folder" or "Add to folder"
+    MiniMenu.AddSubmenu(menu, MenuEntries.Text(label, subject(tag)), children, { title = label, position = position })
 end
 
 return TagMenus

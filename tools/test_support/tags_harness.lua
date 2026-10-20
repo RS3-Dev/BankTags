@@ -7,6 +7,10 @@ local Harness = {}
 
 -- How to open each menu a test built, heard by MiniMenuOpened handlers
 local openers = setmetatable({}, { __mode = "k" })
+-- The folder submenus each menu was given, in the order they were added
+local submenus = setmetatable({}, { __mode = "k" })
+-- PrettyUI's own MiniMenu handlers, by event name
+local prettyMenuHandlers = {}
 
 -- Report whether a file exists
 local function exists(path)
@@ -48,6 +52,48 @@ function Harness.CoreRoot()
     return root
 end
 
+-- Find the read-only PrettyUI checkout from PRETTYUI_ROOT
+function Harness.PrettyUIRoot()
+    local root = os.getenv("PRETTYUI_ROOT")
+    if root == nil then error("set PRETTYUI_ROOT to a PrettyUI checkout the tests load MiniMenu from", 0) end
+    root = string.gsub(root, "\\", "/")
+    if not exists(root .. "/src/minimenu.lua") then
+        error("PrettyUI's src/minimenu.lua was not found under " .. root, 0)
+    end
+    return root
+end
+
+-- Load PrettyUI's real MiniMenu, recording each submenu a menu is given
+-- Its handlers are kept apart so tests run them in the client's order
+-- Drawing the submenu needs the client, so tests choose a child as its row click would
+local function installMiniMenu()
+    local root = Harness.PrettyUIRoot()
+    local stubs = {
+        ["src/core/mouse"] = {},
+        ["src/core/sprites"] = {},
+        ["src/core/math"] = assert(loadfile(root .. "/src/core/math.lua"))(),
+    }
+    local events = {}
+    for _, name in ipairs({ "MiniMenuReady", "MiniMenuOpened", "MiniMenuClosed", "MiniMenuEntrySelected", "Logic" }) do
+        events[name] = {
+            Subscribe = function(_, action) prettyMenuHandlers[name] = action end,
+            Unsubscribe = function() prettyMenuHandlers[name] = nil end,
+        }
+    end
+    local env = setmetatable({ require = function(name) return assert(stubs[name], name) end, Event = events },
+        { __index = _G })
+    local MiniMenu = assert(loadfile(root .. "/src/minimenu.lua", "t", env))()
+    MiniMenu.Start()
+    prettyui.MiniMenu = setmetatable({
+        AddSubmenu = function(menu, label, children, options)
+            local entry = MiniMenu.AddSubmenu(menu, label, children, options)
+            submenus[menu] = submenus[menu] or {}
+            table.insert(submenus[menu], { entry = entry, children = children, options = options })
+            return entry
+        end,
+    }, { __index = MiniMenu })
+end
+
 -- Give stand-in list rows real positions so tests can point at them
 local function placeListRows()
     local newList = prettyui.List.new
@@ -77,6 +123,7 @@ function Harness.new(name, options)
     bankHost:InstallWindowWidgets()
     bankHost:InstallPanelWidgets()
     placeListRows()
+    installMiniMenu()
     prettyui.ItemGrid = { new = function(parent)
         local grid = { root = ui.Layer.new(parent), slots = {} }
         function grid:SetObjects(objects) self.objects = objects end
@@ -231,6 +278,8 @@ function Harness:HostMenu(natives, silent)
     for key in pairs(self.menuSubscriptions) do keys[#keys + 1] = key end
     table.sort(keys)
     if self.menuOrder == "tags_first" then table.sort(keys, function(a, b) return a > b end) end
+    -- PrettyUI is a dependency, so it hears the menu before the plugins
+    prettyMenuHandlers.MiniMenuReady({ miniMenu = menu })
     for _, key in ipairs(keys) do self.menuSubscriptions[key]({ miniMenu = menu }) end
     -- The client stops rebuilding the menu once opened, so this one is what opens
     local subscriptions = self.openSubscriptions
@@ -290,6 +339,43 @@ function Harness.Choose(menu, label)
         if entry.verbText == label then return entry.action(table.unpack(entry.arguments or {})) end
     end
     error(label .. " is not in the menu: " .. table.concat(Harness.Labels(menu), " | "))
+end
+
+-- List a menu's submenus as { entry, children, options }
+function Harness.Submenus(menu)
+    return submenus[menu] or {}
+end
+
+-- Find a submenu by its parent entry's label, or nil
+function Harness.Submenu(menu, label)
+    for _, submenu in ipairs(Harness.Submenus(menu)) do
+        if submenu.entry.verbText == label then return submenu end
+    end
+    return nil
+end
+
+-- List a submenu's child labels in order
+function Harness.ChildLabels(submenu)
+    local labels = {}
+    for _, child in ipairs(submenu.children) do labels[#labels + 1] = child.label end
+    return labels
+end
+
+-- Open a menu and click a child of its submenu, then close the menu
+-- PrettyUI clears its submenu state before running the child, as its row click does
+function Harness.ChooseChild(menu, label, childLabel)
+    Harness.Open(menu)
+    local submenu = Harness.Submenu(menu, label)
+    if submenu == nil then error(label .. " is not a submenu in: " .. table.concat(Harness.Labels(menu), " | ")) end
+    for _, child in ipairs(submenu.children) do
+        if child.label == childLabel then
+            prettyMenuHandlers.MiniMenuClosed({ miniMenu = menu })
+            child.action(table.unpack(child.arguments or child.args or {}))
+            prettyMenuHandlers.MiniMenuClosed({ miniMenu = menu })
+            return
+        end
+    end
+    error(childLabel .. " is not in " .. label .. ": " .. table.concat(Harness.ChildLabels(submenu), " | "))
 end
 
 -- Report whether a menu holds an entry

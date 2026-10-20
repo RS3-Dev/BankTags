@@ -77,13 +77,105 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
             for index, label in ipairs(labels) do out[index] = label .. " <col=f2c66d>" .. name .. "</col>" end
             return out
         end
-        shows("ranged", named({ "Select", "Edit", "Select items", "Remove", "Move to folder..." }, "Ranged"))
-        local labels = named({ "Select", "Edit", "Select items", "Remove", "Remove from folder", "Move to folder..." },
-            "Melee")
+        local ARROW = " <col=ffffff><gt></col>"
+        local addRanged = "Add to folder <col=f2c66d>Ranged</col>" .. ARROW
+        local moveMelee = "Move to folder <col=f2c66d>Melee</col>" .. ARROW
+        local labels = named({ "Select", "Edit", "Select items", "Remove" }, "Ranged")
+        labels[5] = addRanged
+        local menu = shows("ranged", labels)
+        assert(#Harness.Submenus(menu) == 1 and Harness.Submenu(menu, addRanged).options.title == "Add to folder", where)
+        labels = named({ "Select", "Edit", "Select items", "Remove", "Remove from folder" }, "Melee")
         labels[5] = "Remove from folder <col=f2c66d>Combat</col>"
-        shows("melee", labels)
+        labels[6] = moveMelee
+        menu = shows("melee", labels)
+        assert(Harness.Submenu(menu, moveMelee).options.title == "Move to folder", where)
+
+        -- The folder submenu lists other folders, then Create new folder and Cancel
+        if app.store.data.tags.magic ~= nil then assert(app.store:DeleteTag("magic")) end
+        assert(app.store:CreateTag("magic") and app.store:CreateFolder("Archery", "magic"))
+        app:Changed()
+        local function children(id, label)
+            pointAtRow(id)
+            menu = h:ContentMenu()
+            return table.concat(Harness.ChildLabels(Harness.Submenu(menu, label)), "|")
+        end
+        local folders = children("ranged", addRanged)
+        assert(folders == "Combat|Archery|Create new folder|Cancel", folders .. where)
+        folders = children("melee", moveMelee)
+        assert(folders == "Archery|Create new folder|Cancel", folders .. where)
+        -- A child moves the tag on the next tick, once, and expands the folder
+        app.store:SetFolderCollapsed("archery", true)
+        pointAtRow("melee")
+        menu = h:ContentMenu()
+        Harness.ChooseChild(menu, moveMelee, "Archery")
+        assert(app.store:GetTagFolder("melee") == "combat", where)
+        Harness.ChooseChild(menu, moveMelee, "Archery")
+        Harness.Choose(menu, "Remove <col=f2c66d>Melee</col>")
+        h:Tick(2)
+        assert(app.store:GetTagFolder("melee") == "archery" and not app.store:GetFolder("archery").collapsed, where)
+        assert(app.windows.tagDeleteConfirm == nil, where)
+        pointAtRow("ranged")
+        Harness.ChooseChild(h:ContentMenu(), addRanged, "Archery")
+        h:Tick(2)
+        assert(app.store:GetTagFolder("ranged") == "archery" and app.store:CreateFolder("Combat", "melee"), where)
+        -- Cancel, and a menu that was never opened, move nothing
+        local moveRanged = "Move to folder <col=f2c66d>Ranged</col>" .. ARROW
+        pointAtRow("ranged")
+        Harness.ChooseChild(h:ContentMenu(), moveRanged, "Cancel")
+        pointAtRow("ranged")
+        menu = h:ContentMenu()
+        for _, child in ipairs(Harness.Submenu(menu, moveRanged).children) do
+            if child.label == "Combat" then child.action() end
+        end
+        h:Tick(2)
+        assert(app.store:GetTagFolder("ranged") == "archery", where)
+        -- A child chosen after a row click, a removed folder, or a rebuilt tab moves nothing
+        pointAtRow("ranged")
+        menu = h:ContentMenu()
+        app.tab.controls.list.list:Click("ranged")
+        Harness.ChooseChild(menu, moveRanged, "Combat")
+        h:Tick(2)
+        assert(app.store:GetTagFolder("ranged") == "archery" and app:ToggleTag("ranged"), where)
+        h:Tick(2)
+        assert(app.shownTag == nil, where)
+        pointAtRow("ranged")
+        menu = h:ContentMenu()
+        Harness.ChooseChild(menu, moveRanged, "Combat")
+        assert(app:DeleteFolder("combat"))
+        h:Tick(2)
+        assert(app.store:GetTagFolder("ranged") == "archery" and app.store:GetFolder("combat") == nil, where)
+        assert(app.store:CreateFolder("Combat", "melee"))
+        pointAtRow("ranged")
+        menu = h:ContentMenu()
+        layout:SetSidebarMode("__bankutils_ext_tab:other/notes")
+        h:Tick(2)
+        layout:SetSidebarMode("__bankutils_ext_tab:banktags/tags")
+        h:Tick(2)
+        Harness.ChooseChild(menu, moveRanged, "Combat")
+        h:Tick(2)
+        assert(app.store:GetTagFolder("ranged") == "archery", where)
+        -- A removed tag's child moves nothing
+        pointAtRow("magic")
+        menu = h:ContentMenu()
+        Harness.ChooseChild(menu, "Move to folder <col=f2c66d>Magic</col>" .. ARROW, "Combat")
+        assert(app.store:DeleteTag("magic"))
+        h:Tick(2)
+        assert(app.store.data.tags.magic == nil and app.store:GetTagFolder("ranged") == "archery", where)
+        -- Create new folder opens the naming prompt, which files the tag under the new folder
+        pointAtRow("ranged")
+        Harness.ChooseChild(h:ContentMenu(), moveRanged, "Create new folder")
+        assert(app.windows.textPrompt == nil, where)
+        h:Tick(2)
+        assert(app.windows.textPrompt ~= nil, where)
+        app.windows.textPrompt:Save("Bows")
+        assert(app.store:GetTagFolder("ranged") == "bows", where)
+        app.windows:Close("textPrompt")
+        assert(app:MoveTagToFolder("ranged", nil) and app.store:GetTagFolder("melee") == "combat", where)
+        app:Changed()
+        h:Tick(2)
         local folderRow = "__banktags_folder:combat"
-        local menu = shows(folderRow, named({ "Collapse", "Rename folder", "Ungroup folder" }, "Combat"))
+        menu = shows(folderRow, named({ "Collapse", "Rename folder", "Ungroup folder" }, "Combat"))
+        assert(#Harness.Submenus(menu) == 0, where)
         -- Chosen from the open menu, the default runs once
         Harness.Choose(menu, "Collapse <col=f2c66d>Combat</col>")
         h:Tick(2)
