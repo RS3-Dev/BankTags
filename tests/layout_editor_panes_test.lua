@@ -75,7 +75,10 @@ local function drag(fromPane, fromColumn, fromRow, toPane, toColumn, toRow)
     surface.hooks.release()
 end
 local function wheel(paneName, delta) editor.panes[paneName].surface.hooks.wheel(nil, delta) end
-local function showTab(name) editor.tabButtons[name].root.hooks.pressed() end
+-- Click a right tab's header, as PrettyUI's Tabs hears it
+local TAB_INDEX = { unsorted = 1, search = 2 }
+local function showTab(name) editor.tabs:GetTab(TAB_INDEX[name]).hit.hooks.click() end
+local function page(name) return editor.tabs:GetPage(TAB_INDEX[name]) end
 local function saved() return Json.encode(store.data) end
 -- Count the gold outlines drawn on either grid
 local function outlines()
@@ -145,10 +148,14 @@ assert(cells(unsorted) == 12 * 4 and unsorted.slots[45].layoutKey == key(2045))
 assert(sorted.slots[55].kind == "blank" and gear().rows[2].slots[45].kind == "blank")
 
 -- Unsorted shows first; Search's page and input are hidden
-assert(editor.rightTab == "unsorted" and editor.tabButtons.unsorted.active and not editor.tabButtons.search.active)
-assert(not editor.tabPages.unsorted.hidden and editor.tabPages.search.hidden)
+-- Both are PrettyUI tabs in the right column, their pages under the header
+assert(editor.tabs.root.parent == editor.rightPanel and editor.tabs.root.y == editorSize.TAB_Y)
+assert(editor.tabs:GetTab(1).text == "Unsorted" and editor.tabs:GetTab(2).text == "Search")
+assert(editor.rightTab == "unsorted" and editor.tabs:GetActiveIndex() == 1)
+assert(not page("unsorted").root.hidden and page("search").root.hidden)
 assert(editor.searchDragSurface.hidden and not unsorted.surface.hidden)
-assert(editor.itemSearch.root.parent == editor.tabPages.search and unsorted.view.root.parent == editor.tabPages.unsorted)
+assert(editor.itemSearch.root.parent == page("search").content and unsorted.view.root.parent == page("unsorted").content)
+assert(editor.itemSearch.root.y == 0 and editor.searchList.root.y == editorSize.SEARCH_LIST_TOP - editorSize.TAB_PAGE_Y)
 
 -- Each wheel scrolls only its own grid, clamped to that grid's content
 local unsortedMost = 4 + 12 * 44 - unsorted.height
@@ -235,8 +242,8 @@ assert(app.windows.textPrompt == nil and saved() == before)
 -- Search shows its own page, keeping Unsorted's scroll for later
 local unsortedScroll = unsorted.view.scrollY
 showTab("search")
-assert(editor.rightTab == "search" and editor.tabButtons.search.active and not editor.tabButtons.unsorted.active)
-assert(editor.tabPages.unsorted.hidden and not editor.tabPages.search.hidden)
+assert(editor.rightTab == "search" and editor.tabs:GetActiveIndex() == 2)
+assert(page("unsorted").root.hidden and not page("search").root.hidden)
 assert(unsorted.hidden and unsorted.surface.hidden and not editor.searchDragSurface.hidden)
 -- The hidden Unsorted grid takes no press or wheel
 unsorted.surface.hooks.click(nil, editorSize.GRID_LEFT + 20, 24)
@@ -335,18 +342,23 @@ editor.tagList.list:Click("gear")
 showTab("search")
 app.windows:OpenLayoutEditor("gear")
 local reopened = app.windows.layoutEditor
-assert(reopened ~= editor and editor.window == nil and editor.panes == nil and editor.tabPages == nil)
-assert(reopened.rightTab == "unsorted" and reopened.itemSearch.text == "")
+assert(reopened ~= editor and editor.window == nil and editor.panes == nil and editor.tabs == nil)
+assert(reopened.rightTab == "unsorted" and reopened.tabs:GetActiveIndex() == 1 and reopened.itemSearch.text == "")
+-- Showing a tab by name moves PrettyUI's tabs without calling back
+reopened:ShowRightTab("search")
+assert(reopened.rightTab == "search" and reopened.tabs:GetActiveIndex() == 2 and not reopened.searchDragSurface.hidden)
+reopened:ShowRightTab("unsorted")
+assert(reopened.tabs:GetActiveIndex() == 1 and reopened.searchDragSurface.hidden)
 assert(reopened.panes.sorted.view.scrollY == 0 and #reopened.panes.unsorted.slots == 46)
-local reopenedPanes, reopenedPages = reopened.panes, reopened.tabPages
-local reopenedTabs = reopened.tabButtons
+local reopenedPanes, reopenedTabs = reopened.panes, reopened.tabs
+local reopenedPages = { reopenedTabs:GetPage(1), reopenedTabs:GetPage(2) }
 reopened.columnButtons[3].root.hooks.pressed()
-assert(app.windows.layoutEditor == nil and reopened.panes == nil and reopened.tabButtons == nil)
+assert(app.windows.layoutEditor == nil and reopened.panes == nil and reopened.tabs == nil)
 for _, pane in pairs(reopenedPanes) do
     assert(pane.view.destroyed and pane.surface.destroyed)
 end
-for _, name in ipairs({ "unsorted", "search" }) do
-    assert(reopenedPages[name].destroyed and reopenedTabs[name].root == nil)
-end
+-- The tabs destroyed their own pages, once
+assert(reopenedTabs.root == nil)
+for _, tabPage in ipairs(reopenedPages) do assert(tabPage.root.destroyed and tabPage.content.destroyed) end
 
 print("layout_editor_panes_test: ok")

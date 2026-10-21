@@ -188,7 +188,7 @@ local before = whipCopies()
 
 -- Showing Search drops a selection in the hidden Unsorted grid and disarms the keys
 selectWhip()
-editor.tabButtons.search.root.hooks.pressed()
+editor.tabs:GetTab(2).hit.hooks.click()
 assert(editor.selectedLayoutKey == nil and outlines() == 0 and not editor.keysOnGrid)
 -- Clicking either search field gives it the keys, so Ctrl+C stays text copy
 clickSlot("sorted", 0, 0)
@@ -198,7 +198,7 @@ editor.itemSearch.root.hooks.click(nil, 4, 4)
 copyKeys()
 tap(DELETE, NONE)
 assert(whipCopies() == before and app.store:HasTag("melee", WHIP))
-editor.tabButtons.unsorted.root.hooks.pressed()
+editor.tabs:GetTab(1).hit.hooks.click()
 selectWhip()
 editor.tagList.search.root.hooks.click(nil, 4, 4)
 tap(DELETE, NONE)

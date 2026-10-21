@@ -140,6 +140,58 @@ local function scrollViews()
     end
 end
 
+-- Stand in for PrettyUI's Tabs with the API Bank Tags uses:
+-- new(parent, entries, options), GetPage(index).content, SetActive(index, notify),
+-- GetActiveIndex, and Destroy; tab hit areas sit above a 42px header like PrettyUI's
+-- A click runs SetActive(index), which hides other pages' roots and calls
+-- onChange(tabs, index, value, page) only when the active tab changes and notify is not false
+local TAB_HEADER = 42
+local function standInTabs()
+    prettyui.Tabs = { new = function(parent, entries, options)
+        options = options or {}
+        local tabs = { root = ui.Layer.new(parent), tabs = {}, pages = {}, onChange = options.onChange }
+        tabs.root:SetPos(options.x or 0, options.y or 0)
+        tabs.root:SetSize(options.width, options.height)
+        tabs.content = ui.Layer.new(tabs.root)
+        tabs.content:SetPos(0, TAB_HEADER)
+        tabs.content:SetSize(options.width, (options.height or 0) - TAB_HEADER)
+        for index, entry in ipairs(entries) do
+            local hit = ui.Layer.new(tabs.root)
+            hit:SetPos((index - 1) * 92, 0)
+            hit:SetSize(90, TAB_HEADER)
+            hit:Subscribe(ui.Hook.ONCLICK, function() tabs:SetActive(index) return false end)
+            tabs.tabs[index] = { index = index, text = entry.text, value = entry.value, hit = hit }
+            local page = { root = ui.Layer.new(tabs.content), index = index }
+            page.root:SetSize(tabs.content.width, tabs.content.height)
+            page.content = ui.Layer.new(page.root)
+            page.content:SetSize(tabs.content.width, tabs.content.height)
+            function page:SetContentHeight(height) self.contentHeight = height end
+            tabs.pages[index] = page
+        end
+        function tabs:SetActive(index, notify)
+            local tab = self.tabs[index]
+            if tab == nil then return false end
+            local previous = self.activeIndex
+            self.activeIndex = index
+            for pageIndex, page in ipairs(self.pages) do page.root.hidden = pageIndex ~= index end
+            if notify ~= false and previous ~= index and self.onChange ~= nil then
+                self.onChange(self, index, tab.value, self.pages[index])
+            end
+            return true
+        end
+        function tabs:GetActiveIndex() return self.activeIndex end
+        function tabs:GetTab(index) return self.tabs[index] end
+        function tabs:GetPage(index) return self.pages[index] end
+        function tabs:Destroy()
+            assert(self.root ~= nil, "Tabs destroyed twice")
+            self.root:Destroy()
+            self.root, self.pages, self.tabs = nil, {}, {}
+        end
+        tabs:SetActive(options.activeIndex or 1, false)
+        return tabs
+    end }
+end
+
 -- Install the stand-in host, build Bank Tags, and create a loader
 function Harness.new(name, options)
     options = options or {}
@@ -153,6 +205,7 @@ function Harness.new(name, options)
     prettyui.ComboBox = comboBox
     placeListRows()
     scrollViews()
+    standInTabs()
     installMiniMenu()
     prettyui.ItemGrid = { new = function(parent)
         local grid = { root = ui.Layer.new(parent), slots = {} }

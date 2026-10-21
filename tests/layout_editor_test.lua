@@ -134,7 +134,7 @@ local rows = app.store.data.tags.melee.rows
 assert(rows[#rows].kind == "label" and rows[#rows].text == "Weapons")
 
 -- Searching without RuneQL finds bank items and says it is limited
-editor.tabButtons.search.root.hooks.pressed()
+editor.tabs:GetTab(2).hit.hooks.click()
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "")
 assert(string.find(editor.searchHint.content, "Without RuneQL", 1, true) ~= nil)
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "shark")

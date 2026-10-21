@@ -48,11 +48,10 @@ Size.SCROLLBAR_RESERVE = 18
 -- The right column: Unsorted and Search tabs over shared item actions
 Size.RIGHT_INSET = 8
 Size.RIGHT_VIEW_WIDTH = Size.RIGHT_WIDTH - 2 * Size.RIGHT_INSET
-Size.TAB_Y = 8
-Size.TAB_HEIGHT = 26
-Size.TAB_GAP = 4
-Size.TAB_WIDTH = (Size.RIGHT_VIEW_WIDTH - Size.TAB_GAP) // 2
-Size.TAB_PAGE_Y = Size.TAB_Y + Size.TAB_HEIGHT + 8
+Size.TAB_Y = 4
+-- PrettyUI's tab header; pages start under it
+Size.TAB_HEADER = 42
+Size.TAB_PAGE_Y = Size.TAB_Y + Size.TAB_HEADER
 Size.SEARCH_FIELD_HEIGHT = 26
 Size.SEARCH_LIST_TOP = Size.TAB_PAGE_Y + Size.SEARCH_FIELD_HEIGHT + 8
 Size.BUTTON_HEIGHT = 28

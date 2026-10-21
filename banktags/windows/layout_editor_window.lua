@@ -48,7 +48,6 @@ local FOOTER_BUTTON_GAP = 8
 local PANE_NAMES = { "sorted", "unsorted" }
 -- Right-column tabs, left to right; Unsorted shows first
 local RIGHT_TABS = { "unsorted", "search" }
-local TAB_TITLES = { unsorted = BankGrid.UNSORTED_LABEL, search = "Search" }
 local ICON_BUTTON_SIZE = 28
 
 -- Destroy saved UI parts newest first, skipping ones already gone
@@ -307,47 +306,39 @@ function LayoutEditorWindow:CreatePane(name, parent, x, y, width, height, column
     }
 end
 
--- Create a right-column page that one tab shows
-function LayoutEditorWindow:CreateTabPage()
-    local page = ui.Layer.new(self.rightPanel)
-    page:SetPos(0, 0)
-    page:SetSize(Size.RIGHT_WIDTH, Size.PANEL_HEIGHT)
-    page.clickthrough = true
-    return page
-end
-
--- Build the Unsorted and Search tabs and their pages
+-- Build the Unsorted and Search tabs; their pages start under the tab header
 function LayoutEditorWindow:CreateRightTabs()
-    local inset = Size.RIGHT_INSET
-    self.tabButtons = {}
-    for index, name in ipairs(RIGHT_TABS) do
-        self.tabButtons[name] = BankControls.button(
-            self.rightPanel, TAB_TITLES[name], function() self:ShowRightTab(name) end,
-            { x = inset + (index - 1) * (Size.TAB_WIDTH + Size.TAB_GAP), y = Size.TAB_Y,
-                width = Size.TAB_WIDTH, height = Size.TAB_HEIGHT }
-        )
-    end
-    self.tabPages = { unsorted = self:CreateTabPage(), search = self:CreateTabPage() }
+    self.tabs = prettyui.Tabs.new(self.rightPanel, {
+        { kind = "text", text = BankGrid.UNSORTED_LABEL, value = "unsorted" },
+        { kind = "text", text = "Search", value = "search" },
+    }, {
+        x = Size.RIGHT_INSET,
+        y = Size.TAB_Y,
+        width = Size.RIGHT_VIEW_WIDTH,
+        height = Size.ACTIONS_Y - Size.RIGHT_INSET - Size.TAB_Y,
+        scrollable = false,
+        onChange = function(_, _, value) self:ShowRightTab(value) end,
+    })
 
-    local unsortedPage = self.tabPages.unsorted
-    rectangle(unsortedPage, inset, Size.TAB_PAGE_Y,
-        Size.RIGHT_VIEW_WIDTH, Size.UNSORTED_VIEW_HEIGHT, VIEW_BACKGROUND, true)
-    frame(unsortedPage, inset, Size.TAB_PAGE_Y,
-        Size.RIGHT_VIEW_WIDTH, Size.UNSORTED_VIEW_HEIGHT, INNER_FRAME)
-    self.panes.unsorted = self:CreatePane("unsorted", unsortedPage, inset, Size.TAB_PAGE_Y,
-        Size.RIGHT_VIEW_WIDTH, Size.UNSORTED_VIEW_HEIGHT, Size.UNSORTED_COLUMNS)
+    local width = Size.RIGHT_VIEW_WIDTH
+    local unsortedPage = self.tabs:GetPage(1).content
+    rectangle(unsortedPage, 0, 0, width, Size.UNSORTED_VIEW_HEIGHT, VIEW_BACKGROUND, true)
+    frame(unsortedPage, 0, 0, width, Size.UNSORTED_VIEW_HEIGHT, INNER_FRAME)
+    self.panes.unsorted = self:CreatePane("unsorted", unsortedPage, 0, 0,
+        width, Size.UNSORTED_VIEW_HEIGHT, Size.UNSORTED_COLUMNS)
 
-    local searchPage = self.tabPages.search
+    local searchPage = self.tabs:GetPage(2).content
+    local listTop = Size.SEARCH_LIST_TOP - Size.TAB_PAGE_Y
     self.itemSearch = prettyui.TextField.new(searchPage, {
-        x = inset, y = Size.TAB_PAGE_Y, width = Size.RIGHT_VIEW_WIDTH, height = Size.SEARCH_FIELD_HEIGHT,
+        x = 0, y = 0, width = width, height = Size.SEARCH_FIELD_HEIGHT,
         placeholder = "Search items...", maxLength = 80,
         onChange = function(_, _, value) self:RunSearch(value) end,
         onSubmit = function(_, value) self:RunSearch(value) end,
     })
     self.searchList = prettyui.List.new(searchPage, {
-        x = inset,
-        y = Size.SEARCH_LIST_TOP,
-        width = Size.RIGHT_VIEW_WIDTH,
+        x = 0,
+        y = listTop,
+        width = width,
         height = Size.SEARCH_LIST_HEIGHT,
         entryHeight = 32,
         maxSelected = 1,
@@ -357,9 +348,9 @@ function LayoutEditorWindow:CreateRightTabs()
     })
     self.searchHint = prettyui.Text.new(searchPage, {
         text = Parts.SEARCH_HINT,
-        x = inset + 10,
-        y = Size.SEARCH_LIST_TOP + 10,
-        width = Size.RIGHT_VIEW_WIDTH - 20,
+        x = 10,
+        y = listTop + 10,
+        width = width - 20,
         height = 120,
         colour = MUTED,
         maxLines = 8,
@@ -439,16 +430,15 @@ function LayoutEditorWindow:CreatePanels()
 end
 
 -- Show one right tab, ending any drag and hiding the other tab's input
+-- A tab click calls this too; SetActive without notify does not call back
 function LayoutEditorWindow:ShowRightTab(name)
     self:FinishDrag(false)
     -- A held Unsorted scrollbar lets go
     local unsortedView = self.panes.unsorted.view
     if unsortedView.dragStart ~= nil then unsortedView:_StopDrag() end
     self.rightTab = name
-    for _, tab in ipairs(RIGHT_TABS) do
-        local hidden = tab ~= name
-        self.tabButtons[tab]:SetActive(not hidden)
-        self.tabPages[tab].hidden = hidden
+    for index, tab in ipairs(RIGHT_TABS) do
+        if tab == name then self.tabs:SetActive(index, false) end
     end
     local searching = name == "search"
     self.panes.unsorted.hidden = searching
@@ -856,12 +846,9 @@ function LayoutEditorWindow:DestroyControls()
     }) do
         if control ~= nil then pcall(function() control:Destroy() end) end
     end
-    for _, name in ipairs(RIGHT_TABS) do
-        local button = self.tabButtons ~= nil and self.tabButtons[name] or nil
-        local page = self.tabPages ~= nil and self.tabPages[name] or nil
-        for _, part in ipairs({ button, page }) do pcall(function() part:Destroy() end) end
-    end
-    self.tabButtons, self.tabPages = nil, nil
+    -- The tabs own their pages and destroy them
+    if self.tabs ~= nil then pcall(function() self.tabs:Destroy() end) end
+    self.tabs = nil
     if self.tagList ~= nil then
         self.tagList:Destroy()
         for _, button in ipairs(self.columnButtons) do pcall(function() button:Destroy() end) end
