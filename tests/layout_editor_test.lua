@@ -242,13 +242,26 @@ local reopened = app.windows.layoutEditor
 assert(reopened ~= nil and reopened ~= editor and reopened.selectedTag == "snacks")
 assert(editorSize.CENTER_COLUMNS == 10)
 
--- Closing the bank closes the editor; Import/Share stays open
+-- Closing the bank closes the editor and its tag settings; Import/Share stays open
+-- The host removes the inventory while the window is still mounted
 app.windows:OpenImportShare()
 local importShare = app.windows.importShare
-layout:Restore()
-host:UnmountBankWindow()
-h:Tick(2)
+app.windows:OpenTagSettings("melee", false)
+assert(app.windows.tagSettingsEditor ~= nil)
+h:CloseBank()
+assert(app.windows.layoutEditor == nil and app.windows.tagSettingsEditor == nil)
+assert(app.windows.importShare == importShare)
+
+-- Leaving the game closes the editor too
+session, layout = h:OpenBank()
+h:Tick(12)
+app.windows:OpenLayoutEditor("melee")
+assert(app.windows.layoutEditor ~= nil)
+h:Fire("GameStateChanged", { newState = 20 })
+h:Tick()
 assert(app.windows.layoutEditor == nil and app.windows.importShare == importShare)
+host:UnmountBankWindow()
+h:Fire("GameStateChanged", { newState = 30 })
 
 -- Tag settings pick a sprite from the bank without RuneQL
 session, layout = h:OpenBank()

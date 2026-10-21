@@ -119,6 +119,7 @@ function App:Connect()
             onState = function(state) self:OnState(state) end,
             onPage = function(pageID, key) self:OnPage(pageID, key) end,
             onBankItems = function() self:OnBankItems() end,
+            onBankClose = function() self.windows:CloseBankWindows() end,
         })
     end
     if ok then ok, failure = handle:SetSettings({ mount = self.settingsMount }) end
@@ -143,14 +144,10 @@ function App:Disconnect()
     if handle ~= nil then pcall(function() handle:Dispose() end) end
 end
 
--- Follow Bank Core's state, closing windows with the bank
+-- Follow Bank Core's state; bank windows close on onBankClose
 function App:OnState(state)
     self.state = state
     self.select:Follow(state)
-    if not state.running or state.reason == "bank_closed" or state.reason == "not_ready" then
-        self.windows:CloseBankWindows()
-        return
-    end
     self.windows:BankStateChanged(state)
 end
 

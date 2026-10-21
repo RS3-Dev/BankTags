@@ -38,7 +38,7 @@ function Harness.CoreRoot()
     end
     local contract = readText(root .. "/HOST_CONTRACT.md") or ""
     for _, needed in ipairs({ "PluginDependencyUpdate(event)", "GetMenuItem", "SetItemHighlight", "`columns`",
-        "the root is a plain table", "SetSettings",
+        "the root is a plain table", "SetSettings", "onBankClose(reason)",
         "unless a plugin entry is already the left click" }) do
         if not string.find(contract, needed, 1, true) then
             error("Bank Core at " .. root .. " lacks " .. needed .. " in its contract; set BANKCORE_ROOT "
@@ -233,10 +233,16 @@ function Harness.new(name, options)
         return slot
     end
     ui.ObjectQuantityDisplayMode.MULTIPLE = 1
-    -- Bank Core still listens for its own plugin panel
+    -- Bank Core's own host events, which a test raises with Fire
+    local hostSubscriptions = {}
     for _, event in ipairs({ "GameStateChanged", "MiniMenuEntrySelected", "ContentLayerReady",
         "InventoryAdded", "InventoryRemoved", "InventoryUpdated" }) do
-        Event[event] = { Subscribe = function() end, Unsubscribe = function() end }
+        local listeners = {}
+        hostSubscriptions[event] = listeners
+        Event[event] = {
+            Subscribe = function(key, action) listeners[key] = action end,
+            Unsubscribe = function(key) listeners[key] = nil end,
+        }
     end
     -- MiniMenuReady handlers by subscription ID; tests choose the order
     local menuSubscriptions = {}
@@ -283,6 +289,7 @@ function Harness.new(name, options)
         menuSubscriptions = menuSubscriptions,
         openSubscriptions = openSubscriptions,
         keySubscriptions = keySubscriptions,
+        hostSubscriptions = hostSubscriptions,
         input = input,
         -- Where the host adds a plugin's entry, and who hears a menu first
         placement = "above_cancel",
@@ -332,6 +339,20 @@ function Harness:OpenBank(width, height)
     assert(session.layout:IsReady() and session.layout:Apply())
     session.layout.nativeViewAll = true
     return session, session.layout
+end
+
+-- Raise a host event for every plugin listening to it
+function Harness:Fire(event, payload)
+    local actions = {}
+    for _, action in pairs(self.hostSubscriptions[event]) do actions[#actions + 1] = action end
+    for _, action in ipairs(actions) do action(payload) end
+end
+
+-- Close the bank as the host does: the inventory goes before the window
+function Harness:CloseBank()
+    self:Fire("InventoryRemoved", { inv = { id = 95 } })
+    self:Tick()
+    self.bankHost:UnmountBankWindow()
 end
 
 -- Return the mounted Tags tab parent, if Core mounted it
