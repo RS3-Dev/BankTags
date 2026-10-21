@@ -25,9 +25,8 @@ require("banktags/windows/layout_editor_group").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_history").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_clipboard").install(LayoutEditorWindow)
 
--- Errors show over the grid's bottom for about four seconds
-local ERROR_HEIGHT = 40
-local ERROR_INSET = 8
+-- Messages replace the tag name briefly in the header
+local ERROR_HEIGHT = Size.TAG_NAME_HEIGHT
 local ERROR_SHOW_TICKS = 200
 local ERROR_FADE_TICKS = 50
 local ERROR_BACKGROUND = 0x24211EF2
@@ -446,21 +445,22 @@ function LayoutEditorWindow:ShowRightTab(name)
     end
 end
 
--- Show a failure briefly over the grid
+-- Show a failure briefly beside the Layout tab
 -- Saves happen on every change, so only problems and copying are shown
 function LayoutEditorWindow:ShowError(message, colour)
     self:HideError()
     if self.centerPanel == nil then return end
-    local width = Size.CENTER_SURFACE_WIDTH - ERROR_INSET * 2
+    local width = Size.CENTER_SURFACE_WIDTH - Size.TAG_NAME_X - Size.VIEW_INSET
     local banner = ui.Layer.new(self.centerPanel)
-    local bottom = Size.SORTED_TOP + Size.CENTER_SURFACE_HEIGHT
-    banner:SetPos(ERROR_INSET, bottom - ERROR_HEIGHT - ERROR_INSET)
+    banner:SetPos(Size.TAG_NAME_X, Size.TAG_NAME_Y)
     banner:SetSize(width, ERROR_HEIGHT)
     banner.clickthrough = true
+    self.tagName.hidden = true
     local text = prettyui.Text.new(banner, {
         text = tostring(message or "Something went wrong."),
-        x = 10, y = 0, width = width - 20, height = ERROR_HEIGHT,
+        x = 6, y = 0, width = width - 12, height = ERROR_HEIGHT,
         colour = colour or ERROR,
+        font = id.Font.MUSEO_SANS_11PT_REGULAR,
         maxLines = 2,
     })
     text.clickthrough = true
@@ -477,7 +477,7 @@ function LayoutEditorWindow:ShowError(message, colour)
     banner:MoveToFront()
 end
 
--- Show a message that is not a failure briefly over the grid
+-- Show a notice in the same header space as errors
 function LayoutEditorWindow:ShowNotice(message)
     self:ShowError(message, LABEL_TEXT_COLOUR)
 end
@@ -499,6 +499,7 @@ function LayoutEditorWindow:HideError()
     local banner = self.errorBanner
     self.errorBanner = nil
     if banner ~= nil then pcall(function() banner.root:Destroy() end) end
+    if self.tagName ~= nil then self.tagName.hidden = false end
 end
 
 -- Show every tag in the rail, the open one outlined and named
