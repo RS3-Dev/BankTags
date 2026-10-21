@@ -1,7 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
 -- Press Delete, Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+Y, and the arrows in the layout editor over a bank Bank Core reports
--- Key events carry the client's documented KeyDown payload and GameKey and ModifierKey values
+-- Key events use the documented payload and modifier values captured from the live client
 -- FAKE HOST: stand-in key events, keyboard, menus, and focus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -57,7 +57,7 @@ local GAME = { DELETE = 101, BACKSPACE = 85, C = 66, V = 67, Z = 64, Y = 37, A =
     LEFT = 96, RIGHT = 97, UP = 98, DOWN = 99 }
 local SYSTEM = { [101] = 46, [85] = 8, [66] = 67, [67] = 86, [64] = 90, [37] = 89, [48] = 65, [82] = 17,
     [96] = 37, [97] = 39, [98] = 38, [99] = 40 }
-local NONE, SHIFT, CONTROL, ALT = 0, 1, 2, 4
+local NONE, SHIFT, CONTROL, ALT = 0, 1, 4, 2
 -- Send one KeyDown as the client does, optionally as the OS's held-key repeat
 local function press(gameKey, modifiers, isRepeat)
     listener("KeyDown")({ isRepeat = isRepeat == true, gameKey = gameKey, systemKey = SYSTEM[gameKey],
@@ -120,8 +120,8 @@ local function findSlot(layoutKey)
 end
 local function saved() return Json.encode(store.data) end
 
--- The temporary logger watches presses and releases only while the editor is open
-assert(listener("KeyDown") ~= nil and listener("WindowFocusChanged") ~= nil and listener("KeyUp") ~= nil)
+-- Shortcuts listen only while the editor is open
+assert(listener("KeyDown") ~= nil and listener("WindowFocusChanged") ~= nil and listener("KeyUp") == nil)
 -- The buttons name their keys
 assert(editor.copyButton.tooltipText == "Copy the selected item or group (Ctrl+C)")
 assert(editor.pasteButton.tooltipText == "Click an empty cell, then paste the copied items there (Ctrl+V)")
@@ -352,27 +352,18 @@ assert(changes == changesBefore and editor.errorBanner == nil and editor.clipboa
 
 -- Debug logging names each chord and shortcut key, and what blocked it; plain typing is not logged
 local logged = {}
-local rawLogged = {}
-h.host.globals.log = function(...)
-    local message = table.concat({ ... })
-    if message:find("Bank Tags raw key", 1, true) then
-        rawLogged[#rawLogged + 1] = message
-    else
-        logged[#logged + 1] = message
-    end
-end
+h.host.globals.log = function(...) logged[#logged + 1] = table.concat({ ... }) end
 press(GAME.A, NONE)
 undo()
 assert(#logged == 0, "nothing is logged while debug logging is off")
-assert(#rawLogged > 0 and rawLogged[1]:find("gameKey=", 1, true))
 assert(app:SetSetting("enableDebug", true))
 clickSlot("sorted", 9, 5)
 press(GAME.A, NONE)
 assert(#logged == 0, "plain typing is not logged")
 undo()
 assert(#logged == 2, #logged)
-assert(string.find(logged[1], "CONTROL gameKey 82 systemKey 17 modifiers 2 held 2 shortcut nil", 1, true), logged[1])
-assert(string.find(logged[2], "Z gameKey 64 systemKey 90 modifiers 2 held 2 shortcut undo blocked by nothing", 1,
+assert(string.find(logged[1], "CONTROL gameKey 82 systemKey 17 modifiers 4 held 4 shortcut nil", 1, true), logged[1])
+assert(string.find(logged[2], "Z gameKey 64 systemKey 90 modifiers 4 held 4 shortcut undo blocked by nothing", 1,
     true), logged[2])
 editor.itemSearch.root.hooks.click(nil, 4, 4)
 press(GAME.V, CONTROL)
