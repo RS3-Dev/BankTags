@@ -50,13 +50,14 @@ function TagStoreLayouts:GetTaggedItems(tag)
     return items
 end
 
--- Place an item at a grid index, swapping out any item there
-function TagStoreLayouts:MoveLayoutItem(tag, layoutKey, destinationIndex, columnCount, forcePreserve)
+-- Place an item at a grid index of the rows, swapping out any item there
+-- Indexes past the rows add rows; Unsorted items are not on this grid
+function TagStoreLayouts:MoveLayoutItem(tag, layoutKey, destinationIndex, columnCount)
     destinationIndex = math.tointeger(tonumber(destinationIndex))
     if self.data.tags[tag] == nil or destinationIndex == nil or destinationIndex < 1 then
         return false, "The requested layout position is invalid.", false
     end
-    local slots, boundary = self:GetLayout(tag, columnCount)
+    local slots = self:GetLayout(tag, columnCount)
     local nextData = copy(self.data)
     local record = nextData.tags[tag]
     local rows = record.rows
@@ -65,10 +66,6 @@ function TagStoreLayouts:MoveLayoutItem(tag, layoutKey, destinationIndex, column
     local destinationLine = math.floor((destinationIndex - 1) / columns)
     if destinationLine < view.lines and view.cells[destinationIndex] == nil then
         return false, "A label takes up its whole row.", false
-    end
-    if #slots > boundary and destinationIndex > boundary
-        and destinationIndex <= boundary + columns then
-        return false, "That row holds the Unsorted heading.", false
     end
     local sourceIndex = nil
     for index, slot in ipairs(slots) do
@@ -81,7 +78,7 @@ function TagStoreLayouts:MoveLayoutItem(tag, layoutKey, destinationIndex, column
         return false, "The selected item is no longer in this layout.", false
     end
     local unsorted = slots[sourceIndex].unarranged == true
-    if sourceIndex == destinationIndex and not (forcePreserve and unsorted) then
+    if sourceIndex == destinationIndex and not unsorted then
         return true, nil, false
     end
 
