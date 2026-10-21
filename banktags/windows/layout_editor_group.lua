@@ -12,17 +12,25 @@ local REFUSED_COLOUR = 0xC0392B66
 local COUNT_COLOUR = Theme.HEADING_TEXT
 -- What the single-item actions say while a group is selected
 local GROUP_TOOLTIPS = {
-    duplicateButton = "Select one item to copy it",
     removeButton = "Select one item to remove it",
     unsortButton = "Select one item to move it to Unsorted",
 }
 
 local LayoutEditorGroup = {}
 
--- Select one item, or nothing, ending any group
+-- Select one item, or nothing, ending any group and the cell to paste into
 function LayoutEditorGroup:SelectOnly(layoutKey)
     self.selectedLayoutKey = layoutKey
     self.groupKeys = nil
+    self.pasteCell = nil
+end
+
+-- Select sorted items, as a group when there are several
+function LayoutEditorGroup:SelectItems(layoutKeys)
+    self:SelectOnly(layoutKeys[1])
+    if #layoutKeys < 2 then return end
+    self.groupKeys = {}
+    for _, layoutKey in ipairs(layoutKeys) do self.groupKeys[layoutKey] = true end
 end
 
 -- Count the items in a group, or zero without one
@@ -64,6 +72,7 @@ end
 
 -- Add a sorted item to the selection, or take it out
 function LayoutEditorGroup:ToggleGroupItem(layoutKey)
+    self.pasteCell = nil
     local keys = {}
     if self.groupKeys ~= nil then
         for selected in pairs(self.groupKeys) do keys[selected] = true end

@@ -146,7 +146,7 @@ assert(editorSize.RIGHT_X == editorSize.CENTER_X + editorSize.CENTER_WIDTH)
 assert(editorSize.RIGHT_X + editorSize.RIGHT_WIDTH + editorSize.RIGHT_MARGIN == editorSize.WIDTH)
 assert(sorted.columns == editorSize.CENTER_COLUMNS and sorted.columns == 10)
 assert(Harness.Find(editor.centerPanel, "Unsorted") == nil)
-assert(Harness.Find(editor.centerPanel, "Create Copy") == nil and Harness.Find(editor.rightPanel, "New label") == nil)
+assert(Harness.Find(editor.centerPanel, "Copy") == nil and Harness.Find(editor.rightPanel, "New label") == nil)
 -- Unsorted fills the right column, at nine columns of its own
 assert(unsorted.x == editorSize.RIGHT_X + 4 and unsorted.width == editorSize.RIGHT_WIDTH - 8)
 assert(unsorted.y == editorSize.PANEL_TOP + editorSize.TAB_PAGE_Y + 4 and unsorted.columns == 9)
@@ -171,15 +171,16 @@ end
 assert(frames(page("unsorted").content) == 4 and frames(page("search").content) == 4)
 assert(frames(layoutTabs:GetPage(1).content) == 4)
 assert(frames(editor.centerPanel) == 4 and frames(editor.rightPanel) == 4)
--- Five buttons span both columns, with Close at the right edge
-local actions = { editor.duplicateButton, editor.removeButton, editor.unsortButton, editor.newLabelButton, editor.closeButton }
+-- Six buttons span both columns, with Close at the right edge
+local actions = { editor.copyButton, editor.pasteButton, editor.removeButton, editor.unsortButton,
+    editor.newLabelButton, editor.closeButton }
 for index, button in ipairs(actions) do
     assert(button.parent == editor.content and button.y == editorSize.PANEL_TOP + editorSize.ACTIONS_Y)
     assert(button.y + button.height == editorSize.PANEL_TOP + editorSize.PANEL_HEIGHT)
     assert(math.abs(button.width - actions[1].width) <= 4)
     if index > 1 then assert(button.x == actions[index - 1].x + actions[index - 1].width + editorSize.BUTTON_GAP) end
 end
-assert(actions[1].x == editorSize.CENTER_X and actions[5].x + actions[5].width == editorSize.WIDTH - editorSize.RIGHT_MARGIN)
+assert(actions[1].x == editorSize.CENTER_X and actions[6].x + actions[6].width == editorSize.WIDTH - editorSize.RIGHT_MARGIN)
 assert(editor.unsortButton.width >= 140, "Move to Unsorted keeps the width its label fit")
 assert(editor.newLabelButton.x == editorSize.LABEL_BUTTON_X and editor.newLabelButton.y == editorSize.LABEL_BUTTON_Y)
 assert(editor.unsortButton.tooltipText ~= nil and string.find(editor.unsortButton.tooltipText, "Unsorted", 1, true) ~= nil)

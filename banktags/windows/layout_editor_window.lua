@@ -16,13 +16,14 @@ local Theme = require("banktags/ui/theme")
 
 local LayoutEditorWindow = {}
 LayoutEditorWindow.__index = LayoutEditorWindow
--- Drag gestures, catalog search, shortcut keys, item names, groups, and undo live in their own files
+-- Drag gestures, catalog search, shortcut keys, item names, groups, undo, and copying live in their own files
 require("banktags/windows/layout_editor_drag").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_search").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_keys").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_names").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_group").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_history").install(LayoutEditorWindow)
+require("banktags/windows/layout_editor_clipboard").install(LayoutEditorWindow)
 
 -- Errors show over the grid's bottom for about four seconds
 local ERROR_HEIGHT = 40
@@ -67,6 +68,7 @@ function LayoutEditorWindow.new(parent, options)
         onChanged = options.onChanged,
         onClose = options.onClose,
         onPromptLabel = options.onPromptLabel,
+        onConfirmRemoveRow = options.onConfirmRemoveRow,
         overlayWindows = {},
         searchResults = {},
         centerNodes = {},
@@ -74,10 +76,15 @@ function LayoutEditorWindow.new(parent, options)
         selectedLayoutKey = nil,
         -- Set only while two or more sorted items are selected
         groupKeys = nil,
+        -- The empty sorted cell Paste fills, outlined in gold
+        pasteCell = nil,
+        -- The copied items of the open tag, kept until the tag changes or the editor closes
+        clipboard = nil,
         actionTooltips = {
-            duplicateButton = "Copy the selected item (Ctrl+C)",
-            removeButton = "Remove the selected item (Delete). Arrow keys move the selection;"
-                .. " Ctrl+Z undoes and Ctrl+Y redoes",
+            copyButton = "Copy the selected item or group (Ctrl+C)",
+            pasteButton = "Click an empty cell, then paste the copied items there (Ctrl+V)",
+            removeButton = "Remove the selected item (Delete). Ctrl+Z undoes and Ctrl+Y redoes;"
+                .. " arrow keys move the selection when turned on in Bank settings",
             unsortButton = "Leave the selected item unsorted, or drag it to Unsorted",
         },
         drag = nil,
@@ -112,6 +119,8 @@ function LayoutEditorWindow.new(parent, options)
             self.onClose = nil
             self.onChanged = nil
             self.onPromptLabel = nil
+            self.onConfirmRemoveRow = nil
+            self.clipboard = nil
             self.overlayWindows = {}
             -- PrettyUI destroys the window after this returns
             self.window = nil
@@ -368,8 +377,10 @@ end
 function LayoutEditorWindow:CreateActions()
     local y = Size.PANEL_TOP + Size.ACTIONS_Y
     for index, action in ipairs({
-        { "duplicateButton", "Create Copy", function() self:DuplicateSelected() end,
-            self.actionTooltips.duplicateButton },
+        { "copyButton", "Copy", function() self:CopySelected() end,
+            self.actionTooltips.copyButton },
+        { "pasteButton", "Paste", function() self:PasteClipboard() end,
+            self.actionTooltips.pasteButton },
         { "removeButton", "Remove", function() self:RemoveSelected() end,
             self.actionTooltips.removeButton },
         { "unsortButton", "Move to Unsorted", function() self:UnarrangeSelected() end,
@@ -436,8 +447,8 @@ function LayoutEditorWindow:ShowRightTab(name)
 end
 
 -- Show a failure briefly over the grid
--- Saves happen on every change, so only problems are shown
-function LayoutEditorWindow:ShowError(message)
+-- Saves happen on every change, so only problems and copying are shown
+function LayoutEditorWindow:ShowError(message, colour)
     self:HideError()
     if self.centerPanel == nil then return end
     local width = Size.CENTER_SURFACE_WIDTH - ERROR_INSET * 2
@@ -449,7 +460,7 @@ function LayoutEditorWindow:ShowError(message)
     local text = prettyui.Text.new(banner, {
         text = tostring(message or "Something went wrong."),
         x = 10, y = 0, width = width - 20, height = ERROR_HEIGHT,
-        colour = ERROR,
+        colour = colour or ERROR,
         maxLines = 2,
     })
     text.clickthrough = true
@@ -464,6 +475,11 @@ function LayoutEditorWindow:ShowError(message)
     }
     text:MoveToFront()
     banner:MoveToFront()
+end
+
+-- Show a message that is not a failure briefly over the grid
+function LayoutEditorWindow:ShowNotice(message)
+    self:ShowError(message, LABEL_TEXT_COLOUR)
 end
 
 -- Count the error down, fading it out
@@ -501,14 +517,16 @@ end
 function LayoutEditorWindow:TagRenamed(oldTag, newTag)
     if self.selectedTag == oldTag then self.selectedTag = newTag end
     if self.history ~= nil and self.history.tag == oldTag then self.history.tag = newTag end
+    if self.clipboard ~= nil and self.clipboard.tag == oldTag then self.clipboard.tag = newTag end
 end
 
 -- End drags and load the selected tag's layout
 function LayoutEditorWindow:SelectTag(tag)
     if type(tag) ~= "string" or tag == "" then tag = nil end
-    -- Another tag starts both grids at the top, with no undo steps
+    -- Another tag starts both grids at the top, with no undo steps or copied items
     if tag ~= self.selectedTag then
         self:ClearHistory()
+        self.clipboard = nil
         for _, name in ipairs(PANE_NAMES) do self.panes[name].view:SetScrollPosition(0) end
     end
     self.selectedTag = tag
@@ -578,8 +596,13 @@ function LayoutEditorWindow:DrawPane(pane, rowCount, labelRows)
         -- Rows match the live page; columns keep the editor inset
         local row = math.floor(zero / columns)
         if not labelRows[row] then
-            self:CreateGridCell(pane.view.content, Size.GRID_LEFT + (zero % columns) * Size.GRID_STEP,
-                BankGrid.RowItemY(row), pane.slots[index])
+            local x, y = Size.GRID_LEFT + (zero % columns) * Size.GRID_STEP, BankGrid.RowItemY(row)
+            self:CreateGridCell(pane.view.content, x, y, pane.slots[index])
+            if pane.name == "sorted" and index == self.pasteCell then
+                self.centerNodes[#self.centerNodes + 1] = rectangle(
+                    pane.view.content, x, y, Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE, GOLD, false
+                )
+            end
         end
     end
     if pane.surface ~= nil then pane.surface:MoveToFront() end
@@ -717,7 +740,6 @@ function LayoutEditorWindow:RowMenuTarget()
         tag = self.selectedTag,
         row = row,
         usedRows = self.usedRows,
-        emptyRow = self.store:IsEmptyLayoutLine(self.selectedTag, row, Size.CENTER_COLUMNS),
         columns = Size.CENTER_COLUMNS,
         data = self.store.data,
     }
@@ -745,18 +767,58 @@ function LayoutEditorWindow:InsertEmptyRow(line)
     return true
 end
 
--- Remove an empty grid line, moving the rows below it up
-function LayoutEditorWindow:RemoveEmptyRow(line)
-    local saved, reason = self:RecordEdit(self.selectedTag, function()
-        return self.store:RemoveEmptyLayoutRow(self.selectedTag, line, Size.CENTER_COLUMNS)
+-- Describe what removing a line takes out of the tag
+local function removeRowMessage(tag, contents)
+    local name = "<col=ffcb05>\"" .. tostring(tag) .. "\"</col>"
+    if contents.label ~= nil then
+        return "Remove the label <col=ffcb05>\"" .. contents.label .. "\"</col> from " .. name
+            .. "?<br>The rows below it move up."
+    end
+    local parts = {}
+    if contents.items > 0 then
+        parts[#parts + 1] = contents.items .. (contents.items == 1 and " item" or " items")
+    end
+    if contents.reserved > 0 then
+        parts[#parts + 1] = contents.reserved .. (contents.reserved == 1 and " reserved slot" or " reserved slots")
+    end
+    return "Remove this row and its " .. table.concat(parts, " and ") .. " from " .. name
+        .. "?<br>Only the tag changes; your bank keeps every item."
+end
+
+-- Remove a grid line and everything on it, moving the rows below it up
+-- An empty line goes at once; anything else asks first
+function LayoutEditorWindow:RemoveRow(line)
+    local tag = self.selectedTag
+    local contents = tag ~= nil and self.store:LayoutLineContents(tag, line, Size.CENTER_COLUMNS) or nil
+    if contents == nil then return false end
+    if contents.empty then return self:SaveRowRemoval(tag, line) end
+    if self.onConfirmRemoveRow == nil then return false end
+    local target = { tag = tag, row = line, columns = Size.CENTER_COLUMNS, data = self.store.data }
+    self.onConfirmRemoveRow({
+        message = removeRowMessage(tag, contents),
+        onConfirm = function()
+            -- Any save, another tag or size, or a closed editor makes it out of date
+            if not self:RowTargetCurrent(target) then
+                return false, "The layout changed, so the row was not removed. Cancel and try again."
+            end
+            return self:SaveRowRemoval(tag, line)
+        end,
+    })
+    return true
+end
+
+-- Save a line's removal as one undo step
+function LayoutEditorWindow:SaveRowRemoval(tag, line)
+    local saved, reason = self:RecordEdit(tag, function()
+        return self.store:RemoveLayoutRow(tag, line, Size.CENTER_COLUMNS)
     end)
     if not saved then
         self:ShowError(reason or "Could not remove the row.")
-        return false
+        return false, reason
     end
     self:RefreshCenter()
     self:NotifyChanged()
-    return true
+    return true, nil
 end
 
 -- Convert a pane point to its grid slot, skipping label rows
@@ -828,27 +890,6 @@ function LayoutEditorWindow:UnarrangeSelected()
     return true
 end
 
--- Add a ghost copy of the selected item
-function LayoutEditorWindow:DuplicateSelected()
-    if self:RefuseForGroup() then return false end
-    local entry = self:SelectedEntry()
-    if entry == nil or self.selectedTag == nil then
-        self:ShowError("Select a layout item first.")
-        return false
-    end
-    local saved, nextKey, reason = self:RecordEdit(self.selectedTag, function()
-        return self.store:DuplicateLayoutItem(self.selectedTag, entry.layoutKey)
-    end)
-    if not saved then
-        self:ShowError(reason or "Could not duplicate the item.")
-        return false
-    end
-    self.selectedLayoutKey = nextKey
-    self:RefreshCenter()
-    self:NotifyChanged()
-    return true
-end
-
 -- Untag the selected item, keeping other grid positions
 function LayoutEditorWindow:RemoveSelected()
     if self:RefuseForGroup() then return false end
@@ -903,7 +944,8 @@ function LayoutEditorWindow:DestroyControls()
         self.newLabelButton,
         self.unsortButton,
         self.removeButton,
-        self.duplicateButton,
+        self.pasteButton,
+        self.copyButton,
         self.tagRail,
         self.tagName,
         self.closeButton,
@@ -926,7 +968,8 @@ function LayoutEditorWindow:DestroyControls()
     self.closeButton = nil
     self.unsortButton = nil
     self.removeButton = nil
-    self.duplicateButton = nil
+    self.pasteButton = nil
+    self.copyButton = nil
 end
 
 -- Stop events and drags, then destroy the editor

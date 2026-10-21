@@ -126,8 +126,8 @@ assert(grouped(1, 2, 3) and outlines() == 3)
 -- A Shift-click on an empty cell keeps the group
 shiftClick("sorted", 6, 0)
 assert(grouped(1, 2, 3) and changes == 0)
--- Items the group blocks say so
-assert(editor.duplicateButton.tooltipText == "Select one item to copy it")
+-- Items the group blocks say so; Copy takes the whole group
+assert(editor.copyButton.tooltipText == "Copy the selected item or group (Ctrl+C)")
 assert(editor.removeButton.tooltipText == "Select one item to remove it")
 assert(editor.unsortButton.tooltipText == "Select one item to move it to Unsorted")
 
@@ -190,9 +190,9 @@ app.store.Commit = nil
 assert(Json.encode(app.store.data) == before and editor.errorBanner ~= nil and grouped(1, 2, 3))
 editor:HideError()
 
--- Copy, Remove, and Move to Unsorted refuse a group by button and key
+-- Remove and Move to Unsorted refuse a group by button and key
 editor.keysOnGrid = true
-for _, button in ipairs({ editor.duplicateButton, editor.removeButton, editor.unsortButton }) do
+for _, button in ipairs({ editor.removeButton, editor.unsortButton }) do
     button.root.hooks.pressed()
     assert(editor.errorBanner ~= nil, "a group action explains itself")
     editor:HideError()
@@ -204,13 +204,17 @@ for name, action in pairs(h.keySubscriptions.KeyDown) do
 end
 assert(editor.errorBanner ~= nil and Json.encode(app.store.data) == before and changes == 1)
 editor:HideError()
+-- Copy keeps the whole group for Paste and saves nothing
+editor.copyButton.root.hooks.pressed()
+assert(#editor.clipboard.items == 3 and Json.encode(app.store.data) == before and grouped(1, 2, 3))
+editor:HideError()
 -- A new label goes above the item last grabbed
 assert(editor:DefaultLabelRow() == 0)
 
 -- A plain click on an unselected item selects only it, and a single drag still works
 click("sorted", 0, 0)
 assert(editor.groupKeys == nil and editor.selectedLayoutKey == key(4, 1) and outlines() == 1)
-assert(editor.duplicateButton.tooltipText == "Copy the selected item (Ctrl+C)")
+assert(editor.copyButton.tooltipText == "Copy the selected item or group (Ctrl+C)")
 press("sorted", 0, 0)
 assert(editor.drag.kind == "layout")
 dragOver("sorted", 5, 0)

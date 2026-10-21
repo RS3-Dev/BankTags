@@ -134,11 +134,14 @@ for _, entry in ipairs(layout:VisibleMirrorEntries()) do
 end
 assert(whipY ~= nil and sharkY == whipY and sharkX == 8 + 11 * 44, tostring(sharkX))
 
--- Select the whip, then copy it; the ghost opens copy 1
+-- Select the whip, copy it, and paste it into an empty cell; the new copy opens copy 1
 drag("sorted", 0, 0, "sorted", 0, 0)
 assert(editor.selectedLayoutKey == key(4151, 1))
-Harness.Find(editor.content, "Create Copy").hooks.pressed()
-assert(editor.selectedLayoutKey == key(4151, 2))
+Harness.Find(editor.content, "Copy").hooks.pressed()
+drag("sorted", 5, 0, "sorted", 5, 0)
+assert(editor.pasteCell == 6 and editor.selectedLayoutKey == nil)
+Harness.Find(editor.content, "Paste").hooks.pressed()
+assert(editor.selectedLayoutKey == key(4151, 2) and editor.pasteCell == nil)
 local ghost = nil
 for _, slot in ipairs(app.store.data.tags.melee.rows[1].slots) do
     if slot.layoutKey == key(4151, 2) then ghost = slot end
@@ -282,7 +285,7 @@ assert(app.store:GetTagSprite("melee") == 385)
 assert(app:ShowTag("snacks"))
 h:Tick(2)
 app.windows:OpenTagDeleteConfirm("snacks")
-app.windows.tagDeleteConfirm.deleteButton.root.hooks.click()
+app.windows.tagDeleteConfirm.confirmButton.root.hooks.click()
 h:Tick(2)
 assert(app.store.data.tags.snacks == nil and app.shownTag == nil and layout.selectedTag == nil)
 

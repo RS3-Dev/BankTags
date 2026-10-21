@@ -231,6 +231,8 @@ function TagMenus:AddEditorEntries(menu)
     local windows = self.app.windows
     local editor = windows.layoutEditor
     local target = editor:RowMenuTarget()
+    -- A menu opened over the grid leaves the editor's keys working
+    editor.menuOnGrid = target ~= nil
     local MiniMenu = prettyui.MiniMenu
     if target == nil or MiniMenu == nil then return end
     local current = function() return windows.layoutEditor == editor and editor:RowTargetCurrent(target) end
@@ -248,7 +250,7 @@ function TagMenus:AddEditorEntries(menu)
     local row = target.row
     if row < target.usedRows then offer("Add row above", function() editor:InsertEmptyRow(row) end) end
     if row + 1 < target.usedRows then offer("Add row below", function() editor:InsertEmptyRow(row + 1) end) end
-    if target.emptyRow then offer("Remove empty row", function() editor:RemoveEmptyRow(row) end) end
+    if row < target.usedRows then offer("Remove row", function() editor:RemoveRow(row) end) end
     if #children == 0 then return end
     children[#children + 1] = { label = "Cancel", action = function() end }
     MiniMenu.AddSubmenu(menu, "Edit row", children, { title = "Edit row" })

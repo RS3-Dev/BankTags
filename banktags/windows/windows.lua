@@ -1,10 +1,10 @@
 -- Own Bank Tags' standalone windows, closing most with the bank
 
+local ConfirmWindow = require("banktags/windows/confirm_window")
 local debugLog = require("banktags/core/debug_log").Write
 local ImportShare = require("banktags/windows/import_share")
 local LayoutEditorWindow = require("banktags/windows/layout_editor_window")
 local SpritePicker = require("banktags/windows/sprite_picker")
-local TagDeleteConfirm = require("banktags/windows/tag_delete_confirm")
 local TagRules = require("banktags/tags/tag_rules")
 local TagSettingsEditor = require("banktags/windows/tag_settings_editor")
 local TextPrompt = require("banktags/ui/text_prompt")
@@ -13,9 +13,9 @@ local Windows = {}
 Windows.__index = Windows
 
 -- Windows that close with the bank
-local BANK_WINDOWS = { "textPrompt", "layoutEditor", "tagSettingsEditor", "tagDeleteConfirm" }
+local BANK_WINDOWS = { "textPrompt", "layoutEditor", "tagSettingsEditor", "tagDeleteConfirm", "rowRemoveConfirm" }
 -- Windows kept in front of the layout editor, the last frontmost
-local EDITOR_OVERLAYS = { "tagSettingsEditor", "spritePicker", "textPrompt" }
+local EDITOR_OVERLAYS = { "tagSettingsEditor", "spritePicker", "textPrompt", "rowRemoveConfirm" }
 
 -- Find the layer standalone windows open on
 local function windowParent()
@@ -155,11 +155,13 @@ function Windows:OpenLayoutEditor(tag)
         bankItems = app:BankItems(),
         onChanged = function() app:Changed() end,
         onPromptLabel = function(options) self:OpenPageLabelPrompt(options) end,
+        onConfirmRemoveRow = function(options) self:OpenRowRemoveConfirm(options) end,
         onClose = function(value)
             if self.layoutEditor == value then
                 self.layoutEditor = nil
-                -- A label prompt edits this editor's tag, so it closes too
+                -- A label prompt or row removal edits this editor's tag, so it closes too
                 self:Close("textPrompt")
+                self:Close("rowRemoveConfirm")
             end
         end,
     })
@@ -201,9 +203,13 @@ function Windows:OpenTagDeleteConfirm(tag)
     self:Close("tagDeleteConfirm")
     local parent = parentFor("delete confirmation")
     if parent == nil then return end
-    self.tagDeleteConfirm = TagDeleteConfirm.new(parent, {
-        tag = tag,
-        onDelete = function()
+    self.tagDeleteConfirm = ConfirmWindow.new(parent, {
+        title = "Delete Bank Tag",
+        message = "Delete <col=ffcb05>\"" .. tostring(tag)
+            .. "\"</col> from every tagged item?<br><br>Do you wish to continue?",
+        confirmLabel = "Delete",
+        failureText = "Could not delete the tag.",
+        onConfirm = function()
             local saved, reason = app.store:DeleteTag(tag)
             if not saved then return false, reason end
             app:Changed()
@@ -211,6 +217,22 @@ function Windows:OpenTagDeleteConfirm(tag)
         end,
     })
     self.tagDeleteConfirm:Show()
+end
+
+-- Ask before removing a layout editor row, in front of the editor
+function Windows:OpenRowRemoveConfirm(options)
+    self:Close("rowRemoveConfirm")
+    local parent = parentFor("row removal confirmation")
+    if parent == nil then return end
+    self.rowRemoveConfirm = ConfirmWindow.new(parent, {
+        title = "Remove Row",
+        message = options.message,
+        confirmLabel = "Remove",
+        failureText = "Could not remove the row.",
+        onConfirm = options.onConfirm,
+    })
+    self.rowRemoveConfirm:Show()
+    self:SyncEditorOverlays()
 end
 
 -- Open the sprite picker for the window that asked

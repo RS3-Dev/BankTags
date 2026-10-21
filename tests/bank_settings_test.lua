@@ -58,6 +58,11 @@ assert(app.settings.showTagSprites == false and h.databases.banktags[SETTINGS_KE
 section.placement:Select("fill", true)
 assert(app.settings.preserveTagLayout == false and app.store.preserveTagLayout == false)
 assert(h.databases.banktags[SETTINGS_KEY].preserveTagLayout == false)
+-- Arrow-key movement starts off, says the arrows also move the camera, and saves like the others
+assert(app.settings.arrowKeyMovement == false and not section.controls.arrowKeyMovement:IsSelected("arrowKeyMovement"))
+assert(Harness.Find(parent, "Arrow keys also move the camera.") ~= nil)
+section.controls.arrowKeyMovement:SetSelected("arrowKeyMovement", true, true)
+assert(app.settings.arrowKeyMovement == true and h.databases.banktags[SETTINGS_KEY].arrowKeyMovement == true)
 section.controls.enableDebug:SetSelected("enableDebug", true, true)
 assert(h.databases.banktags[SETTINGS_KEY].enableDebug == true and section.status.hidden)
 -- Bank Core's saved data holds none of them
@@ -70,6 +75,9 @@ assert(not section.controls.showTagSprites:IsSelected("showTagSprites") and not 
 assert(not section.status.hidden and section.status.content == "Could not save the setting.")
 section.placement:Select("preserve", true)
 assert(section.placement:GetSelectedID() == "fill" and app.store.preserveTagLayout == false)
+section.controls.arrowKeyMovement:SetSelected("arrowKeyMovement", false, true)
+assert(section.controls.arrowKeyMovement:IsSelected("arrowKeyMovement") and app.settings.arrowKeyMovement == true)
+assert(h.databases.banktags[SETTINGS_KEY].arrowKeyMovement == true)
 h.host.rejectWrites = false
 section.controls.showTagSprites:SetSelected("showTagSprites", true, true)
 assert(app.settings.showTagSprites and section.status.hidden)
@@ -80,6 +88,7 @@ assert(app.settingsSection == nil)
 section = openSection()
 assert(section.controls.showTagSprites:IsSelected("showTagSprites") and section.placement:GetSelectedID() == "fill")
 assert(section.controls.enableDebug:IsSelected("enableDebug"))
+assert(section.controls.arrowKeyMovement:IsSelected("arrowKeyMovement"))
 
 -- Bank Core unloads, closing the section; it returns on reload
 h.host:Unload("bankcore")
@@ -90,6 +99,17 @@ session, layout = h:OpenBank()
 h:Tick(2)
 section = openSection()
 assert(section.controls.showTagSprites:IsSelected("showTagSprites"))
+
+assert(section.controls.arrowKeyMovement:IsSelected("arrowKeyMovement"))
+
+-- Reloading Bank Tags reads the saved choice back
+h.host:Unload("banktags")
+h:LoadTags()
+app = h:App()
+assert(app.settings.arrowKeyMovement == true)
+h:Tick(2)
+section = openSection()
+assert(section.controls.arrowKeyMovement:IsSelected("arrowKeyMovement"))
 
 -- Bank Tags unloads, so the window falls back to Core's section
 h.host:Unload("banktags")

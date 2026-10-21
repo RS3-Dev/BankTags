@@ -204,6 +204,8 @@ function LayoutEditorDrag:BeginCenterDrag(pane, index, hit, x, y)
         -- A Shift-click that misses keeps the group being built
         if shift then return false end
         self:SelectOnly(nil)
+        -- An empty sorted cell is where Paste puts copies
+        if pane.name == "sorted" then self.pasteCell = index end
         self:RefreshCenter()
         return false
     end

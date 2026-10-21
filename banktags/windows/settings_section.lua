@@ -1,6 +1,7 @@
 -- Draw Bank Tags' preferences in Bank Core's settings window
 
 local Settings = require("banktags/core/settings")
+local Theme = require("banktags/ui/theme")
 
 local SettingsSection = {}
 SettingsSection.__index = SettingsSection
@@ -8,6 +9,7 @@ SettingsSection.__index = SettingsSection
 local MAX_WIDTH = 280
 local TEXT = 0xD7C9ADFF
 local GOLD = 0xF2C66DFF
+local MUTED = Theme.MUTED_TEXT
 
 -- Add a label that takes no input
 local function label(parent, value, x, y, width, height, colour)
@@ -50,10 +52,14 @@ function SettingsSection.new(parent, options)
         selectedID = self.settings.preserveTagLayout and "preserve" or "fill",
         onChange = function(_, selected) self:Change("preserveTagLayout", selected == "preserve") end,
     })
-    self:AddToggle(parent, "enableDebug", "Enable debug logging", x + 10, 158, width - 20,
+    self:AddToggle(parent, "arrowKeyMovement", "Arrow-key movement", x + 10, 158, width - 20,
+        "Move the layout editor's selected items with the arrow keys")
+    self.parts[#self.parts + 1] = label(parent, "Arrow keys also move the camera.", x + 10, 186,
+        width - 20, 18, MUTED)
+    self:AddToggle(parent, "enableDebug", "Enable debug logging", x + 10, 214, width - 20,
         "Write Bank Tags diagnostics to the client log")
     self.status = prettyui.Text.new(parent, {
-        text = "", x = x, y = 198, width = width, height = 60,
+        text = "", x = x, y = 254, width = width, height = 60,
         font = id.Font.MUSEO_SANS_11PT_REGULAR,
         colour = 0xE57373FF, maxLines = 3,
     })

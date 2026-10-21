@@ -401,4 +401,104 @@ rowsBefore = Json.encode(rowsStore.data)
 local saved, reason = rowsStore:InsertLayoutRow("rows", 0, 10)
 assert(not saved and reason:find("at most", 1, true) and Json.encode(rowsStore.data) == rowsBefore)
 
+-- Removing a row -------------------------------------------------------------------
+
+-- Lines at ten wide: 0 Top, 1 a whip and its copy, 2-3 a row of 12 wrapping,
+-- 4 a shark, a reserved slot, and another copy of the whip
+local wrapping = {}
+for index = 1, 12 do wrapping[index] = rowItem(5000 + index) end
+rowsStore.data.tags.rows.rows = {
+    { kind = "label", text = "Top" },
+    { kind = "row", slots = { rowItem(4151, 1), rowItem(4151, 2, 1) } },
+    { kind = "row", slots = wrapping },
+    { kind = "row", slots = { rowItem(385, 1), { kind = "blank", dormant = "gone_item" }, rowItem(4151, 3, 1) } },
+}
+rowsStore.data.tags.rows.unsorted = { rowItem(385, 2) }
+assert(rowsStore:Save())
+unsortedBefore = Json.encode(rowsStore.data.tags.rows.unsorted)
+assert(lines() == "Top 4151 5001 5011 385", lines())
+-- Each line reports what removing it takes out of the tag
+local contents = rowsStore:LayoutLineContents("rows", 0, 10)
+assert(contents.label == "Top" and contents.items == 0 and contents.reserved == 0 and not contents.empty)
+contents = rowsStore:LayoutLineContents("rows", 1, 10)
+assert(contents.label == nil and contents.items == 2 and contents.reserved == 0 and not contents.empty)
+assert(rowsStore:LayoutLineContents("rows", 3, 10).items == 2)
+contents = rowsStore:LayoutLineContents("rows", 4, 10)
+assert(contents.items == 2 and contents.reserved == 1)
+assert(rowsStore:LayoutLineContents("rows", 5, 10) == nil and rowsStore:LayoutLineContents("gone", 0, 10) == nil)
+-- A wrapped row loses only the removed line, in one save; every later line moves up
+writes = 0
+assert(rowsStore:RemoveLayoutRow("rows", 2, 10))
+assert(writes > 0 and lines() == "Top 4151 5011 385", lines())
+assert(not rowsStore:HasTag("rows", key(5001)) and not rowsStore:HasTag("rows", key(5010)))
+assert(rowsStore:HasTag("rows", key(5011)) and rowsStore:HasTag("rows", key(5012)))
+-- A label's line takes only the label
+assert(rowsStore:RemoveLayoutRow("rows", 0, 10))
+assert(lines() == "4151 5011 385", lines())
+-- A row's items leave the tag as Remove does: a copy elsewhere keeps the source it opens
+assert(rowsStore:RemoveLayoutRow("rows", 0, 10))
+assert(lines() == "5011 385", lines())
+assert(not rowsStore:HasTag("rows", key(4151, 1)) and not rowsStore:HasTag("rows", key(4151, 2)))
+view = TagLayouts.Render(rowsStore.data.tags.rows.rows, 10)
+assert(view.slots[12].dormant == "gone_item" and view.slots[13].sourceLayoutKey == key(4151, 1))
+assert(Json.encode(rowsStore.data.tags.rows.unsorted) == unsortedBefore)
+-- Lines past the layout, bad lines, missing tags, and a failed save change nothing
+rowsBefore = Json.encode(rowsStore.data)
+for _, case in ipairs({ { "rows", 2 }, { "rows", -1 }, { "rows", "x" }, { "gone", 0 } }) do
+    local removed, why = rowsStore:RemoveLayoutRow(case[1], case[2], 10)
+    assert(not removed and why ~= nil)
+end
+failWrites = true
+local removed, why = rowsStore:RemoveLayoutRow("rows", 0, 10)
+failWrites = false
+assert(not removed and why ~= nil and Json.encode(rowsStore.data) == rowsBefore)
+
+-- Pasting copies -------------------------------------------------------------------
+
+-- Copies keep their offsets, open the copied stacks, and number after the tag's last copy of each item
+local items = {
+    { objectID = 5011, sourceLayoutKey = key(5011), line = 0, column = 0 },
+    { objectID = 4151, sourceLayoutKey = key(4151, 1), line = 1, column = 2 },
+}
+writes = 0
+local pasted, keys = rowsStore:PasteLayoutItems("rows", items, 6, 10)
+assert(pasted and keys[1] == key(5011, 2) and keys[2] == key(4151, 4) and writes > 0)
+view = TagLayouts.Render(rowsStore.data.tags.rows.rows, 10)
+assert(view.slots[6].layoutKey == key(5011, 2) and view.slots[6].sourceLayoutKey == key(5011))
+assert(view.slots[18].layoutKey == key(4151, 4) and view.slots[18].sourceLayoutKey == key(4151, 1))
+-- Two copies of one item number one after the other; below the rows they add lines
+local pair = {
+    { objectID = 4151, sourceLayoutKey = key(4151, 1), line = 0, column = 0 },
+    { objectID = 4151, sourceLayoutKey = key(4151, 1), line = 1, column = 1 },
+}
+pasted, keys = rowsStore:PasteLayoutItems("rows", pair, 41, 10)
+assert(pasted and keys[1] == key(4151, 5) and keys[2] == key(4151, 6))
+view = TagLayouts.Render(rowsStore.data.tags.rows.rows, 10)
+assert(view.lines == 6 and view.slots[41].layoutKey == key(4151, 5) and view.slots[52].layoutKey == key(4151, 6))
+-- An item, a reserved slot, a label, the right edge, or one blocked copy refuses the whole paste
+assert(rowsStore:InsertLabel("rows", 2, "Mid", 10))
+rowsBefore = Json.encode(rowsStore.data)
+local one = { { objectID = 385, sourceLayoutKey = key(385), line = 0, column = 0 } }
+local blocked = { one[1], { objectID = 385, sourceLayoutKey = key(385), line = 0, column = 1 } }
+local offEdge = { one[1], { objectID = 385, sourceLayoutKey = key(385), line = 0, column = 3 } }
+writes = 0
+for _, case in ipairs({ { one, 1 }, { one, 12 }, { one, 21 }, { blocked, 5 }, { offEdge, 8 }, { one, 0 }, { {}, 3 } }) do
+    local ok, pastedKeys, refusal = rowsStore:PasteLayoutItems("rows", case[1], case[2], 10)
+    assert(not ok and pastedKeys == nil and refusal ~= nil, tostring(case[2]))
+end
+assert(writes == 0 and Json.encode(rowsStore.data) == rowsBefore)
+-- A failed save, or a tag already full, pastes nothing
+failWrites = true
+local ok, _, failure = rowsStore:PasteLayoutItems("rows", one, 5, 10)
+failWrites = false
+assert(not ok and failure ~= nil and Json.encode(rowsStore.data) == rowsBefore)
+full = {}
+for index = 1, TagData.EDIT_ENTRY_LIMIT - 2 do full[index] = { kind = "label", text = "L" .. index } end
+full[#full + 1] = { kind = "row", slots = { rowItem(385, 3) } }
+rowsStore.data.tags.rows.rows, rowsStore.data.tags.rows.unsorted = full, {}
+assert(rowsStore:Save())
+rowsBefore = Json.encode(rowsStore.data)
+ok, _, failure = rowsStore:PasteLayoutItems("rows", one, (#full - 1) * 10 + 2, 10)
+assert(not ok and failure:find("at most", 1, true) and Json.encode(rowsStore.data) == rowsBefore)
+
 print("tag_store_test: ok")

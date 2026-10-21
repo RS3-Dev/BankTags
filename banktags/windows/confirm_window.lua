@@ -1,9 +1,9 @@
--- Confirm a tag deletion before the app saves it
+-- Ask before a removal that the app saves only once confirmed
 
 local Theme = require("banktags/ui/theme")
 
-local TagDeleteConfirm = {}
-TagDeleteConfirm.__index = TagDeleteConfirm
+local ConfirmWindow = {}
+ConfirmWindow.__index = ConfirmWindow
 
 local WIDTH = 340
 local HEIGHT = 164
@@ -17,15 +17,14 @@ local BUTTON_X = math.floor((CONTENT_WIDTH - (BUTTON_WIDTH * 2 + BUTTON_GAP)) / 
 local TEXT = Theme.TEXT
 local ERROR = Theme.ERROR_TEXT
 
--- Create the deletion confirmation dialog
-function TagDeleteConfirm.new(parent, options)
+-- Create the confirmation dialog
+function ConfirmWindow.new(parent, options)
     local self = setmetatable({
-        tag = options.tag,
-        onDelete = options.onDelete,
-    }, TagDeleteConfirm)
+        onConfirm = options.onConfirm,
+    }, ConfirmWindow)
 
     self.window = prettyui.Window.new(parent, {
-        title = "Delete Bank Tag",
+        title = options.title,
         x = -math.floor(WIDTH / 2),
         y = -math.floor(HEIGHT / 2),
         xAnchor = 0.5,
@@ -41,8 +40,7 @@ function TagDeleteConfirm.new(parent, options)
 
     local content = self.window.content
     self.message = prettyui.Text.new(content, {
-        text = "Delete <col=ffcb05>\"" .. tostring(self.tag)
-            .. "\"</col> from every tagged item?<br><br>Do you wish to continue?",
+        text = options.message,
         x = MARGIN,
         y = 18,
         width = CONTROL_WIDTH,
@@ -61,13 +59,13 @@ function TagDeleteConfirm.new(parent, options)
         height = 28,
     })
 
-    self.deleteButton = prettyui.SimpleButton.new(content, "Delete", function()
-        if self.onDelete == nil then return end
-        local success, reason = self.onDelete()
+    self.confirmButton = prettyui.SimpleButton.new(content, options.confirmLabel, function()
+        if self.onConfirm == nil then return end
+        local success, reason = self.onConfirm()
         if success then
             self.window:Close()
         else
-            self.message.content = tostring(reason or "Could not delete the tag.")
+            self.message.content = tostring(reason or options.failureText)
             self.message.rgba = ERROR
         end
     end, {
@@ -81,25 +79,25 @@ function TagDeleteConfirm.new(parent, options)
 end
 
 -- Show the dialog window
-function TagDeleteConfirm:Show()
+function ConfirmWindow:Show()
     self.window:Show()
 end
 
 -- Destroy the dialog controls and window
-function TagDeleteConfirm:Destroy()
+function ConfirmWindow:Destroy()
     for _, control in ipairs({
-        self.deleteButton,
+        self.confirmButton,
         self.cancelButton,
         self.message,
         self.window,
     }) do
         if control ~= nil then pcall(function() control:Destroy() end) end
     end
-    self.deleteButton = nil
+    self.confirmButton = nil
     self.cancelButton = nil
     self.message = nil
     self.window = nil
-    self.onDelete = nil
+    self.onConfirm = nil
 end
 
-return TagDeleteConfirm
+return ConfirmWindow

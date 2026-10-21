@@ -268,6 +268,15 @@ function Harness.new(name, options)
     end
     local input = { menuOpen = false, capturing = false }
     prettyui.KeybindField = { IsCapturing = function() return input.capturing end }
+    -- Values from the client docs' GameKey table, with its FromID name lookup
+    local gameKeys = { Y = 37, Z = 64, C = 66, V = 67, CONTROL = 82, BACKSPACE = 85,
+        LEFT = 96, RIGHT = 97, UP = 98, DOWN = 99, DELETE = 101 }
+    gameKeys.FromID = function(value)
+        for keyName, keyValue in pairs(gameKeys) do
+            if keyValue == value then return keyName end
+        end
+        return nil
+    end
     local Build = require("tools/build")
     local out = "dist/test/" .. name
     local built = Build.Run({ out = out })
@@ -276,9 +285,7 @@ function Harness.new(name, options)
         Mouse = Mouse, Keyboard = Keyboard, MiniMenuActionType = MiniMenuActionType,
         MiniMenuEntryType = MiniMenuEntryType,
         MiniMenu = { IsOpen = function() return input.menuOpen end },
-        -- Values from the client docs' GameKey table
-        GameKey = { Y = 37, Z = 64, C = 66, CONTROL = 82, BACKSPACE = 85,
-            LEFT = 96, RIGHT = 97, UP = 98, DOWN = 99, DELETE = 101 },
+        GameKey = gameKeys,
         Player = { IsAvailable = function() return true end }, GameState = { GAME = 30 },
         log = function() end }
     local databases = {}

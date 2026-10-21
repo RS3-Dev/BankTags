@@ -1,6 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Right-click the layout editor's sorted grid for its Edit row submenu: add a row, or remove an empty one
+-- Right-click the layout editor's sorted grid for its Edit row submenu: add a row, or remove one
+-- Removing a row with items, reserved slots, or a label asks first in a confirmation window
 -- Only sorted rows in the layout get entries; they act once, from the opened menu, while still current
 -- FAKE HOST: stand-in components, pointer, menus, and scroll views, not the game client
 
@@ -89,14 +90,15 @@ end
 local function saved() return Json.encode(store.data) end
 local function shown(menu) return table.concat(Harness.DisplayedLabels(menu), "|") end
 local EDIT = "Edit row <col=ffffff><gt></col>"
-local ABOVE, BELOW, REMOVE = "Add row above", "Add row below", "Remove empty row"
+local ABOVE, BELOW, REMOVE = "Add row above", "Add row below", "Remove row"
 local OFFERED = "Cancel|" .. EDIT
 -- List the Edit row children of a menu, or nil without the submenu
 local function children(menu)
     local submenu = Harness.Submenu(menu, EDIT)
     return submenu ~= nil and table.concat(Harness.ChildLabels(submenu), "|") or nil
 end
-local BOTH = ABOVE .. "|" .. BELOW .. "|Cancel"
+local BOTH = ABOVE .. "|" .. BELOW .. "|" .. REMOVE .. "|Cancel"
+local LAST = ABOVE .. "|" .. REMOVE .. "|Cancel"
 -- Choose an Edit row child from a menu
 local function choose(menu, label) Harness.ChooseChild(menu, EDIT, label) end
 
@@ -114,7 +116,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         end
         -- The last line has nothing below it to move
         pointAt("sorted", 0, 2)
-        assert(children(h:ContentMenu()) == ABOVE .. "|Cancel", where)
+        assert(children(h:ContentMenu()) == LAST, where)
         -- The drop row and the empty rows past it are already empty
         for _, row in ipairs({ 3, 4, 8 }) do
             pointAt("sorted", 3, row)
@@ -180,24 +182,22 @@ choose(menu, ABOVE)
 h:Tick(2)
 assert(saved() == before and changes == 1)
 
--- Above a label moves the label down; the new empty row also offers Remove empty row
+-- Above a label moves the label down; every row in the layout offers Remove row
 pointAt("sorted", 4, 0)
 choose(h:ContentMenu(), ABOVE)
 h:Tick(2)
 assert(lines() == "- Weapons 3001 - 3003", lines())
 assert(editor.centerLabels[1].row == 1 and changes == 2)
-pointAt("sorted", 4, 0)
-assert(children(h:ContentMenu()) == BOTH:gsub("|Cancel", "|" .. REMOVE .. "|Cancel"))
--- Rows with an item, a label, or a blank beside an item offer no removal
-for _, row in ipairs({ 1, 2 }) do
+for _, row in ipairs({ 0, 1, 2, 3 }) do
     pointAt("sorted", 2, row)
-    assert(not string.find(children(h:ContentMenu()), REMOVE, 1, true), "row " .. row)
+    assert(children(h:ContentMenu()) == BOTH, "row " .. row)
 end
 
--- Removing an empty row moves every later row and label up, in one save and one notice
+-- Removing an empty row asks nothing and moves every later row and label up, in one save and one notice
 pointAt("sorted", 7, 3)
 choose(h:ContentMenu(), REMOVE)
 h:Tick(2)
+assert(app.windows.rowRemoveConfirm == nil)
 assert(lines() == "- Weapons 3001 3003", lines())
 assert(changes == 3 and editor.usedRows == 4)
 assert(TagLayouts.Render(store.data.tags.gear.rows, 10).slots[22].sourceLayoutKey == key(3001, 1))
@@ -206,12 +206,81 @@ choose(h:ContentMenu(), REMOVE)
 h:Tick(2)
 assert(lines() == "Weapons 3001 3003", lines())
 assert(changes == 4 and editor.centerLabels[1].row == 0)
--- A removal the store refuses shows why and changes nothing
-pointAt("sorted", 0, 1)
+-- A line past the layout has nothing to remove
 before = saved()
-editor:RemoveEmptyRow(1)
-assert(saved() == before and editor.errorBanner ~= nil and changes == 4)
+assert(not editor:RemoveRow(5) and saved() == before and changes == 4)
+
+-- A row holding items asks first, naming what leaves the tag; Cancel changes nothing
+local function confirm() return app.windows.rowRemoveConfirm end
+local function askToRemove(column, row)
+    pointAt("sorted", column, row)
+    choose(h:ContentMenu(), REMOVE)
+    h:Tick(2)
+    return assert(confirm())
+end
+askToRemove(2, 1)
+assert(saved() == before and changes == 4 and not confirm().window.root.hidden)
+local message = confirm().message.content
+assert(string.find(message, "its 3 items from", 1, true) and string.find(message, "your bank keeps every item", 1, true),
+    message)
+assert(editor.overlayWindows[#editor.overlayWindows] == confirm().window, "the confirmation stays over the editor")
+assert(editor:KeysBlocker() ~= nil, "the confirmation takes the editor's keys")
+confirm().cancelButton.root.hooks.click()
+assert(confirm().window.root.hidden and saved() == before and changes == 4)
+-- Confirming removes the whole line in one save and one undo step; Unsorted and the other rows stay
+askToRemove(2, 1).confirmButton.root.hooks.click()
+assert(lines() == "Weapons 3003", lines())
+assert(changes == 5 and confirm().window.root.hidden)
+for _, gone in ipairs({ key(3001, 1), key(3001, 2), key(3002, 1) }) do assert(not store:HasTag("gear", gone)) end
+assert(store:HasTag("gear", key(3003, 1)) and Json.encode(store.data.tags.gear.unsorted) == Json.encode({ item(3004, 1) }))
+-- Undo puts back every item, copy, and blank; redo removes them again
+assert(editor:Undo() and saved() == before and changes == 6)
+assert(editor:Redo() and lines() == "Weapons 3003")
+assert(editor:Undo() and saved() == before)
+-- A label's line asks first and removes only the label
+askToRemove(5, 0)
+assert(string.find(confirm().message.content, "the label <col=ffcb05>\"Weapons\"", 1, true), confirm().message.content)
+confirm().confirmButton.root.hooks.click()
+assert(lines() == "3001 3003", lines())
+assert(store:HasTag("gear", key(3001, 2)) and editor.centerLabels[1] == nil)
+assert(editor:Undo() and saved() == before)
+
+-- A confirmation goes stale after any save or another tag, and then removes nothing
+local function staleConfirm(change)
+    local window = askToRemove(2, 1)
+    change()
+    before = saved()
+    window.confirmButton.root.hooks.click()
+    assert(saved() == before and string.find(window.message.content, "layout changed", 1, true), window.message.content)
+    assert(not window.window.root.hidden)
+    window.cancelButton.root.hooks.click()
+end
+staleConfirm(function()
+    assert(store:SetLabel("gear", 0, "Arms", 10))
+    app:Changed()
+end)
+staleConfirm(function() assert(store:CreateTag("snacks")) end)
+staleConfirm(function() editor:SelectTag("food") end)
+editor:SelectTag("gear")
+-- Closing the editor closes its confirmation
+askToRemove(2, 1)
+editor.window:Close()
+assert(app.windows.rowRemoveConfirm == nil)
+openEditor()
+sorted = editor.panes.sorted
+-- A failed save keeps the window open with the reason, and changes nothing
+askToRemove(2, 1)
+store.loadError = "The saved tags could not be read."
+before = saved()
+confirm().confirmButton.root.hooks.click()
+store.loadError = nil
+assert(saved() == before and changes == 0 and editor.history == nil)
+assert(not confirm().window.root.hidden and confirm().message.content == "The saved tags could not be read.")
+confirm().cancelButton.root.hooks.click()
 editor:HideError()
+assert(lines() == "Arms 3001 3003", lines())
+assert(store:SetLabel("gear", 0, "Weapons", 10))
+app:Changed()
 
 -- One line of a wrapped row goes alone, and a reserved blank keeps its line
 local long = store.data.tags.gear.rows[2].slots
@@ -222,13 +291,22 @@ assert(store:Save())
 app:Changed()
 assert(lines() == "Weapons 3001 - 3002 -", lines())
 pointAt("sorted", 0, 4)
-assert(children(h:ContentMenu()) == ABOVE .. "|Cancel")
+assert(children(h:ContentMenu()) == LAST)
 pointAt("sorted", 0, 2)
 choose(h:ContentMenu(), REMOVE)
 h:Tick(2)
 assert(lines() == "Weapons 3001 3002 -", lines())
 local wrapped = store.data.tags.gear.rows[2].slots
 assert(#wrapped == 11 and wrapped[11].layoutKey == key(3002, 2) and wrapped[2].layoutKey == key(3001, 2))
+assert(store.data.tags.gear.rows[3].slots[2].dormant == "Old item")
+-- A reserved slot counts as content, so its line asks first
+askToRemove(0, 3)
+assert(string.find(confirm().message.content, "its 1 reserved slot from", 1, true), confirm().message.content)
+confirm().cancelButton.root.hooks.click()
+-- Removing a wrapped row's item line takes only that line's items
+askToRemove(0, 2).confirmButton.root.hooks.click()
+assert(lines() == "Weapons 3001 -", lines())
+assert(#store.data.tags.gear.rows[2].slots == 4 and not store:HasTag("gear", key(3002, 2)))
 assert(store.data.tags.gear.rows[3].slots[2].dormant == "Old item")
 -- Back to the rows the next checks start from
 resetGear()

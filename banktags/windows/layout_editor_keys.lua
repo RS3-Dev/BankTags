@@ -1,28 +1,30 @@
--- Copy, remove, move, undo, and redo layout items from the keyboard
+-- Copy, paste, remove, move, undo, and redo layout items from the keyboard
 
 local Config = require("banktags/core/config")
+local DebugLog = require("banktags/core/debug_log")
 local Parts = require("banktags/windows/layout_editor_parts")
 local Size = Parts.size
 
 local KEY_EVENT = Config.PLUGIN_REF .. "_layout_editor_keys"
--- Ctrl's bit in a key event's modifiers, ModifierKey.CONTROL in the docs
+-- Modifier bits in a key event, ModifierKey in the docs; the event never reports META
+local SHIFT_MODIFIER = 1
 local CONTROL_MODIFIER = 2
+local ALT_MODIFIER = 4
+local ANY_MODIFIER = 7
 
 local LayoutEditorKeys = {}
 
 -- Listen for shortcut keys while the editor is open
 function LayoutEditorKeys:StartShortcuts()
-    self.heldKeys = {}
     self.keysOnGrid = false
+    self.menuOnGrid = false
     Event.KeyDown.Subscribe(KEY_EVENT, function(event) self:KeyPressed(event) end)
-    Event.KeyUp.Subscribe(KEY_EVENT, function(event) self.heldKeys[event.gameKey] = nil end)
-    -- A menu may lead to a window with its own text field
-    Event.MiniMenuOpened.Subscribe(KEY_EVENT, function() self.keysOnGrid = false end)
-    -- Key releases are missed while the game is in the background
-    Event.WindowFocusChanged.Subscribe(KEY_EVENT, function()
-        self.heldKeys = {}
-        self.keysOnGrid = false
+    -- Another menu may lead to a window with its own text field; the grid's own row menu does not
+    Event.MiniMenuOpened.Subscribe(KEY_EVENT, function()
+        if not self.menuOnGrid then self.keysOnGrid = false end
     end)
+    -- The player may have typed elsewhere while the game was in the background
+    Event.WindowFocusChanged.Subscribe(KEY_EVENT, function() self.keysOnGrid = false end)
     -- Clicking the item search gives it the keys
     self.itemSearch.root:Subscribe(ui.Hook.ONCLICK, function()
         self.keysOnGrid = false
@@ -33,11 +35,10 @@ end
 -- Stop listening for shortcut keys
 function LayoutEditorKeys:StopShortcuts()
     Event.KeyDown.Unsubscribe(KEY_EVENT)
-    Event.KeyUp.Unsubscribe(KEY_EVENT)
     Event.MiniMenuOpened.Unsubscribe(KEY_EVENT)
     Event.WindowFocusChanged.Unsubscribe(KEY_EVENT)
-    self.heldKeys = {}
     self.keysOnGrid = false
+    self.menuOnGrid = false
 end
 
 -- Check whether a window opened from the editor is showing
@@ -48,20 +49,20 @@ function LayoutEditorKeys:OverlayShown()
     return false
 end
 
--- Check whether the grids have the keys
-function LayoutEditorKeys:KeysReady()
-    return self.keysOnGrid
-        and self.window ~= nil
-        and not self.window.root.hidden
-        and self.drag == nil
-        and not self:OverlayShown()
-        and not MiniMenu.IsOpen()
-        and not prettyui.KeybindField.IsCapturing()
+-- Name what keeps the keys from the grids, or nil when they have them
+function LayoutEditorKeys:KeysBlocker()
+    if not self.keysOnGrid then return "no grid press since focus moved" end
+    if self.window == nil or self.window.root.hidden then return "hidden editor" end
+    if self.drag ~= nil then return "drag" end
+    if self:OverlayShown() then return "window over the editor" end
+    if MiniMenu.IsOpen() then return "open menu" end
+    if prettyui.KeybindField.IsCapturing() then return "keybind field" end
+    return nil
 end
 
--- Check whether a shortcut may act on the selected item
-function LayoutEditorKeys:ShortcutsReady()
-    return self:KeysReady() and self:SelectedEntry() ~= nil
+-- Check whether the grids have the keys
+function LayoutEditorKeys:KeysReady()
+    return self:KeysBlocker() == nil
 end
 
 -- Move the selected sorted item or group one cell, as a drag there would
@@ -96,39 +97,65 @@ function LayoutEditorKeys:NudgeSelected(columnStep, lineStep)
     return changed
 end
 
--- Unmodified arrow keys, as column and line steps
-local function arrowSteps(key)
-    if key == GameKey.LEFT then return -1, 0 end
-    if key == GameKey.RIGHT then return 1, 0 end
-    if key == GameKey.UP then return 0, -1 end
-    if key == GameKey.DOWN then return 0, 1 end
-    return nil, nil
+-- Read the held modifiers from the event and the keyboard
+-- Either may report a held key; AltGr arrives as Ctrl and Alt, so it is never Ctrl alone
+local function heldModifiers(event)
+    local held = (math.tointeger(event.modifiers) or 0) & ANY_MODIFIER
+    if Keyboard.IsShiftDown() then held = held | SHIFT_MODIFIER end
+    if Keyboard.IsControlDown() then held = held | CONTROL_MODIFIER end
+    if Keyboard.IsAltDown() then held = held | ALT_MODIFIER end
+    return held
 end
 
--- Run each shortcut once per press
-function LayoutEditorKeys:KeyPressed(event)
-    local key = event.gameKey
-    if event.isRepeat or self.heldKeys[key] then return end
-    self.heldKeys[key] = true
-
-    local plain = event.modifiers == 0
-    local control = event.modifiers == CONTROL_MODIFIER
-    if control and (key == GameKey.Z or key == GameKey.Y) then
-        if not self:KeysReady() then return end
-        if key == GameKey.Z then self:Undo() else self:Redo() end
-        return
+-- Name the shortcut a key and its modifiers make, with arrow steps
+local function shortcutFor(key, held)
+    if held == CONTROL_MODIFIER then
+        if key == GameKey.Z then return "undo" end
+        if key == GameKey.Y then return "redo" end
+        if key == GameKey.C then return "copy" end
+        if key == GameKey.V then return "paste" end
+        return nil
     end
-    local columnStep, lineStep = arrowSteps(key)
-    local isDelete = key == GameKey.DELETE and plain
-    local isCopy = key == GameKey.C and control
-    local isArrow = columnStep ~= nil and plain
-    if not (isDelete or isCopy or isArrow) or not self:ShortcutsReady() then return end
-    if isArrow then
-        self:NudgeSelected(columnStep, lineStep)
-    elseif isDelete then
+    if held ~= 0 then return nil end
+    if key == GameKey.DELETE then return "remove" end
+    if key == GameKey.LEFT then return "move", -1, 0 end
+    if key == GameKey.RIGHT then return "move", 1, 0 end
+    if key == GameKey.UP then return "move", 0, -1 end
+    if key == GameKey.DOWN then return "move", 0, 1 end
+    return nil
+end
+
+-- Log a chord or shortcut key while debugging, with what blocked it
+function LayoutEditorKeys:TraceKey(event, held, shortcut)
+    if held == 0 and shortcut == nil and event.gameKey ~= GameKey.CONTROL then return end
+    DebugLog.Write("Bank Tags editor key ", tostring(GameKey.FromID(event.gameKey)),
+        " gameKey ", tostring(event.gameKey), " systemKey ", tostring(event.systemKey),
+        " modifiers ", tostring(event.modifiers), " held ", held, " shortcut ", tostring(shortcut),
+        " blocked by ", tostring(self:KeysBlocker() or "nothing"),
+        " selected ", tostring(self.selectedLayoutKey))
+end
+
+-- Run each shortcut once per press, never on the OS's held-key repeats
+function LayoutEditorKeys:KeyPressed(event)
+    if event.isRepeat then return end
+    local held = heldModifiers(event)
+    local shortcut, columnStep, lineStep = shortcutFor(event.gameKey, held)
+    if DebugLog.IsEnabled() then self:TraceKey(event, held, shortcut) end
+    if shortcut == nil or not self:KeysReady() then return end
+    if shortcut == "undo" then
+        self:Undo()
+    elseif shortcut == "redo" then
+        self:Redo()
+    elseif shortcut == "paste" then
+        self:PasteClipboard()
+    elseif self:SelectedEntry() == nil then
+        return
+    elseif shortcut == "copy" then
+        self:CopySelected()
+    elseif shortcut == "remove" then
         self:RemoveSelected()
-    else
-        self:DuplicateSelected()
+    elseif self.settings().arrowKeyMovement then
+        self:NudgeSelected(columnStep, lineStep)
     end
 end
 

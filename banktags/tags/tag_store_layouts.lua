@@ -10,6 +10,24 @@ local labelText = TagRules.labelText
 
 local TagStoreLayouts = {}
 
+-- Write slots at grid indexes, giving each new line below the rows its own row
+local function writeCells(rows, view, writes)
+    local columns, firstAdded = view.columns, #rows + 1
+    for index, slot in pairs(writes) do
+        local cell = view.cells[index]
+        local slots, position
+        if cell ~= nil then
+            slots, position = rows[cell.entry].slots, cell.position
+        else
+            local entry = firstAdded + (index - 1) // columns - view.lines
+            for added = #rows + 1, entry do rows[added] = { kind = "row", slots = {} } end
+            slots, position = rows[entry].slots, (index - 1) % columns + 1
+        end
+        for padding = #slots + 1, position - 1 do slots[padding] = { kind = "blank" } end
+        slots[position] = slot
+    end
+end
+
 -- Lay out the rows, then the Unsorted heading and items
 function TagStoreLayouts:GetLayout(tag, columnCount)
     local record = self.data.tags[tag]
@@ -175,7 +193,6 @@ function TagStoreLayouts:MoveLayoutItems(tag, layoutKeys, anchorKey, destination
     local nextData = copy(self.data)
     local rows = nextData.tags[tag].rows
     local view = TagLayouts.Render(rows, columnCount)
-    local columns, firstAdded = view.columns, #rows + 1
     local writes, moved = {}, {}
     for _, move in ipairs(plan.moves) do
         writes[move.destination] = view.slots[move.source]
@@ -191,20 +208,7 @@ function TagStoreLayouts:MoveLayoutItems(tag, layoutKeys, anchorKey, destination
     for position, index in ipairs(displaced) do
         writes[vacated[position]] = view.slots[index] or { kind = "blank" }
     end
-    for index, slot in pairs(writes) do
-        local cell = view.cells[index]
-        local slots, position
-        if cell ~= nil then
-            slots, position = rows[cell.entry].slots, cell.position
-        else
-            -- Below the rows each new line is its own row
-            local entry = firstAdded + (index - 1) // columns - view.lines
-            for added = #rows + 1, entry do rows[added] = { kind = "row", slots = {} } end
-            slots, position = rows[entry].slots, (index - 1) % columns + 1
-        end
-        for padding = #slots + 1, position - 1 do slots[padding] = { kind = "blank" } end
-        slots[position] = slot
-    end
+    writeCells(rows, view, writes)
     local saved, saveReason = self:Commit(nextData, "Could not save the layout.")
     return saved, saveReason, saved
 end
@@ -239,35 +243,45 @@ function TagStoreLayouts:InsertLayoutRow(tag, line, columnCount)
     return self:Commit(nextData, "Could not save the layout.")
 end
 
--- Check whether a laid-out line is in a row and holds nothing at all
--- Labels, reserved blanks, items, and lines past the layout do not count
-function TagStoreLayouts:IsEmptyLayoutLine(tag, line, columnCount)
+-- Count what a laid-out line holds: its label, items, and reserved slots
+-- Lines past the layout hold nothing, so this returns nil for them
+function TagStoreLayouts:LayoutLineContents(tag, line, columnCount)
     local record = self.data.tags[tag]
     line = math.tointeger(tonumber(line))
-    if record == nil or line == nil or line < 0 then return false end
+    if record == nil or line == nil or line < 0 then return nil end
     local view = TagLayouts.Render(record.rows, columnCount)
-    if line >= view.lines then return false end
-    for cell = line * view.columns + 1, (line + 1) * view.columns do
-        if view.cells[cell] == nil or not TagLayouts.IsOpen(view.slots[cell]) then return false end
+    if line >= view.lines then return nil end
+    local contents = { items = 0, reserved = 0 }
+    for _, label in ipairs(view.labels) do
+        if label.row == line then contents.label = label.text end
     end
-    return true
+    for cell = line * view.columns + 1, (line + 1) * view.columns do
+        local slot = view.slots[cell]
+        if slot.kind == "item" then
+            contents.items = contents.items + 1
+        elseif not TagLayouts.IsOpen(slot) then
+            contents.reserved = contents.reserved + 1
+        end
+    end
+    contents.empty = contents.label == nil and contents.items == 0 and contents.reserved == 0
+    return contents
 end
 
--- Remove one empty grid line, moving every line after it up
--- Only that line of a wrapped row goes; Unsorted is untouched
-function TagStoreLayouts:RemoveEmptyLayoutRow(tag, line, columnCount)
-    if not self:IsEmptyLayoutLine(tag, line, columnCount) then
-        return false, "Only an empty row can be removed."
+-- Remove one grid line and everything on it, moving every line after it up
+-- A label line takes only the label; a wrapped row loses only that line; Unsorted is untouched
+function TagStoreLayouts:RemoveLayoutRow(tag, line, columnCount)
+    if self:LayoutLineContents(tag, line, columnCount) == nil then
+        return false, "There is no row there to remove."
     end
     line = math.tointeger(tonumber(line))
     local nextData = copy(self.data)
     local rows = nextData.tags[tag].rows
     local view = TagLayouts.Render(rows, columnCount)
     local index = TagLayouts.EntryAtLine(view, rows, line)
-    local slots = rows[index].slots
-    if #slots <= view.columns then
+    if rows[index].kind == "label" or #rows[index].slots <= view.columns then
         table.remove(rows, index)
     else
+        local slots = rows[index].slots
         local first = (line - view.starts[index]) * view.columns + 1
         for position = math.min(first + view.columns - 1, #slots), first, -1 do
             table.remove(slots, position)
@@ -356,6 +370,49 @@ function TagStoreLayouts:DuplicateLayoutItem(tag, sourceLayoutKey)
     local saved, reason = self:Commit(nextData, "Could not save the layout copy.")
     if not saved then return false, nil, reason end
     return true, nextKey, nil
+end
+
+-- Add copies that open their source stacks, the first copied item at a grid index
+-- Each keeps its line and column offset; every cell they take must be empty, or none is added
+function TagStoreLayouts:PasteLayoutItems(tag, items, destinationIndex, columnCount)
+    destinationIndex = math.tointeger(tonumber(destinationIndex))
+    if self.data.tags[tag] == nil or destinationIndex == nil or destinationIndex < 1
+        or type(items) ~= "table" or #items == 0 then
+        return false, nil, "The paste position is invalid."
+    end
+    local lastCopies = {}
+    for _, item in ipairs(self:GetTaggedItems(tag)) do
+        local number = TagData.CopyNumber(item.layoutKey) or 0
+        lastCopies[item.objectID] = math.max(lastCopies[item.objectID] or 0, number)
+    end
+    local nextData = copy(self.data)
+    local rows = nextData.tags[tag].rows
+    local view = TagLayouts.Render(rows, columnCount)
+    local columns = view.columns
+    local line, column = (destinationIndex - 1) // columns, (destinationIndex - 1) % columns
+    local writes, keys = {}, {}
+    for _, item in ipairs(items) do
+        local itemLine, itemColumn = line + item.line, column + item.column
+        if itemColumn >= columns then return false, nil, "The copies do not fit there." end
+        local index = itemLine * columns + itemColumn + 1
+        if itemLine < view.lines and (view.cells[index] == nil or not TagLayouts.IsOpen(view.slots[index])) then
+            return false, nil, "Paste needs empty cells; an item, reserved slot, or label is in the way."
+        end
+        local copyNumber = (lastCopies[item.objectID] or 0) + 1
+        lastCopies[item.objectID] = copyNumber
+        local key = ItemIdentity.LayoutKey(item.objectID, copyNumber)
+        keys[#keys + 1] = key
+        writes[index] = {
+            kind = "item",
+            objectID = item.objectID,
+            layoutKey = key,
+            sourceLayoutKey = item.sourceLayoutKey,
+        }
+    end
+    writeCells(rows, view, writes)
+    local saved, reason = self:Commit(nextData, "Could not save the pasted copies.")
+    if not saved then return false, nil, reason end
+    return true, keys, nil
 end
 
 -- Copy the data and lay one tag's rows out for a label edit

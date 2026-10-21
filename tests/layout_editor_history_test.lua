@@ -1,6 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Move sorted items with the arrow keys, and undo or redo layout edits with Ctrl+Z and Ctrl+Y
+-- Move sorted items with the arrow keys, once turned on, and undo or redo layout edits with Ctrl+Z and Ctrl+Y
 -- FAKE HOST: stand-in key events, keyboard, pointer, and drags, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -60,6 +60,8 @@ local function openEditor()
     end }
 end
 openEditor()
+-- Arrow-key movement is off until the player turns it on
+assert(app:SetSetting("arrowKeyMovement", true))
 
 -- Find the editor's listener for a key event
 local function listener(event)
@@ -68,17 +70,17 @@ local function listener(event)
     end
     return nil
 end
-local LEFT, RIGHT, UP, DOWN, Z, Y, C, DELETE = 96, 97, 98, 99, 64, 37, 66, 101
+-- GameKey values from the client docs
+local LEFT, RIGHT, UP, DOWN, Z, Y, C, V, DELETE = 96, 97, 98, 99, 64, 37, 66, 67, 101
 local NONE, SHIFT_HELD, CONTROL_HELD, CONTROL_SHIFT = 0, 1, 2, 3
+-- Send a key press as the client's KeyDown payload, optionally as the OS's held-key repeat
 local function press(gameKey, modifiers, isRepeat)
-    listener("KeyDown")({ gameKey = gameKey, modifiers = modifiers or NONE, isRepeat = isRepeat == true })
+    listener("KeyDown")({ gameKey = gameKey, systemKey = 0, modifiers = modifiers or NONE,
+        isRepeat = isRepeat == true, timestamp = 0 })
 end
-local function release(gameKey)
-    listener("KeyUp")({ gameKey = gameKey, modifiers = NONE })
-end
+-- The editor acts on presses alone, so a tap is one press
 local function tap(gameKey, modifiers)
     press(gameKey, modifiers)
-    release(gameKey)
 end
 local function undo() tap(Z, CONTROL_HELD) end
 local function redo() tap(Y, CONTROL_HELD) end
@@ -162,11 +164,10 @@ local before = saved()
 tap(RIGHT)
 assert(lines() == "2 1 3 4 | Mid | 5 1 / 99", lines())
 assert(changes == 1 and editor.selectedLayoutKey == key(1, 1) and editor.errorBanner == nil)
--- Holding the key, or its repeats, moves only once
-press(LEFT)
+-- Holding the key moves only once, through the OS's repeats
 press(LEFT)
 press(LEFT, NONE, true)
-release(LEFT)
+press(LEFT, NONE, true)
 assert(lines() == "1 2 3 4 | Mid | 5 1 / 99" and changes == 2)
 -- Shift, Ctrl, and Ctrl+Shift arrows do nothing
 for _, modifiers in ipairs({ SHIFT_HELD, CONTROL_HELD, CONTROL_SHIFT }) do tap(RIGHT, modifiers) end
@@ -259,9 +260,11 @@ step("group drag", function()
     shiftClick("sorted", 1, 2)
     drag("sorted", 0, 2, "sorted", 2, 3)
 end)
-step("Ctrl+C", function()
+step("Ctrl+V", function()
     click("sorted", 3, 0)
     tap(C, CONTROL_HELD)
+    click("sorted", 0, 6)
+    tap(V, CONTROL_HELD)
 end)
 step("Delete", function()
     click("sorted", 3, 0)
@@ -286,7 +289,7 @@ step("delete label", function()
     assert(prompt.onDelete())
 end)
 step("insert row", function() assert(editor:InsertEmptyRow(1)) end)
-step("remove row", function() assert(editor:RemoveEmptyRow(1)) end)
+step("remove row", function() assert(editor:RemoveRow(1)) end)
 local last = #states
 assert(#names == 15)
 
