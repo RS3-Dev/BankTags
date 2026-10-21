@@ -508,6 +508,7 @@ function LayoutEditorWindow:RefreshCenter()
     self:DestroyCenterNodes()
     local sorted, unsorted = self.panes.sorted, self.panes.unsorted
     sorted.slots, unsorted.slots, self.centerLabels = {}, {}, {}
+    self.usedRows = 0
     if self.selectedTag == nil then
         for _, name in ipairs(PANE_NAMES) do
             local pane = self.panes[name]
@@ -534,6 +535,7 @@ function LayoutEditorWindow:RefreshCenter()
             sorted.view.content, Size.GRID_LEFT, BankGrid.LabelY(label.row), label.text)
     end
     local usedRows = boundary // columns
+    self.usedRows = usedRows
     -- Keep one empty drop row after the last used row
     self:DrawPane(sorted, usedRows + (usedRows > 0 and 1 or 0), labelRows)
     -- Unsorted packs its items at its own columns
@@ -666,6 +668,45 @@ function LayoutEditorWindow:PromptNewLabel(row)
             return true, nil
         end,
     })
+    return true
+end
+
+-- Find the sorted grid row under the pointer for a right-click menu
+-- Only the sorted items count, not its scrollbar, the other panes, or a covering window
+function LayoutEditorWindow:RowMenuTarget()
+    if self.window == nil or self.window.root.hidden or self.drag ~= nil
+        or self.selectedTag == nil or self:OverlayShown() then return nil end
+    local x, y = self:ContentPointer()
+    local pane, paneX, paneY = self:PaneAt(x, y)
+    if pane == nil or pane.name ~= "sorted" or paneX >= pane.width - Size.SCROLLBAR_RESERVE then return nil end
+    local row = self:RowAt(pane, paneX, paneY)
+    if row == nil then return nil end
+    return {
+        tag = self.selectedTag,
+        row = row,
+        usedRows = self.usedRows,
+        columns = Size.CENTER_COLUMNS,
+        data = self.store.data,
+    }
+end
+
+-- Check that a menu's row still means the same place in this editor
+function LayoutEditorWindow:RowTargetCurrent(target)
+    return self.window ~= nil and not self.window.root.hidden and self.drag == nil
+        and self.selectedTag == target.tag
+        and self.store.data == target.data
+        and Size.CENTER_COLUMNS == target.columns
+end
+
+-- Insert an empty row at a grid line, moving the rows below it down
+function LayoutEditorWindow:InsertEmptyRow(line)
+    local saved, reason = self.store:InsertLayoutRow(self.selectedTag, line, Size.CENTER_COLUMNS)
+    if not saved then
+        self:ShowError(reason or "Could not add the row.")
+        return false
+    end
+    self:RefreshCenter()
+    self:NotifyChanged()
     return true
 end
 

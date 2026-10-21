@@ -298,4 +298,107 @@ assert(not target:ImportText(shared, { folderKey = "gone" }))
 assert(not target:ImportText(shared, { newFolderName = string.rep("x", 41) }))
 assert(Json.encode(target.data) == before)
 
+-- Empty layout rows -----------------------------------------------------------------
+
+db = {}
+local rowsStore = TagStore.new()
+assert(rowsStore:CreateTag("rows"))
+local function rowItem(objectID, copy, source)
+    return { kind = "item", objectID = objectID, layoutKey = key(objectID, copy),
+        sourceLayoutKey = source ~= nil and key(objectID, source) or nil }
+end
+-- Lines at ten wide: 0 Top, 1 a whip and its copy, 2-4 a row of 25 wrapping,
+-- 5 an empty row, 6 End, 7 a shark beside a reserved slot
+local long = {}
+for objectID = 1, 25 do long[objectID] = rowItem(5000 + objectID) end
+long[11], long[12] = { kind = "blank" }, { kind = "blank" }
+rowsStore.data.tags.rows.rows = {
+    { kind = "label", text = "Top" },
+    { kind = "row", slots = { rowItem(4151, 1), rowItem(4151, 2, 1) } },
+    { kind = "row", slots = long },
+    { kind = "row", slots = {} },
+    { kind = "label", text = "End" },
+    { kind = "row", slots = { rowItem(385, 1), { kind = "blank", dormant = "gone_item" } } },
+}
+rowsStore.data.tags.rows.unsorted = { rowItem(385, 2) }
+assert(rowsStore:Save())
+-- Describe each grid line ten wide: a label's text, "-" for empty, or its first item
+local function lines()
+    local view = TagLayouts.Render(rowsStore.data.tags.rows.rows, 10)
+    local out = {}
+    for line = 0, view.lines - 1 do
+        local text = "-"
+        for _, label in ipairs(view.labels) do if label.row == line then text = label.text end end
+        for cell = line * 10 + 1, line * 10 + 10 do
+            local slot = view.slots[cell]
+            if text == "-" and slot.kind == "item" then text = tostring(slot.objectID) end
+            if text == "-" and slot.dormant ~= nil then text = "reserved" end
+        end
+        out[#out + 1] = text
+    end
+    return table.concat(out, " ")
+end
+local unsortedBefore = Json.encode(rowsStore.data.tags.rows.unsorted)
+assert(lines() == "Top 4151 5001 5013 5021 - End 385", lines())
+
+-- One save moves a label and everything after it down a line
+writes = 0
+assert(rowsStore:InsertLayoutRow("rows", 0, 10))
+assert(writes > 0 and lines() == "- Top 4151 5001 5013 5021 - End 385", lines())
+local saveWrites = writes
+-- Above a row, and above the label after an empty row
+assert(rowsStore:InsertLayoutRow("rows", 2, 10))
+assert(lines() == "- Top - 4151 5001 5013 5021 - End 385", lines())
+assert(writes == saveWrites * 2, "one insert is one save")
+assert(rowsStore:InsertLayoutRow("rows", 8, 10))
+assert(lines() == "- Top - 4151 5001 5013 5021 - - End 385", lines())
+
+-- Inside a wrapped row, the row splits at the line; its blank cells stay put
+assert(rowsStore:InsertLayoutRow("rows", 5, 10))
+assert(lines() == "- Top - 4151 5001 - 5013 5021 - - End 385", lines())
+local view = TagLayouts.Render(rowsStore.data.tags.rows.rows, 10)
+assert(view.slots[61].kind == "blank" and view.slots[62].kind == "blank" and view.slots[63].objectID == 5013)
+assert(view.slots[71].objectID == 5021 and view.slots[75].objectID == 5025)
+-- A wrapped line that splits off empty keeps its line as a row of its own
+local blanks = {}
+for position = 1, 30 do blanks[position] = { kind = "blank" } end
+blanks[1], blanks[30] = rowItem(6001), rowItem(6002)
+rowsStore.data.tags.rows.rows[#rowsStore.data.tags.rows.rows + 1] = { kind = "row", slots = blanks }
+assert(rowsStore:Save())
+assert(lines() == "- Top - 4151 5001 - 5013 5021 - - End 385 6001 - 6002", lines())
+assert(rowsStore:InsertLayoutRow("rows", 14, 10))
+assert(lines() == "- Top - 4151 5001 - 5013 5021 - - End 385 6001 - - 6002", lines())
+view = TagLayouts.Render(rowsStore.data.tags.rows.rows, 10)
+assert(view.slots[160].objectID == 6002)
+
+-- Copies, their sources, reserved slots, and Unsorted all stay as they were
+local whipCopy = view.slots[32]
+assert(whipCopy.layoutKey == key(4151, 2) and whipCopy.sourceLayoutKey == key(4151, 1))
+assert(view.slots[112].dormant == "gone_item")
+assert(Json.encode(rowsStore.data.tags.rows.unsorted) == unsortedBefore)
+
+-- The empty rows survive a share code and a reload
+local reloaded = assert(TagData.Decode(TagData.Encode(rowsStore.data, "rows")))
+assert(Json.encode(reloaded.tags.rows.rows) == Json.encode(rowsStore.data.tags.rows.rows))
+assert(Json.encode(TagStore.new().data.tags.rows.rows) == Json.encode(rowsStore.data.tags.rows.rows))
+
+-- Lines past the layout, bad lines, and missing tags change nothing
+local rowsBefore = Json.encode(rowsStore.data)
+writes = 0
+for _, case in ipairs({ { "rows", 16 }, { "rows", 99 }, { "rows", -1 }, { "rows", "x" }, { "gone", 0 } }) do
+    local saved, reason = rowsStore:InsertLayoutRow(case[1], case[2], 10)
+    assert(not saved and reason ~= nil)
+end
+assert(writes == 0 and Json.encode(rowsStore.data) == rowsBefore)
+
+-- A full tag refuses another row, with a reason the editor can show
+local full = {}
+for index = 1, TagData.EDIT_ENTRY_LIMIT - 2 do full[index] = { kind = "label", text = "L" .. index } end
+full[#full + 1] = { kind = "row", slots = { rowItem(385, 3) } }
+rowsStore.data.tags.rows.rows, rowsStore.data.tags.rows.unsorted = full, {}
+assert(rowsStore:Save())
+rowsBefore = Json.encode(rowsStore.data)
+local saved, reason = rowsStore:InsertLayoutRow("rows", 0, 10)
+assert(not saved and reason:find("at most", 1, true) and Json.encode(rowsStore.data) == rowsBefore)
+
 print("tag_store_test: ok")

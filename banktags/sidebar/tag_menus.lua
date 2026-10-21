@@ -63,9 +63,10 @@ function TagMenus:EditorOpen()
     return self.app.windows.layoutEditor ~= nil
 end
 
--- Run an action next tick if current() still returns true and the editor stayed closed
-function TagMenus:Defer(current, action)
-    local function live() return not self:EditorOpen() and current() end
+-- Run an action next tick if current() still returns true
+-- Bank entries also need the editor to stay closed; editor entries check their editor in current()
+function TagMenus:Defer(current, action, forEditor)
+    local function live() return (forEditor or not self:EditorOpen()) and current() end
     return function()
         if not live() then return end
         self.pending[#self.pending + 1] = function()
@@ -94,11 +95,15 @@ function TagMenus:ItemCheck(item, extra)
 end
 
 -- Answer one menu: entries for the bank item beneath the pointer, or for the Tags row
--- The layout editor covers the bank, so nothing beneath it gets entries
+-- The layout editor covers the bank, so nothing beneath it gets entries; only its own grid does
 function TagMenus:HandleMenu(menu)
     self.rowMenu = nil
     local handle = self.app.handle
-    if handle == nil or self:EditorOpen() then return end
+    if handle == nil then return end
+    if self:EditorOpen() then
+        self:AddEditorEntries(menu)
+        return
+    end
     local item = handle:GetMenuItem(menu)
     if item ~= nil then
         self:AddItemEntries(menu, item)
@@ -217,6 +222,33 @@ function TagMenus:AddRowEntries(menu)
     if not MenuEntries.AddTop(menu, entries) then return end
     self.rowMenu = rowMenu
     if entry.kind == "tag" then self:AddFolderSubmenu(menu, entry.tag, #entries + 1, chosen, current) end
+end
+
+-- Add row inserts for the layout editor's sorted grid row under the pointer
+-- Like a Tags row, they act only when picked from the opened menu, and only once
+-- Another save, tag, size, drag, or a closed editor makes the menu out of date
+function TagMenus:AddEditorEntries(menu)
+    local windows = self.app.windows
+    local editor = windows.layoutEditor
+    local target = editor:RowMenuTarget()
+    if target == nil then return end
+    local current = function() return windows.layoutEditor == editor and editor:RowTargetCurrent(target) end
+    local rowMenu = { id = "editor row " .. target.row, opened = false, used = false }
+    local entries = {}
+    -- Rows past the layout are already empty, so they offer nothing
+    local function offer(label, line)
+        if line >= target.usedRows then return end
+        local deferred = self:Defer(current, function() editor:InsertEmptyRow(line) end, true)
+        entries[#entries + 1] = { label = label, action = function()
+            if not rowMenu.opened or rowMenu.used then return end
+            rowMenu.used = true
+            deferred()
+        end }
+    end
+    offer("Add empty row above", target.row)
+    offer("Add empty row below", target.row + 1)
+    if #entries == 0 or not MenuEntries.AddTop(menu, entries) then return end
+    self.rowMenu = rowMenu
 end
 
 -- Add the folder submenu below the row's other actions

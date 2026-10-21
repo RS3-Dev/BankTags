@@ -117,6 +117,36 @@ function TagStoreLayouts:MoveLayoutItem(tag, layoutKey, destinationIndex, column
     return saved, reason, saved
 end
 
+-- Insert an empty grid row at a line, moving that line and every one after it down
+-- A row wrapped across the line is split there; Unsorted is untouched
+function TagStoreLayouts:InsertLayoutRow(tag, line, columnCount)
+    line = math.tointeger(tonumber(line))
+    if self.data.tags[tag] == nil or line == nil or line < 0 then
+        return false, "The row position is invalid."
+    end
+    local nextData = copy(self.data)
+    local rows = nextData.tags[tag].rows
+    local view = TagLayouts.Render(rows, columnCount)
+    -- Rows past the layout are already empty, and saving trims them
+    if line >= view.lines then return false, "There are no rows below to move down." end
+    local index = TagLayouts.EntryAtLine(view, rows, line)
+    local added = 1
+    local split = line - view.starts[index]
+    if split > 0 then
+        -- Labels take one line, so only a wrapped row starts above the line
+        local slots = rows[index].slots
+        local tail = table.move(slots, split * view.columns + 1, #slots, 1, {})
+        for position = #slots, split * view.columns + 1, -1 do slots[position] = nil end
+        TagRules.trimTrailingLayoutBlanks(slots)
+        -- Empty lines trimmed from the first part still need a row each
+        added = added + split - math.max(1, math.ceil(#slots / view.columns))
+        index = index + 1
+        table.insert(rows, index, { kind = "row", slots = tail })
+    end
+    for _ = 1, added do table.insert(rows, index, { kind = "row", slots = {} }) end
+    return self:Commit(nextData, "Could not save the layout.")
+end
+
 -- Move one arranged item to Unsorted, leaving a blank in its place
 function TagStoreLayouts:UnarrangeLayoutItem(tag, layoutKey)
     local record = self.data.tags[tag]
