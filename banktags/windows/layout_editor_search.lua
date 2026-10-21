@@ -101,15 +101,7 @@ function LayoutEditorSearch:ShowSearchResults(results)
     if self.labelDragSurface ~= nil then self.labelDragSurface:MoveToFront() end
 end
 
--- Check whether a tag's copy is in its Unsorted list
-local function isUnsorted(store, tag, layoutKey)
-    for _, slot in ipairs(store.data.tags[tag].unsorted) do
-        if slot.layoutKey == layoutKey then return true end
-    end
-    return false
-end
-
--- Save a search result to the tag at a sorted slot, or with none to Unsorted
+-- Save a search result to the tag at a sorted slot
 function LayoutEditorSearch:AddCatalogResult(result, destination)
     local objectID = math.tointeger(tonumber(result and result.objectId))
     if self.selectedTag == nil or objectID == nil then return false end
@@ -129,13 +121,8 @@ function LayoutEditorSearch:AddCatalogResult(result, destination)
         self:ShowError(reason or "Could not add the item to this tag.")
         return false
     end
-    local positioned, positionReason = true, nil
-    if destination ~= nil then
-        positioned, positionReason = self.store:MoveLayoutItem(
-            self.selectedTag, layoutKey, destination, Size.CENTER_COLUMNS)
-    elseif not isUnsorted(self.store, self.selectedTag, layoutKey) then
-        positioned, positionReason = self.store:UnarrangeLayoutItem(self.selectedTag, layoutKey)
-    end
+    local positioned, positionReason = self.store:MoveLayoutItem(
+        self.selectedTag, layoutKey, destination, Size.CENTER_COLUMNS)
     self.selectedLayoutKey = layoutKey
     self:RefreshCenter()
     if not positioned then

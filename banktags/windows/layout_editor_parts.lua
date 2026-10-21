@@ -7,7 +7,9 @@ local Size = {}
 Parts.size = Size
 
 -- Shown in the empty item search panel
-Parts.SEARCH_HINT = "Search for an item, then drag it into the grid."
+Parts.SEARCH_HINT = "Search for an item, then drag it into the layout."
+-- Shown under the item actions
+Parts.ACTIONS_HELP = "Drag items into the layout. Delete removes, Ctrl+C copies."
 
 -- Default sizes match the expanded bank window plus Bank Core's sidebar
 -- Offsets land on the bank's own panels, and a larger bank grows them
@@ -36,26 +38,32 @@ Size.LABEL_LINE_OFFSET = BankGrid.LABEL_LINE_OFFSET
 Size.LABEL_GHOST_WIDTH = 180
 Size.LABEL_GHOST_HEIGHT = 28
 Size.DEFAULT_SURFACE_WIDTH = 473
-Size.DEFAULT_SURFACE_HEIGHT = 550
--- Sorted and Unsorted views share this x and width
+-- The sorted view fills the center surface
 Size.CENTER_VIEW_X = 4
 Size.SORTED_VIEW_Y = 4
 -- A 467px view leaves 449px for items after PrettyUI's scrollbar
 Size.DEFAULT_VIEW_WIDTH = 467
--- Unsorted sits under the sorted grid: a heading, then four item rows
-Size.UNSORTED_ROWS = 4
-Size.UNSORTED_HEADING_HEIGHT = 26
-Size.UNSORTED_VIEW_HEIGHT = BankGrid.TOP + Size.UNSORTED_ROWS * BankGrid.STEP
-Size.PANE_GAP = 4
--- Grid actions share a footer row 8px below the grid
-Size.DEFAULT_FOOTER_Y = 558
-Size.FOOTER_HEIGHT = 28
-Size.LABEL_BUTTON_WIDTH = 104
-Size.UNSORT_BUTTON_WIDTH = 140
-Size.SEARCH_LIST_TOP = 42
-Size.SEARCH_LIST_BOTTOM = 8
 -- PrettyUI reserves this much for a scroll list's scrollbar and its gap
 Size.SCROLLBAR_RESERVE = 18
+-- The right column: Unsorted and Search tabs over shared item actions
+Size.RIGHT_INSET = 8
+Size.RIGHT_VIEW_WIDTH = Size.RIGHT_WIDTH - 2 * Size.RIGHT_INSET
+Size.TAB_Y = 8
+Size.TAB_HEIGHT = 26
+Size.TAB_GAP = 4
+Size.TAB_WIDTH = (Size.RIGHT_VIEW_WIDTH - Size.TAB_GAP) // 2
+Size.TAB_PAGE_Y = Size.TAB_Y + Size.TAB_HEIGHT + 8
+Size.SEARCH_FIELD_HEIGHT = 26
+Size.SEARCH_LIST_TOP = Size.TAB_PAGE_Y + Size.SEARCH_FIELD_HEIGHT + 8
+Size.BUTTON_HEIGHT = 28
+Size.BUTTON_GAP = 4
+Size.BUTTON_STEP = Size.BUTTON_HEIGHT + Size.BUTTON_GAP
+Size.HELP_HEIGHT = 30
+-- Three button rows, then the help text
+Size.ACTIONS_HEIGHT = 3 * Size.BUTTON_STEP + Size.HELP_HEIGHT
+-- Unsorted fits as many columns as the right view holds
+Size.UNSORTED_COLUMNS = (Size.RIGHT_VIEW_WIDTH - Size.SCROLLBAR_RESERVE - Size.GRID_LEFT
+    + Size.GRID_STEP - Size.GRID_SLOT_SIZE) // Size.GRID_STEP
 
 -- Size the editor to cover the bank at Bank Core's columns
 -- Only one editor is open, so sizes live in Size
@@ -69,16 +77,15 @@ function Parts.SizeToBank(columns, bankWidth, bankHeight)
     Size.PANEL_HEIGHT = Size.DEFAULT_PANEL_HEIGHT + extraHeight
     Size.CENTER_WIDTH = Size.DEFAULT_CENTER_WIDTH + extraWidth
     Size.CENTER_SURFACE_WIDTH = Size.DEFAULT_SURFACE_WIDTH + extraWidth
-    Size.CENTER_SURFACE_HEIGHT = Size.DEFAULT_SURFACE_HEIGHT + extraHeight
+    Size.CENTER_SURFACE_HEIGHT = Size.PANEL_HEIGHT
     Size.CENTER_VIEW_WIDTH = Size.DEFAULT_VIEW_WIDTH + extraWidth
-    -- A taller bank grows only the sorted view
-    Size.SORTED_VIEW_HEIGHT = Size.CENTER_SURFACE_HEIGHT - 8 - Size.PANE_GAP
-        - Size.UNSORTED_HEADING_HEIGHT - Size.UNSORTED_VIEW_HEIGHT
-    Size.UNSORTED_HEADING_Y = Size.SORTED_VIEW_Y + Size.SORTED_VIEW_HEIGHT + Size.PANE_GAP
-    Size.UNSORTED_VIEW_Y = Size.UNSORTED_HEADING_Y + Size.UNSORTED_HEADING_HEIGHT
+    Size.SORTED_VIEW_HEIGHT = Size.CENTER_SURFACE_HEIGHT - 2 * Size.SORTED_VIEW_Y
     Size.RIGHT_X = Size.CENTER_X + Size.CENTER_WIDTH
-    Size.LABEL_BUTTON_X = Size.CENTER_SURFACE_WIDTH - Size.LABEL_BUTTON_WIDTH
-    Size.FOOTER_Y = Size.DEFAULT_FOOTER_Y + extraHeight
+    -- A taller bank grows both right tabs; the actions stay at the bottom
+    Size.ACTIONS_Y = Size.PANEL_HEIGHT - Size.RIGHT_INSET - Size.ACTIONS_HEIGHT
+    Size.LABEL_BUTTON_Y = Size.ACTIONS_Y + 2 * Size.BUTTON_STEP
+    Size.UNSORTED_VIEW_HEIGHT = Size.ACTIONS_Y - Size.RIGHT_INSET - Size.TAB_PAGE_Y
+    Size.SEARCH_LIST_HEIGHT = Size.ACTIONS_Y - Size.RIGHT_INSET - Size.SEARCH_LIST_TOP
 end
 Parts.SizeToBank(BankGrid.DEFAULT_COLUMNS)
 

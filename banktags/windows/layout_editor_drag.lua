@@ -21,16 +21,16 @@ local LayoutEditorDrag = {}
 function LayoutEditorDrag:RestoreDragSurface(surface, kind)
     if surface == nil then return end
     local pane = self.panes ~= nil and self.panes[kind] or nil
+    local rightX = Size.RIGHT_X + Size.RIGHT_INSET
     if pane ~= nil then
-        surface:SetPos(Size.CENTER_X + Size.CENTER_VIEW_X, Size.PANEL_TOP + pane.y)
-        surface:SetSize(Size.CENTER_VIEW_WIDTH - Size.SCROLLBAR_RESERVE, pane.height)
+        surface:SetPos(pane.x, pane.y)
+        surface:SetSize(pane.width - Size.SCROLLBAR_RESERVE, pane.height)
     elseif kind == "search" then
-        surface:SetPos(Size.RIGHT_X + 8, Size.PANEL_TOP + Size.SEARCH_LIST_TOP)
-        surface:SetSize(Size.RIGHT_WIDTH - 16 - Size.SCROLLBAR_RESERVE,
-            Size.PANEL_HEIGHT - Size.SEARCH_LIST_TOP - Size.SEARCH_LIST_BOTTOM)
+        surface:SetPos(rightX, Size.PANEL_TOP + Size.SEARCH_LIST_TOP)
+        surface:SetSize(Size.RIGHT_VIEW_WIDTH - Size.SCROLLBAR_RESERVE, Size.SEARCH_LIST_HEIGHT)
     elseif kind == "label" then
-        surface:SetPos(Size.CENTER_X + Size.LABEL_BUTTON_X, Size.PANEL_TOP + Size.FOOTER_Y)
-        surface:SetSize(Size.LABEL_BUTTON_WIDTH, Size.FOOTER_HEIGHT)
+        surface:SetPos(rightX, Size.PANEL_TOP + Size.LABEL_BUTTON_Y)
+        surface:SetSize(Size.RIGHT_VIEW_WIDTH, Size.BUTTON_HEIGHT)
     end
     surface:MoveToFront()
 end
@@ -60,13 +60,13 @@ function LayoutEditorDrag:SearchSurfaceResult(y)
     return self.searchResults[index]
 end
 
--- Check whether an editor content point is over the search results
+-- Check whether an editor content point is over the shown search results
 function LayoutEditorDrag:OnSearchList(x, y)
     x, y = tonumber(x), tonumber(y)
-    if x == nil or y == nil then return false end
-    local left, top = Size.RIGHT_X + 8, Size.PANEL_TOP + Size.SEARCH_LIST_TOP
-    return x >= left and x < left + Size.RIGHT_WIDTH - 16
-        and y >= top and y < Size.PANEL_TOP + Size.PANEL_HEIGHT - Size.SEARCH_LIST_BOTTOM
+    if x == nil or y == nil or self.rightTab ~= "search" then return false end
+    local left, top = Size.RIGHT_X + Size.RIGHT_INSET, Size.PANEL_TOP + Size.SEARCH_LIST_TOP
+    return x >= left and x < left + Size.RIGHT_VIEW_WIDTH
+        and y >= top and y < top + Size.SEARCH_LIST_HEIGHT
 end
 
 -- Scroll the list a surface covers, or during a drag the one under the pointer
@@ -78,8 +78,11 @@ function LayoutEditorDrag:ScrollWheel(component, delta, kind)
         kind = pane ~= nil and pane.name or (self:OnSearchList(x, y) and "search" or nil)
     end
     local pane = self.panes ~= nil and self.panes[kind] or nil
-    if pane ~= nil then return pane.view._onScrollWheel(component, delta) end
-    if kind == "search" then return self.searchList:_OnScrollWheel(component, delta) end
+    -- A hidden tab never scrolls
+    if pane ~= nil and not pane.hidden then return pane.view._onScrollWheel(component, delta) end
+    if kind == "search" and self.rightTab == "search" then
+        return self.searchList:_OnScrollWheel(component, delta)
+    end
     return true
 end
 
@@ -87,6 +90,7 @@ end
 function LayoutEditorDrag:BindDragSurface(surface, kind, onPress)
     surface:Subscribe(ui.Hook.ONCLICK, function(_, x, y)
         if self.drag ~= nil then return false end
+        if surface.hidden then return true end
         return onPress(x, y)
     end)
     -- Update the drag only while this surface owns it
@@ -400,9 +404,9 @@ end
 function LayoutEditorDrag:OnLabelButton(x, y)
     x, y = tonumber(x), tonumber(y)
     if x == nil or y == nil then return false end
-    local left, top = Size.CENTER_X + Size.LABEL_BUTTON_X, Size.PANEL_TOP + Size.FOOTER_Y
-    return x >= left and x < left + Size.LABEL_BUTTON_WIDTH
-        and y >= top and y < top + Size.FOOTER_HEIGHT
+    local left, top = Size.RIGHT_X + Size.RIGHT_INSET, Size.PANEL_TOP + Size.LABEL_BUTTON_Y
+    return x >= left and x < left + Size.RIGHT_VIEW_WIDTH
+        and y >= top and y < top + Size.BUTTON_HEIGHT
 end
 
 -- Pick a new label's row: above the selection, or after the items
@@ -440,7 +444,7 @@ function LayoutEditorDrag:FinishLabelDrag(x, y)
     return false
 end
 
--- Add the dragged result at a sorted slot, or to Unsorted
+-- Add the dragged result at a sorted slot
 function LayoutEditorDrag:FinishSearchDrag(x, y)
     if self.drag == nil or self.drag.kind ~= "search" then return false end
     local drag = self.drag
@@ -450,9 +454,7 @@ function LayoutEditorDrag:FinishSearchDrag(x, y)
     self.drag = nil
     if drag.ghost ~= nil then pcall(function() drag.ghost:Destroy() end) end
     self:RestoreDragSurface(drag.sourceSurface, drag.sourceSurfaceKind)
-    if destination ~= nil or (pane ~= nil and pane.name == "unsorted") then
-        self:AddCatalogResult(drag.result, destination)
-    end
+    if destination ~= nil then self:AddCatalogResult(drag.result, destination) end
     return false
 end
 

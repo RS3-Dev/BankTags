@@ -44,8 +44,11 @@ local LABEL_TEXT_COLOUR = Theme.HEADING_TEXT
 local LABEL_LINE_COLOUR = Theme.HEADING_LINE
 local DRAG_EVENT = Config.PLUGIN_REF .. "_layout_editor"
 local FOOTER_BUTTON_GAP = 8
--- Panes in the center column, top to bottom
+-- The sorted grid, then the Unsorted grid in the right column
 local PANE_NAMES = { "sorted", "unsorted" }
+-- Right-column tabs, left to right; Unsorted shows first
+local RIGHT_TABS = { "unsorted", "search" }
+local TAB_TITLES = { unsorted = BankGrid.UNSORTED_LABEL, search = "Search" }
 local ICON_BUTTON_SIZE = 28
 
 -- Destroy saved UI parts newest first, skipping ones already gone
@@ -282,17 +285,21 @@ function LayoutEditorWindow:CreateTagColumn()
     self.columnFrame = frame(column, 0, 0, Size.COLUMN_WIDTH, Size.PANEL_HEIGHT, FRAME)
 end
 
--- Create one scrolling grid in the center column
-function LayoutEditorWindow:CreatePane(name, y, height)
+-- Create one scrolling grid at a content point, with its own columns
+function LayoutEditorWindow:CreatePane(name, parent, x, y, width, height, columns)
+    local parentX, parentY = Geometry.relativePosition(parent, self.content)
     return {
         name = name,
-        y = y,
+        x = parentX + x,
+        y = parentY + y,
+        width = width,
         height = height,
+        columns = columns,
         slots = {},
-        view = prettyui.SimpleView.new(self.centerPanel, {
-            x = Size.CENTER_VIEW_X,
+        view = prettyui.SimpleView.new(parent, {
+            x = x,
             y = y,
-            width = Size.CENTER_VIEW_WIDTH,
+            width = width,
             height = height,
             contentHeight = height,
             scrollStep = Size.GRID_STEP,
@@ -300,7 +307,98 @@ function LayoutEditorWindow:CreatePane(name, y, height)
     }
 end
 
--- Build the tag column, grids, and search columns
+-- Create a right-column page that one tab shows
+function LayoutEditorWindow:CreateTabPage()
+    local page = ui.Layer.new(self.rightPanel)
+    page:SetPos(0, 0)
+    page:SetSize(Size.RIGHT_WIDTH, Size.PANEL_HEIGHT)
+    page.clickthrough = true
+    return page
+end
+
+-- Build the Unsorted and Search tabs and their pages
+function LayoutEditorWindow:CreateRightTabs()
+    local inset = Size.RIGHT_INSET
+    self.tabButtons = {}
+    for index, name in ipairs(RIGHT_TABS) do
+        self.tabButtons[name] = BankControls.button(
+            self.rightPanel, TAB_TITLES[name], function() self:ShowRightTab(name) end,
+            { x = inset + (index - 1) * (Size.TAB_WIDTH + Size.TAB_GAP), y = Size.TAB_Y,
+                width = Size.TAB_WIDTH, height = Size.TAB_HEIGHT }
+        )
+    end
+    self.tabPages = { unsorted = self:CreateTabPage(), search = self:CreateTabPage() }
+
+    local unsortedPage = self.tabPages.unsorted
+    rectangle(unsortedPage, inset, Size.TAB_PAGE_Y,
+        Size.RIGHT_VIEW_WIDTH, Size.UNSORTED_VIEW_HEIGHT, VIEW_BACKGROUND, true)
+    frame(unsortedPage, inset, Size.TAB_PAGE_Y,
+        Size.RIGHT_VIEW_WIDTH, Size.UNSORTED_VIEW_HEIGHT, INNER_FRAME)
+    self.panes.unsorted = self:CreatePane("unsorted", unsortedPage, inset, Size.TAB_PAGE_Y,
+        Size.RIGHT_VIEW_WIDTH, Size.UNSORTED_VIEW_HEIGHT, Size.UNSORTED_COLUMNS)
+
+    local searchPage = self.tabPages.search
+    self.itemSearch = prettyui.TextField.new(searchPage, {
+        x = inset, y = Size.TAB_PAGE_Y, width = Size.RIGHT_VIEW_WIDTH, height = Size.SEARCH_FIELD_HEIGHT,
+        placeholder = "Search items...", maxLength = 80,
+        onChange = function(_, _, value) self:RunSearch(value) end,
+        onSubmit = function(_, value) self:RunSearch(value) end,
+    })
+    self.searchList = prettyui.List.new(searchPage, {
+        x = inset,
+        y = Size.SEARCH_LIST_TOP,
+        width = Size.RIGHT_VIEW_WIDTH,
+        height = Size.SEARCH_LIST_HEIGHT,
+        entryHeight = 32,
+        maxSelected = 1,
+        backgroundColour = 0x00000000,
+        borderColour = INNER_FRAME,
+        selectedColour = ROW_SELECTED,
+    })
+    self.searchHint = prettyui.Text.new(searchPage, {
+        text = Parts.SEARCH_HINT,
+        x = inset + 10,
+        y = Size.SEARCH_LIST_TOP + 10,
+        width = Size.RIGHT_VIEW_WIDTH - 20,
+        height = 120,
+        colour = MUTED,
+        maxLines = 8,
+    })
+end
+
+-- Build the item actions and help under the right tabs
+-- These replace the right-click menu, which only Bank Core may change
+function LayoutEditorWindow:CreateActions()
+    local x, y = Size.RIGHT_INSET, Size.ACTIONS_Y
+    local width, height = Size.RIGHT_VIEW_WIDTH, Size.BUTTON_HEIGHT
+    local half = (width - Size.BUTTON_GAP) // 2
+    self.duplicateButton = BankControls.button(
+        self.rightPanel, "Create Copy", function() self:DuplicateSelected() end,
+        { x = x, y = y, width = half, height = height, tooltip = "Copy the selected item (Ctrl+C)" }
+    )
+    self.removeButton = BankControls.button(
+        self.rightPanel, "Remove", function() self:RemoveSelected() end,
+        { x = x + half + Size.BUTTON_GAP, y = y, width = width - half - Size.BUTTON_GAP, height = height,
+            tooltip = "Remove the selected item (Delete)" }
+    )
+    self.unsortButton = BankControls.button(
+        self.rightPanel, "Move to Unsorted", function() self:UnarrangeSelected() end,
+        { x = x, y = y + Size.BUTTON_STEP, width = width, height = height }
+    )
+    -- Its drag surface handles clicks too, so the button has no action
+    self.newLabelButton = BankControls.button(self.rightPanel, "New label", nil, {
+        x = x, y = Size.LABEL_BUTTON_Y, width = width, height = height,
+    })
+    self.actionsHelp = prettyui.Text.new(self.rightPanel, {
+        text = Parts.ACTIONS_HELP,
+        x = x, y = Size.LABEL_BUTTON_Y + Size.BUTTON_STEP, width = width, height = Size.HELP_HEIGHT,
+        colour = MUTED,
+        font = id.Font.MUSEO_SANS_11PT_REGULAR,
+        maxLines = 2,
+    })
+end
+
+-- Build the tag column, sorted grid, and right tabs
 function LayoutEditorWindow:CreatePanels()
     self:CreateTagColumn()
     self.centerPanel = self:Panel(Size.CENTER_X, Size.CENTER_WIDTH)
@@ -319,35 +417,10 @@ function LayoutEditorWindow:CreatePanels()
         self.centerPanel, 0, 0,
         Size.CENTER_SURFACE_WIDTH, Size.CENTER_SURFACE_HEIGHT, FRAME
     )
-    -- Sorted rows scroll on top, and Unsorted scrolls on its own below
     self.panes = {
-        sorted = self:CreatePane("sorted", Size.SORTED_VIEW_Y, Size.SORTED_VIEW_HEIGHT),
-        unsorted = self:CreatePane("unsorted", Size.UNSORTED_VIEW_Y, Size.UNSORTED_VIEW_HEIGHT),
+        sorted = self:CreatePane("sorted", self.centerPanel, Size.CENTER_VIEW_X, Size.SORTED_VIEW_Y,
+            Size.CENTER_VIEW_WIDTH, Size.SORTED_VIEW_HEIGHT, Size.CENTER_COLUMNS),
     }
-    self:CreateHeading(self.centerPanel, Size.CENTER_VIEW_X + Size.GRID_LEFT,
-        Size.UNSORTED_HEADING_Y, BankGrid.UNSORTED_LABEL)
-    -- These replace the right-click menu, which only Bank Core may change
-    self.duplicateButton = BankControls.button(
-        self.centerPanel, "Create Copy", function() self:DuplicateSelected() end,
-        { x = 8, y = Size.FOOTER_Y, width = 104, height = Size.FOOTER_HEIGHT,
-            tooltip = "Copy the selected item (Ctrl+C)" }
-    )
-    self.removeButton = BankControls.button(
-        self.centerPanel, "Remove", function() self:RemoveSelected() end,
-        { x = 120, y = Size.FOOTER_Y, width = 84, height = Size.FOOTER_HEIGHT,
-            tooltip = "Remove the selected item (Delete)" }
-    )
-    self.unsortButton = BankControls.button(
-        self.centerPanel, "Move to Unsorted", function() self:UnarrangeSelected() end,
-        { x = 212, y = Size.FOOTER_Y, width = Size.UNSORT_BUTTON_WIDTH, height = Size.FOOTER_HEIGHT }
-    )
-    -- Its drag surface handles clicks too, so the button has no action
-    self.newLabelButton = BankControls.button(self.centerPanel, "New label", nil, {
-        x = Size.LABEL_BUTTON_X,
-        y = Size.FOOTER_Y,
-        width = Size.LABEL_BUTTON_WIDTH,
-        height = Size.FOOTER_HEIGHT,
-    })
     self.rightBackground = tiledSprite(
         self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.PANEL_HEIGHT,
         NativeUi.SPRITES.PANEL_BACKGROUND
@@ -355,36 +428,41 @@ function LayoutEditorWindow:CreatePanels()
     self.rightFrame = frame(
         self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.PANEL_HEIGHT, FRAME
     )
-    self.itemSearch = prettyui.TextField.new(self.rightPanel, {
-        x = 8, y = 8, width = Size.RIGHT_WIDTH - 16, height = 26,
-        placeholder = "Search items...", maxLength = 80,
-        onChange = function(_, _, value) self:RunSearch(value) end,
-        onSubmit = function(_, value) self:RunSearch(value) end,
-    })
-    self.searchList = prettyui.List.new(self.rightPanel, {
-        x = 8,
-        y = Size.SEARCH_LIST_TOP,
-        width = Size.RIGHT_WIDTH - 16,
-        height = Size.PANEL_HEIGHT - Size.SEARCH_LIST_TOP - Size.SEARCH_LIST_BOTTOM,
-        entryHeight = 32,
-        maxSelected = 1,
-        backgroundColour = 0x00000000,
-        borderColour = INNER_FRAME,
-        selectedColour = ROW_SELECTED,
-    })
-    self.searchHint = prettyui.Text.new(self.rightPanel, {
-        text = Parts.SEARCH_HINT,
-        x = 18,
-        y = Size.SEARCH_LIST_TOP + 10,
-        width = Size.RIGHT_WIDTH - 36,
-        height = 120,
-        colour = MUTED,
-        maxLines = 8,
-    })
+    self:CreateRightTabs()
+    self:CreateActions()
     self:RunSearch("")
     self:CreateDragSurfaces()
     for _, edges in ipairs({ self.centerFrame, self.rightFrame }) do
         for _, edge in ipairs(edges) do edge:MoveToFront() end
+    end
+    self:ShowRightTab("unsorted")
+end
+
+-- Show one right tab, ending any drag and hiding the other tab's input
+function LayoutEditorWindow:ShowRightTab(name)
+    self:FinishDrag(false)
+    -- A held Unsorted scrollbar lets go
+    local unsortedView = self.panes.unsorted.view
+    if unsortedView.dragStart ~= nil then unsortedView:_StopDrag() end
+    self.rightTab = name
+    for _, tab in ipairs(RIGHT_TABS) do
+        local hidden = tab ~= name
+        self.tabButtons[tab]:SetActive(not hidden)
+        self.tabPages[tab].hidden = hidden
+    end
+    local searching = name == "search"
+    self.panes.unsorted.hidden = searching
+    self.panes.unsorted.surface.hidden = searching
+    self.searchDragSurface.hidden = not searching
+    if searching then
+        -- The search field is the next thing typed into
+        self.keysOnGrid = false
+        -- A hidden Unsorted item stays unselected
+        local entry = self:SelectedEntry()
+        if entry ~= nil and entry.unarranged then
+            self.selectedLayoutKey = nil
+            self:RefreshCenter()
+        end
     end
 end
 
@@ -489,7 +567,7 @@ function LayoutEditorWindow:RefreshCenter()
 
     local columns = Size.CENTER_COLUMNS
     local slots, boundary, labels = self.store:GetLayout(self.selectedTag, columns)
-    -- The rows end at the boundary; Unsorted items follow their heading
+    -- The rows end at the boundary; Unsorted items follow it
     for index, slot in ipairs(slots) do
         if index <= boundary then
             sorted.slots[index] = slot
@@ -504,17 +582,17 @@ function LayoutEditorWindow:RefreshCenter()
         self.centerNodes[#self.centerNodes + 1] = self:CreateHeading(
             sorted.view.content, Size.GRID_LEFT, BankGrid.LabelY(label.row), label.text)
     end
-    local visibleRows = math.ceil((sorted.height - Size.GRID_TOP) / Size.GRID_STEP)
     local usedRows = boundary // columns
     -- Keep one empty drop row after the last used row
-    self:DrawPane(sorted, math.max(visibleRows, usedRows + (usedRows > 0 and 1 or 0)), labelRows)
-    -- Unsorted packs its items and always shows its four rows
-    self:DrawPane(unsorted, math.max(Size.UNSORTED_ROWS, math.ceil(#unsorted.slots / columns)), {})
+    self:DrawPane(sorted, usedRows + (usedRows > 0 and 1 or 0), labelRows)
+    -- Unsorted packs its items at its own columns
+    self:DrawPane(unsorted, math.ceil(#unsorted.slots / unsorted.columns), {})
 end
 
--- Size a pane to its rows and draw each cell not under a label
+-- Size a pane to its rows, at least its height, and draw each cell not under a label
 function LayoutEditorWindow:DrawPane(pane, rowCount, labelRows)
-    local columns = Size.CENTER_COLUMNS
+    local columns = pane.columns
+    rowCount = math.max(rowCount, math.ceil((pane.height - Size.GRID_TOP) / Size.GRID_STEP))
     pane.view:SetContentHeight(math.max(pane.height, BankGrid.RowItemY(rowCount)))
     for index = 1, rowCount * columns do
         local zero = index - 1
@@ -582,7 +660,7 @@ end
 function LayoutEditorWindow:RowAt(pane, x, y)
     x, y = tonumber(x), tonumber(y)
     if pane == nil or x == nil or y == nil or x < Size.GRID_LEFT or y < 0
-        or x >= Size.CENTER_VIEW_WIDTH or y >= pane.height then return nil end
+        or x >= pane.width or y >= pane.height then return nil end
     return BankGrid.RowAtContentY(y + (tonumber(pane.view.scrollY) or 0))
 end
 
@@ -645,20 +723,20 @@ function LayoutEditorWindow:SlotIndexAt(pane, x, y)
     local row = self:RowAt(pane, x, y)
     if row == nil or self:LabelRowAt(pane, x, y) ~= nil then return nil end
     local column = math.floor((tonumber(x) - Size.GRID_LEFT) / Size.GRID_STEP)
-    if column < 0 or column >= Size.CENTER_COLUMNS then return nil end
-    return row * Size.CENTER_COLUMNS + column + 1
+    if column < 0 or column >= pane.columns then return nil end
+    return row * pane.columns + column + 1
 end
 
--- Find the pane under an editor content point, and the point in its view
+-- Find the shown pane under an editor content point, and the point in its view
 function LayoutEditorWindow:PaneAt(x, y)
     x, y = tonumber(x), tonumber(y)
     if x == nil or y == nil or self.panes == nil then return nil end
-    local left = Size.CENTER_X + Size.CENTER_VIEW_X
-    if x < left or x >= left + Size.CENTER_VIEW_WIDTH then return nil end
     for _, name in ipairs(PANE_NAMES) do
         local pane = self.panes[name]
-        local top = Size.PANEL_TOP + pane.y
-        if y >= top and y < top + pane.height then return pane, x - left, y - top end
+        if not pane.hidden and x >= pane.x and x < pane.x + pane.width
+            and y >= pane.y and y < pane.y + pane.height then
+            return pane, x - pane.x, y - pane.y
+        end
     end
     return nil
 end
@@ -774,9 +852,16 @@ function LayoutEditorWindow:DestroyControls()
         self.unsortButton,
         self.removeButton,
         self.duplicateButton,
+        self.actionsHelp,
     }) do
         if control ~= nil then pcall(function() control:Destroy() end) end
     end
+    for _, name in ipairs(RIGHT_TABS) do
+        local button = self.tabButtons ~= nil and self.tabButtons[name] or nil
+        local page = self.tabPages ~= nil and self.tabPages[name] or nil
+        for _, part in ipairs({ button, page }) do pcall(function() part:Destroy() end) end
+    end
+    self.tabButtons, self.tabPages = nil, nil
     if self.tagList ~= nil then
         self.tagList:Destroy()
         for _, button in ipairs(self.columnButtons) do pcall(function() button:Destroy() end) end
@@ -792,6 +877,7 @@ function LayoutEditorWindow:DestroyControls()
     self.unsortButton = nil
     self.removeButton = nil
     self.duplicateButton = nil
+    self.actionsHelp = nil
 end
 
 -- Stop events and drags, then destroy the editor

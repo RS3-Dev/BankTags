@@ -71,8 +71,7 @@ local function clickSlot(paneName, column, row)
     local left, top = Geometry.absolutePosition(editor.content)
     local pane = editor.panes[paneName]
     local x, y = editorSize.GRID_LEFT + column * 44 + 20, 4 + row * 44 + 20
-    host.mouse = { x = left + editorSize.CENTER_X + editorSize.CENTER_VIEW_X + x,
-        y = top + editorSize.PANEL_TOP + pane.y + y }
+    host.mouse = { x = left + pane.x + x, y = top + pane.y + y }
     pane.surface.hooks.click(nil, x, y)
     pane.surface.hooks.release()
 end
@@ -131,7 +130,7 @@ tap(DELETE, NONE)
 assert(whipCopies() == 2 and not app.store:HasTag("melee", key(4151, 3)) and changes == 3)
 -- Clicking an empty cell clears the selection
 clickSlot("sorted", 0, 0)
-clickSlot("unsorted", 5, 3)
+clickSlot("unsorted", 3, 3)
 assert(editor.selectedLayoutKey == nil and outlines() == 0)
 clickSlot("sorted", 0, 0)
 assert(editor.selectedLayoutKey == key(4151, 2))
@@ -187,11 +186,19 @@ assert(not app.store:HasTag("melee", key(4151, 3)) and whipCopies() == 1)
 selectWhip()
 local before = whipCopies()
 
+-- Showing Search drops a selection in the hidden Unsorted grid and disarms the keys
+selectWhip()
+editor.tabButtons.search.root.hooks.pressed()
+assert(editor.selectedLayoutKey == nil and outlines() == 0 and not editor.keysOnGrid)
 -- Clicking either search field gives it the keys, so Ctrl+C stays text copy
+clickSlot("sorted", 0, 0)
+assert(editor.keysOnGrid)
+editor.selectedLayoutKey = WHIP
 editor.itemSearch.root.hooks.click(nil, 4, 4)
 copyKeys()
 tap(DELETE, NONE)
 assert(whipCopies() == before and app.store:HasTag("melee", WHIP))
+editor.tabButtons.unsorted.root.hooks.pressed()
 selectWhip()
 editor.tagList.search.root.hooks.click(nil, 4, 4)
 tap(DELETE, NONE)

@@ -67,8 +67,7 @@ local function pointAtSlot(paneName, column, row)
     local left, top = Geometry.absolutePosition(editor.content)
     local pane = editor.panes[paneName]
     local x, y = editorSize.GRID_LEFT + column * 44 + 20, 4 + row * 44 + 20 - pane.view.scrollY
-    host.mouse = { x = left + editorSize.CENTER_X + editorSize.CENTER_VIEW_X + x,
-        y = top + editorSize.PANEL_TOP + pane.y + y }
+    host.mouse = { x = left + pane.x + x, y = top + pane.y + y }
     return x, y
 end
 -- Press on a slot and release over another, as dragging an item does
@@ -79,7 +78,7 @@ local function drag(fromPane, fromColumn, fromRow, toPane, toColumn, toRow)
     surface.hooks.release()
 end
 
--- Sorted rows and Unsorted are separate grids; the shark leads Unsorted
+-- Sorted rows fill the center and Unsorted is the right column's first tab; the shark leads it
 local sorted, unsorted = editor.panes.sorted, editor.panes.unsorted
 assert(sorted.slots[1].layoutKey == key(4151, 1) and unsorted.slots[1].layoutKey == key(385, 1))
 -- Drag the shark into column 12, which only 13 columns allow
@@ -98,7 +97,7 @@ assert(whipY ~= nil and sharkY == whipY and sharkX == 8 + 11 * 44, tostring(shar
 -- Select the whip, then copy it; the ghost opens copy 1
 drag("sorted", 0, 0, "sorted", 0, 0)
 assert(editor.selectedLayoutKey == key(4151, 1))
-Harness.Find(editor.centerPanel, "Create Copy").hooks.pressed()
+Harness.Find(editor.rightPanel, "Create Copy").hooks.pressed()
 assert(editor.selectedLayoutKey == key(4151, 2))
 local ghost = nil
 for _, slot in ipairs(app.store.data.tags.melee.rows[1].slots) do
@@ -106,16 +105,16 @@ for _, slot in ipairs(app.store.data.tags.melee.rows[1].slots) do
 end
 assert(ghost ~= nil and ghost.sourceLayoutKey == key(4151, 1))
 -- Move to Unsorted keeps the selected copy in the tag
-Harness.Find(editor.centerPanel, "Move to Unsorted").hooks.pressed()
+Harness.Find(editor.rightPanel, "Move to Unsorted").hooks.pressed()
 local unsorted = app.store.data.tags.melee.unsorted
 assert(unsorted[#unsorted].layoutKey == key(4151, 2) and app.store:HasTag("melee", key(4151, 2)))
 -- Remove takes the selected copy out of the tag
 drag("sorted", 0, 0, "sorted", 0, 0)
-Harness.Find(editor.centerPanel, "Remove").hooks.pressed()
+Harness.Find(editor.rightPanel, "Remove").hooks.pressed()
 assert(not app.store:HasTag("melee", key(4151, 1)) and app.store:HasTag("melee", key(4151, 2)))
 -- With nothing selected the buttons explain instead of acting
 editor.selectedLayoutKey = nil
-Harness.Find(editor.centerPanel, "Remove").hooks.pressed()
+Harness.Find(editor.rightPanel, "Remove").hooks.pressed()
 assert(editor.errorBanner ~= nil)
 h:Tick(260)
 assert(editor.errorBanner == nil, "the error fades on the editor's own logic subscription")
@@ -123,8 +122,8 @@ assert(editor.errorBanner == nil, "the error fades on the editor's own logic sub
 -- New label asks for text and adds the label after the layout
 local labelSurface = editor.labelDragSurface
 local labelLeft, labelTop = Geometry.absolutePosition(editor.content)
-host.mouse = { x = labelLeft + editorSize.CENTER_X + editorSize.LABEL_BUTTON_X + 10,
-    y = labelTop + editorSize.PANEL_TOP + editorSize.FOOTER_Y + 10 }
+host.mouse = { x = labelLeft + editorSize.RIGHT_X + editorSize.RIGHT_INSET + 10,
+    y = labelTop + editorSize.PANEL_TOP + editorSize.LABEL_BUTTON_Y + 10 }
 labelSurface.hooks.click(nil, 10, 10)
 labelSurface.hooks.release()
 local prompt = app.windows.textPrompt
@@ -135,6 +134,7 @@ local rows = app.store.data.tags.melee.rows
 assert(rows[#rows].kind == "label" and rows[#rows].text == "Weapons")
 
 -- Searching without RuneQL finds bank items and says it is limited
+editor.tabButtons.search.root.hooks.pressed()
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "")
 assert(string.find(editor.searchHint.content, "Without RuneQL", 1, true) ~= nil)
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "shark")
