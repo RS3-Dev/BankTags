@@ -22,7 +22,7 @@ assert(app.state.columns == 13 and app.state.bounds ~= nil)
 
 local ItemIdentity = require("banktags/tags/item_identity")
 local key = ItemIdentity.LayoutKey
-assert(app.store:CreateTag("melee"))
+assert(app.store:CreateTag("melee", 4151))
 assert(app.store:CreateTag("food"))
 assert(app.store:CreateFolder("Combat", "melee"))
 app.store:SetLayoutPlacement(false)
@@ -45,16 +45,45 @@ assert(editor ~= nil and editor.selectedTag == "melee")
 local editorSize = h:TagsModule("banktags/windows/layout_editor_parts").size
 assert(editorSize.CENTER_COLUMNS == 13)
 assert(editor.window.root.x == app.state.bounds.x and editor.window.root.y == app.state.bounds.y)
--- A tag picker replaces the tag column: every tag in sidebar order, under its folder
-local picker = editor.tagPicker
-assert(picker.entries[1].id == "melee" and picker.entries[1].label == "Combat / Melee" and picker.entries[1].order == 1)
-assert(picker.entries[2].id == "food" and picker.entries[2].label == "Food" and #picker.entries == 2)
-assert(picker:GetSelectedID() == "melee" and Harness.Find(editor.content, "Edit tag") == editor.editTagButton.root)
+-- A tag rail replaces the tag column: an icon button per tag in sidebar order, named with its folder
+local rail = editor.tagRail
+-- Find the rail button for a tag
+local function railButton(tag)
+    for _, button in ipairs(rail.buttons) do
+        if button.tagID == tag then return button end
+    end
+    return nil
+end
+-- List the rail's tags, then whether only the open one is gold
+local function railTags()
+    local tags = {}
+    for _, button in ipairs(rail.buttons) do tags[#tags + 1] = button.tagID end
+    return table.concat(tags, ",")
+end
+local function railOpen(tag)
+    for _, button in ipairs(rail.buttons) do
+        if button.active ~= (button.tagID == tag) then return false end
+    end
+    return true
+end
+assert(railTags() == "melee,food" and railOpen("melee"))
+assert(rail.entries[1].label == "Combat / Melee" and railButton("melee").tooltipText == "Combat / Melee")
+assert(rail.entries[2].label == "Food" and railButton("food").tooltipText == "Food")
+-- The stored icon draws over its button; a tag without one shows its first letters
+local melee = railButton("melee")
+assert(melee.root.text.content == "" and Harness.Find(rail.root, "Fo") == railButton("food").root)
+local railIcon = nil
+for _, node in ipairs(rail.root.children) do
+    if node.associatedObjectID == 4151 and not node.destroyed then railIcon = node end
+end
+assert(railIcon ~= nil and railIcon.clickthrough and railIcon.y > melee.y and railIcon.y < melee.y + melee.height)
+-- The open tag's name sits beside Edit tag, with no picker
+assert(editor.tagTitle.content == "Combat / Melee" and Harness.Find(editor.content, "Edit tag") == editor.editTagButton.root)
 -- New Tag and Import/Share stay in the Tags tab, and the window's own close button closes it
 assert(Harness.Find(editor.content, "New Tag") == nil)
--- The sorted grid takes the tag column's place, below the picker and above the shortcuts
-assert(editor.centerPanel.x == editorSize.CENTER_X and editorSize.CENTER_X < 44)
-assert(editor.panes.sorted.y > picker.root.y + picker.root.height)
+-- The sorted grid sits beside the rail, below the name and above the shortcuts
+assert(editor.centerPanel.x == editorSize.CENTER_X and rail.root.x + rail.root.width < editorSize.CENTER_X)
+assert(editor.panes.sorted.y > editor.tagTitle.y + editor.tagTitle.height)
 assert(Harness.Find(editor.centerPanel, "Saved automatically").y == editorSize.FOOTER_Y)
 
 -- Quantities come from Bank Core's snapshot; a placeholder is drawn faded
@@ -149,30 +178,52 @@ assert(string.find(editor.searchHint.content, "Without RuneQL", 1, true) ~= nil)
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "shark")
 assert(#editor.searchResults == 1 and editor.searchResults[1].objectId == 385)
 
--- Choosing another tag in the picker opens that tag
-picker:Select("food", true)
+-- Pressing another tag in the rail opens that tag
+railButton("food").root.hooks.pressed()
+assert(railOpen("food") and editor.tagTitle.content == "Food")
 assert(editor.selectedTag == "food" and #editor.panes.sorted.slots == 0 and #editor.panes.unsorted.slots == 0)
 -- Edit tag opens the open tag's settings in front of the editor
 editor.editTagButton.root.hooks.pressed()
 local tagSettings = app.windows.tagSettingsEditor
 assert(tagSettings ~= nil and tagSettings.field.text == "food" and not editor.keysOnGrid)
 assert(editor.overlayWindows[1] == tagSettings.window)
--- Renaming keeps the tag open and renames it in the picker
+-- Renaming keeps the tag open and renames it in the rail
 tagSettings.field:SetText("snacks")
 tagSettings.saveButton.root.hooks.click()
-assert(editor.selectedTag == "snacks" and picker:GetSelectedID() == "snacks")
-assert(picker.entries[2].id == "snacks" and picker.entries[2].label == "Snacks")
+assert(editor.selectedTag == "snacks" and railOpen("snacks") and editor.tagTitle.content == "Snacks")
+assert(railTags() == "melee,snacks" and railButton("snacks").tooltipText == "Snacks")
 assert(app.store:RenameFolder(app.store:GetTagFolder("melee"), "Gear") and app:Changed() == nil)
-assert(picker.entries[1].label == "Gear / Melee" and editor.selectedTag == "snacks")
--- Deleting the open tag opens the first one and drops it from the picker
+assert(railButton("melee").tooltipText == "Gear / Melee" and editor.selectedTag == "snacks")
+-- Deleting the open tag opens the first one and drops it from the rail
 assert(app.store:CreateTag("spare"))
 app:Changed()
-picker:Select("spare", true)
-assert(editor.selectedTag == "spare" and #picker.entries == 3)
+railButton("spare").root.hooks.pressed()
+assert(editor.selectedTag == "spare" and railTags() == "melee,snacks,spare")
 assert(app.store:DeleteTag("spare"))
 app:Changed()
-assert(editor.selectedTag == "melee" and picker:GetSelectedID() == "melee" and #picker.entries == 2)
-picker:Select("snacks", true)
+assert(editor.selectedTag == "melee" and railOpen("melee") and railTags() == "melee,snacks")
+railButton("snacks").root.hooks.pressed()
+-- More tags than fit page with arrows; every tag stays reachable and the open one in view
+for index = 1, 30 do assert(app.store:CreateTag("extra " .. index)) end
+app:Changed()
+assert(rail.view.arrows and #rail.buttons < 32 and rail.upArrow.disabled and not rail.downArrow.disabled)
+assert(railOpen("snacks") and railButton("snacks") ~= nil)
+local seen = {}
+repeat
+    for _, button in ipairs(rail.buttons) do seen[button.tagID] = true end
+    local paged = not rail.downArrow.disabled
+    if paged then rail.downArrow.root.hooks.pressed() end
+until not paged
+for index = 1, 30 do assert(seen["extra " .. index], "extra " .. index .. " is reachable") end
+assert(seen.melee and seen.snacks and editor.selectedTag == "snacks" and railButton("snacks") == nil)
+railButton("extra 30").root.hooks.pressed()
+assert(editor.selectedTag == "extra 30" and editor.tagTitle.content == "Extra 30" and railOpen("extra 30"))
+editor:SelectTag("melee")
+assert(railButton("melee") ~= nil and rail.upArrow.disabled)
+for index = 1, 30 do assert(app.store:DeleteTag("extra " .. index)) end
+app:Changed()
+assert(not rail.view.arrows and railTags() == "melee,snacks" and rail.upArrow == nil)
+railButton("snacks").root.hooks.pressed()
 
 -- Moving the bank moves the editor once Bank Core reports the new bounds
 local window = host.window

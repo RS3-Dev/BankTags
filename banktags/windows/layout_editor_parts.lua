@@ -1,6 +1,7 @@
 -- Share layout editor measurements and drawing helpers
 
 local BankGrid = require("banktags/ui/bank_grid")
+local TagRail = require("banktags/windows/layout_editor_rail")
 
 local Parts = {}
 local Size = {}
@@ -15,21 +16,24 @@ Parts.SHORTCUTS = "Delete: Remove     Ctrl+C: Create copy"
 Parts.SAVED = "Saved automatically"
 
 -- Default sizes match the expanded bank window plus Bank Core's sidebar
--- The sorted grid takes the sidebar's place; a larger bank grows it
+-- A tag rail and the sorted grid take the sidebar's place; a larger bank grows the grid
 -- Bank Core's sidebar: its tab rail, the gap after it, and its tag column
 Size.SIDEBAR_WIDTH = 32 + 8 + 244
 Size.DEFAULT_WIDTH = 714 + Size.SIDEBAR_WIDTH
 Size.DEFAULT_HEIGHT = 650
 Size.PANEL_TOP = 12
 Size.DEFAULT_PANEL_HEIGHT = 594
-Size.CENTER_X = 8
+-- The tag rail runs down the left edge, like Bank Core's tab rail
+Size.RAIL_X = 8
+Size.RAIL_GAP = 8
+Size.CENTER_X = Size.RAIL_X + TagRail.WIDTH + Size.RAIL_GAP
 Size.DEFAULT_CENTER_WIDTH = 477
 -- The right column ends where the window's border begins
 Size.RIGHT_MARGIN = 20
--- The tag picker and Edit tag sit above the sorted grid
-Size.PICKER_HEIGHT = 30
+-- The open tag's name and Edit tag sit above the sorted grid
+Size.TITLE_HEIGHT = 30
 Size.EDIT_TAG_WIDTH = 96
-Size.SORTED_TOP = Size.PICKER_HEIGHT + 10
+Size.SORTED_TOP = Size.TITLE_HEIGHT + 10
 -- The shortcuts and saved note sit under the sorted grid
 Size.FOOTER_HEIGHT = 28
 -- The editor grid starts 4px in, not the bank's 8px

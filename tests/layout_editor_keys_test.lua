@@ -200,16 +200,6 @@ tap(DELETE, NONE)
 assert(whipCopies() == before and app.store:HasTag("melee", WHIP))
 editor.tabs:GetTab(1).hit.hooks.click()
 selectWhip()
--- The open tag picker takes typing too, from the next tick on
-editor.tagPicker.open = true
-tap(DELETE, NONE)
-assert(app.store:HasTag("melee", WHIP))
-h:Tick(1)
-editor.tagPicker.open = false
-assert(not editor.keysOnGrid)
-tap(DELETE, NONE)
-assert(app.store:HasTag("melee", WHIP), "a closed picker keeps its field's keys until the grid is pressed")
-
 -- An open menu, or one opened since the grid press, blocks the keys
 selectWhip()
 h.input.menuOpen = true
@@ -302,7 +292,9 @@ assert(changes == changesBefore and editor.errorBanner == nil and whipCopies() =
 
 -- Choosing another tag clears the selection, so keys do nothing
 selectWhip()
-editor.tagPicker:Select("food", true)
+for _, button in ipairs(editor.tagRail.buttons) do
+    if button.tagID == "food" then button.root.hooks.pressed() end
+end
 assert(editor.selectedTag == "food" and editor.selectedLayoutKey == nil)
 tap(DELETE, NONE)
 assert(app.store:HasTag("melee", WHIP))

@@ -22,14 +22,14 @@ h:Tick(12)
 local key = require("banktags/tags/item_identity").LayoutKey
 local store = app.store
 -- Sorted: a label, then 195 items wrapping onto twenty rows, with one blank
--- Unsorted: 120 items, twelve rows at ten columns
+-- Unsorted: 108 items, twelve rows at nine columns
 assert(store:CreateTag("gear") and store:CreateTag("food"))
 store:SetLayoutPlacement(false)
 for objectID = 1001, 1195 do assert(store:AddTag("gear", objectID)) end
 assert(store:InsertLabel("gear", 0, "Weapons", 10))
 assert(store:RemoveTag("gear", key(1045)))
 store:SetLayoutPlacement(true)
-for objectID = 2001, 2120 do assert(store:AddTag("gear", objectID)) end
+for objectID = 2001, 2108 do assert(store:AddTag("gear", objectID)) end
 app:Changed()
 h:Tick(2)
 app.windows:OpenLayoutEditor("gear")
@@ -74,6 +74,13 @@ local function drag(fromPane, fromColumn, fromRow, toPane, toColumn, toRow)
     if type(toPane) == "string" then pointAt(toPane, toColumn, toRow) else pointAtContent(toPane, toColumn) end
     surface.hooks.release()
 end
+-- Press a tag's button in the tag rail
+local function openTag(tag)
+    for _, button in ipairs(editor.tagRail.buttons) do
+        if button.tagID == tag then return button.root.hooks.pressed() end
+    end
+    error("no rail button for " .. tag)
+end
 local function wheel(paneName, delta) editor.panes[paneName].surface.hooks.wheel(nil, delta) end
 -- Click a right tab's header, as PrettyUI's Tabs hears it
 local TAB_INDEX = { unsorted = 1, search = 2 }
@@ -106,27 +113,32 @@ local function cells(pane)
 end
 
 -- The sorted grid fills the center at Bank Core's columns, with no Unsorted heading
--- It sits where the tag column was, under the tag picker and over the shortcuts
+-- It sits beside the tag rail, under the open tag's name and over the shortcuts
 assert(editorSize.CENTER_SURFACE_HEIGHT == editorSize.PANEL_HEIGHT - editorSize.SORTED_TOP - editorSize.FOOTER_HEIGHT)
 assert(sorted.x == editorSize.CENTER_X + 4 and sorted.y == editorSize.PANEL_TOP + editorSize.SORTED_TOP + 4)
 assert(sorted.height == editorSize.CENTER_SURFACE_HEIGHT - 8)
-local tagPicker = editor.tagPicker.root
-assert(tagPicker.x == editorSize.CENTER_X and tagPicker.y == editorSize.PANEL_TOP)
-assert(tagPicker.y + tagPicker.height < sorted.y and editor.editTagButton.root.y == tagPicker.y)
-assert(editor.editTagButton.root.x > tagPicker.x + tagPicker.width)
+local rail = editor.tagRail.root
+assert(rail.x == editorSize.RAIL_X and rail.y == editorSize.PANEL_TOP and rail.height == editorSize.PANEL_HEIGHT)
+assert(rail.x + rail.width + editorSize.RAIL_GAP == editorSize.CENTER_X and editorSize.CENTER_X == 48)
+local title = editor.tagTitle
+assert(title.content == "Gear" and title.y == editorSize.PANEL_TOP and title.x > editorSize.CENTER_X)
+assert(title.y + title.height < sorted.y and editor.editTagButton.root.y == title.y)
+assert(editor.editTagButton.root.x > title.x + title.width)
 assert(editor.editTagButton.root.x + editor.editTagButton.root.width <= editorSize.CENTER_X + editorSize.CENTER_SURFACE_WIDTH)
 assert(editor.footerNotes[1].y == editorSize.FOOTER_Y and string.find(editor.footerNotes[1].content, "Ctrl+C", 1, true) ~= nil)
 assert(editorSize.PANEL_TOP + editorSize.FOOTER_Y + editorSize.FOOTER_HEIGHT == editorSize.PANEL_TOP + editorSize.PANEL_HEIGHT)
--- The right column takes the freed width, about half the window
-assert(editorSize.RIGHT_X == editorSize.CENTER_X + editorSize.CENTER_WIDTH and editorSize.RIGHT_WIDTH >= editorSize.CENTER_WIDTH)
+-- The window keeps its width; the right column takes the rest of it
+assert(editorSize.WIDTH == editorSize.DEFAULT_WIDTH and editorSize.CENTER_WIDTH == editorSize.DEFAULT_CENTER_WIDTH)
+assert(editorSize.RIGHT_X == editorSize.CENTER_X + editorSize.CENTER_WIDTH)
+assert(editorSize.RIGHT_X + editorSize.RIGHT_WIDTH + editorSize.RIGHT_MARGIN == editorSize.WIDTH)
 assert(sorted.columns == editorSize.CENTER_COLUMNS and sorted.columns == 10)
 assert(Harness.Find(editor.centerPanel, "Unsorted") == nil)
 assert(Harness.Find(editor.centerPanel, "Create Copy") == nil and Harness.Find(editor.centerPanel, "New label") == nil)
--- Unsorted fills the right column above the actions, at ten columns of its own
+-- Unsorted fills the right column above the actions, at nine columns of its own
 assert(unsorted.x == editorSize.RIGHT_X + 8 and unsorted.width == editorSize.RIGHT_WIDTH - 16)
-assert(unsorted.y == editorSize.PANEL_TOP + editorSize.TAB_PAGE_Y and unsorted.columns == 10)
+assert(unsorted.y == editorSize.PANEL_TOP + editorSize.TAB_PAGE_Y and unsorted.columns == 9)
 local itemWidth = unsorted.width - editorSize.SCROLLBAR_RESERVE - editorSize.GRID_LEFT
-assert(10 * 44 - 4 <= itemWidth and 11 * 44 - 4 > itemWidth, "ten columns fit beside the scrollbar")
+assert(9 * 44 - 4 <= itemWidth and 10 * 44 - 4 > itemWidth, "nine columns fit beside the scrollbar")
 assert(unsorted.y + unsorted.height + 8 == editorSize.PANEL_TOP + editorSize.ACTIONS_Y)
 -- The actions sit inside the right column under both tabs, two a row, the help last
 for _, button in ipairs({ editor.duplicateButton, editor.removeButton, editor.unsortButton, editor.newLabelButton }) do
@@ -151,13 +163,13 @@ do
     Parts.SizeToBank(editorSize.CENTER_COLUMNS, editor.bounds.width, editorSize.HEIGHT + 88)
     assert(editorSize.SORTED_VIEW_HEIGHT == before.sorted + 88 and editorSize.UNSORTED_VIEW_HEIGHT == before.unsorted + 88)
     assert(editorSize.SEARCH_LIST_HEIGHT == before.search + 88 and editorSize.ACTIONS_Y == before.actions + 88)
-    assert(editorSize.UNSORTED_COLUMNS == 10)
+    assert(editorSize.UNSORTED_COLUMNS == 9)
     Parts.SizeToBank(editor.columns, editor.bounds.width, editor.bounds.height)
 end
--- The label, twenty item rows, and an empty drop row; Unsorted packs twelve rows of ten
-assert(#sorted.slots == 210 and #unsorted.slots == 120 and editor.centerLabels[1].row == 0)
+-- The label, twenty item rows, and an empty drop row; Unsorted packs twelve rows of nine
+assert(#sorted.slots == 210 and #unsorted.slots == 108 and editor.centerLabels[1].row == 0)
 assert(sorted.view.content.height == 4 + 22 * 44 and unsorted.view.content.height == 4 + 12 * 44)
-assert(cells(unsorted) == 12 * 10 and unsorted.slots[120].layoutKey == key(2120))
+assert(cells(unsorted) == 12 * 9 and unsorted.slots[108].layoutKey == key(2108))
 assert(sorted.slots[55].kind == "blank" and gear().rows[2].slots[45].kind == "blank")
 
 -- Unsorted shows first; Search's page and input are hidden
@@ -187,11 +199,11 @@ wheel("sorted", 3)
 assert(sorted.view.scrollY == 132 and unsorted.view.scrollY == unsortedMost - 44)
 
 -- With both scrolled, an Unsorted item drops into the exact sorted cell
--- Unsorted row 10, column 2 is item 2103; sorted row 5, column 4 is the blank
+-- Unsorted row 10, column 2 is item 2093; sorted row 5, column 4 is the blank
 drag("unsorted", 2, 10, "sorted", 4, 5)
-assert(gear().rows[2].slots[45].layoutKey == key(2103) and unsortedIndex(key(2103)) == nil)
-assert(#gear().unsorted == 119 and store:HasTag("gear", key(2103)) and changes == 1)
-assert(sorted.slots[55].layoutKey == key(2103) and editor.selectedLayoutKey == key(2103) and outlines() == 1)
+assert(gear().rows[2].slots[45].layoutKey == key(2093) and unsortedIndex(key(2093)) == nil)
+assert(#gear().unsorted == 107 and store:HasTag("gear", key(2093)) and changes == 1)
+assert(sorted.slots[55].layoutKey == key(2093) and editor.selectedLayoutKey == key(2093) and outlines() == 1)
 -- Its neighbours, the label, and the scroll of each grid are unchanged
 assert(gear().rows[1].kind == "label" and gear().rows[1].text == "Weapons")
 assert(gear().rows[2].slots[44].layoutKey == key(1044) and gear().rows[2].slots[46].layoutKey == key(1046))
@@ -200,17 +212,18 @@ assert(sorted.view.scrollY == 132 and unsorted.view.scrollY == unsortedMost - 44
 -- A sorted item dropped on Unsorted leaves a blank and joins the end of Unsorted
 -- Sorted row 6, column 0 is item 1051
 drag("sorted", 0, 6, "unsorted", 3, 4)
-assert(gear().rows[2].slots[51].kind == "blank" and unsortedIndex(key(1051)) == 120)
+assert(gear().rows[2].slots[51].kind == "blank" and unsortedIndex(key(1051)) == 108)
 assert(store:HasTag("gear", key(1051)) and changes == 2 and editor.selectedLayoutKey == key(1051))
-assert(unsorted.slots[120].layoutKey == key(1051) and outlines() == 1)
+assert(unsorted.slots[108].layoutKey == key(1051) and outlines() == 1)
 assert(sorted.view.scrollY == 132 and unsorted.view.scrollY == unsortedMost - 44)
 
 -- Unsorted has no order to edit, so a drag within it only selects
 local before = saved()
 drag("unsorted", 0, 3, "unsorted", 3, 5)
-assert(saved() == before and changes == 2 and editor.selectedLayoutKey == gear().unsorted[31].layoutKey)
+assert(saved() == before and changes == 2 and editor.selectedLayoutKey == gear().unsorted[28].layoutKey)
 
--- Drops on the tag picker, the tabs, the actions, or a label change nothing
+-- Drops on the tag rail, the title, the tabs, the actions, or a label change nothing
+drag("sorted", 1, 6, editorSize.RAIL_X + 10, editorSize.PANEL_TOP + 10)
 drag("sorted", 1, 6, editorSize.CENTER_X + 10, editorSize.PANEL_TOP + 10)
 drag("sorted", 1, 6, editorSize.RIGHT_X + 20, editorSize.PANEL_TOP + editorSize.TAB_Y + 10)
 drag("unsorted", 1, 3, editorSize.RIGHT_X + 20, editorSize.PANEL_TOP + editorSize.ACTIONS_Y + 10)
@@ -341,17 +354,17 @@ assert(labelSurface.x == editorSize.RIGHT_X + editorSize.LABEL_BUTTON_X and labe
 wheel("unsorted", 1)
 wheel("sorted", 1)
 showTab("search")
-editor.tagPicker:Select("food", true)
+openTag("food")
 assert(sorted.view.scrollY == 0 and unsorted.view.scrollY == 0)
 assert(editor.rightTab == "search" and editor.itemSearch.text == "rune")
 showTab("unsorted")
 -- Its empty Unsorted still fills the tab with cells, the last row partly shown
 local unsortedRows = math.ceil((unsorted.height - 4) / 44)
 assert(#unsorted.slots == 0 and unsorted.view.content.height == 4 + unsortedRows * 44)
-assert(cells(unsorted) == unsortedRows * 10)
+assert(cells(unsorted) == unsortedRows * 9)
 
 -- Reopening builds fresh grids on the Unsorted tab; closing destroys them
-editor.tagPicker:Select("gear", true)
+openTag("gear")
 showTab("search")
 app.windows:OpenLayoutEditor("gear")
 local reopened = app.windows.layoutEditor
@@ -362,7 +375,7 @@ reopened:ShowRightTab("search")
 assert(reopened.rightTab == "search" and reopened.tabs:GetActiveIndex() == 2 and not reopened.searchDragSurface.hidden)
 reopened:ShowRightTab("unsorted")
 assert(reopened.tabs:GetActiveIndex() == 1 and reopened.searchDragSurface.hidden)
-assert(reopened.panes.sorted.view.scrollY == 0 and #reopened.panes.unsorted.slots == 121)
+assert(reopened.panes.sorted.view.scrollY == 0 and #reopened.panes.unsorted.slots == 109)
 local reopenedPanes, reopenedTabs = reopened.panes, reopened.tabs
 local reopenedPages = { reopenedTabs:GetPage(1), reopenedTabs:GetPage(2) }
 reopened.window:Close()

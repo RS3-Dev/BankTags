@@ -52,7 +52,6 @@ function LayoutEditorKeys:ShortcutsReady()
         and self.window ~= nil
         and not self.window.root.hidden
         and self.drag == nil
-        and not self.tagPicker.open
         and not self:OverlayShown()
         and not MiniMenu.IsOpen()
         and not prettyui.KeybindField.IsCapturing()

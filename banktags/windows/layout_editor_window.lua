@@ -1,4 +1,4 @@
--- Build the layout editor over the bank: tag picker, grids, labels, and buttons
+-- Build the layout editor over the bank: tag rail, grids, labels, and buttons
 
 local Config = require("banktags/core/config")
 local NativeUi = require("banktags/ui/native_ui")
@@ -6,7 +6,7 @@ local BankControls = require("banktags/ui/bank_controls")
 local BankGrid = require("banktags/ui/bank_grid")
 local Geometry = require("banktags/ui/geometry")
 local ItemIdentity = require("banktags/tags/item_identity")
-local Text = require("banktags/core/text")
+local TagRail = require("banktags/windows/layout_editor_rail")
 local Parts = require("banktags/windows/layout_editor_parts")
 local Size = Parts.size
 local rectangle = Parts.rectangle
@@ -46,8 +46,6 @@ local DRAG_EVENT = Config.PLUGIN_REF .. "_layout_editor"
 local PANE_NAMES = { "sorted", "unsorted" }
 -- Right-column tabs, left to right; Unsorted shows first
 local RIGHT_TABS = { "unsorted", "search" }
--- The picker entry shown when there are no tags
-local NO_TAG = ""
 
 -- Destroy saved UI parts newest first, skipping ones already gone
 local function destroyAll(values)
@@ -236,46 +234,31 @@ function LayoutEditorWindow:SetOverlays(windows)
     self:KeepOnTop()
 end
 
--- List every tag in sidebar order, folder members under their folder's name
-function LayoutEditorWindow:TagPickerEntries()
-    local entries = {}
-    -- Append one tag, named after its folder when it has one
-    local function add(tag, folderName)
-        local label = Text.titleCase(tag)
-        if folderName ~= nil then label = folderName .. " / " .. label end
-        entries[#entries + 1] = { id = tag, label = label, order = #entries + 1 }
-    end
-    for _, node in ipairs(self.store:TagTree()) do
-        if node.kind == "tag" then
-            add(node.tag, nil)
-        else
-            for _, tag in ipairs(node.tags) do add(tag, node.name) end
-        end
-    end
-    -- Ordered entries make PrettyUI keep this order, so the list needs one
-    if #entries == 0 then entries[1] = { id = NO_TAG, label = "No tags", order = 1 } end
-    return entries
+-- Build the tag rail down the editor's left edge
+function LayoutEditorWindow:CreateTagRail()
+    self.tagRail = TagRail.new(self.content, {
+        x = Size.RAIL_X,
+        y = Size.PANEL_TOP,
+        height = Size.PANEL_HEIGHT,
+        onSelect = function(tag) self:SelectTag(tag) end,
+    })
 end
 
--- Build the tag picker and Edit tag above the sorted grid
-function LayoutEditorWindow:CreateTagPicker()
+-- Build the open tag's name and Edit tag above the sorted grid
+function LayoutEditorWindow:CreateTitle()
     local x, y = Size.CENTER_X, Size.PANEL_TOP
-    local pickerWidth = Size.CENTER_SURFACE_WIDTH - Size.EDIT_TAG_WIDTH - Size.BUTTON_GAP * 2
-    self.tagPicker = prettyui.ComboBox.new(self.content, {
-        x = x,
+    self.tagTitle = prettyui.Text.new(self.content, {
+        text = "",
+        x = x + 4,
         y = y,
-        width = pickerWidth,
-        height = Size.PICKER_HEIGHT,
-        entries = self:TagPickerEntries(),
-        maxVisibleEntries = 12,
-        tooltip = "Choose the tag to edit",
-        onChange = function(_, tag)
-            if tag ~= NO_TAG then self:SelectTag(tag) end
-        end,
+        width = Size.CENTER_SURFACE_WIDTH - Size.EDIT_TAG_WIDTH - Size.BUTTON_GAP * 2 - 4,
+        height = Size.TITLE_HEIGHT,
+        colour = LABEL_TEXT_COLOUR,
+        maxLines = 1,
     })
     self.editTagButton = BankControls.button(self.content, "Edit tag", function() self:EditTag() end, {
         x = x + Size.CENTER_SURFACE_WIDTH - Size.EDIT_TAG_WIDTH, y = y,
-        width = Size.EDIT_TAG_WIDTH, height = Size.PICKER_HEIGHT,
+        width = Size.EDIT_TAG_WIDTH, height = Size.TITLE_HEIGHT,
         tooltip = "Rename this tag or change its icon",
     })
 end
@@ -405,7 +388,7 @@ function LayoutEditorWindow:CreateFooter()
     end
 end
 
--- Build the tag picker, sorted grid, and right tabs
+-- Build the tag rail, sorted grid, and right tabs
 function LayoutEditorWindow:CreatePanels()
     self.centerPanel = self:Panel(Size.CENTER_X, Size.CENTER_WIDTH)
     self.rightPanel = self:Panel(Size.RIGHT_X, Size.RIGHT_WIDTH)
@@ -428,7 +411,8 @@ function LayoutEditorWindow:CreatePanels()
             Size.CENTER_VIEW_WIDTH, Size.SORTED_VIEW_HEIGHT, Size.CENTER_COLUMNS),
     }
     self:CreateFooter()
-    self:CreateTagPicker()
+    self:CreateTagRail()
+    self:CreateTitle()
     self.rightBackground = tiledSprite(
         self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.PANEL_HEIGHT,
         NativeUi.SPRITES.PANEL_BACKGROUND
@@ -522,11 +506,17 @@ function LayoutEditorWindow:HideError()
     if banner ~= nil then pcall(function() banner.root:Destroy() end) end
 end
 
--- Show every tag in the picker with the open one chosen
+-- Show every tag in the rail and the open one's name above the grid
 function LayoutEditorWindow:RefreshTags()
-    if self.tagPicker == nil then return end
-    self.tagPicker:SetEntries(self:TagPickerEntries(), self.selectedTag or NO_TAG)
-    self.tagPicker:SetDisabled(self.selectedTag == nil)
+    if self.tagRail == nil then return end
+    local entries = TagRail.Entries(self.store)
+    self.tagRail:SetTags(entries, self.selectedTag)
+    local title = "No tags"
+    for _, entry in ipairs(entries) do
+        if entry.id == self.selectedTag then title = entry.label end
+    end
+    self.tagTitle.content = title
+    self.editTagButton:SetDisabled(self.selectedTag == nil)
 end
 
 -- Open the open tag's settings to rename it or change its icon
@@ -753,10 +743,8 @@ function LayoutEditorWindow:PaneAt(x, y)
 end
 
 -- Keep the editor above native bank redraws
--- The open tag picker takes typing, and PrettyUI owns its clicks
 function LayoutEditorWindow:PollDrag()
     self:KeepOnTop()
-    if self.tagPicker.open then self.keysOnGrid = false end
     self:TickError()
 end
 
@@ -866,7 +854,8 @@ function LayoutEditorWindow:DestroyControls()
         self.removeButton,
         self.duplicateButton,
         self.actionsHelp,
-        self.tagPicker,
+        self.tagRail,
+        self.tagTitle,
         self.editTagButton,
     }) do
         if control ~= nil then pcall(function() control:Destroy() end) end
@@ -876,7 +865,8 @@ function LayoutEditorWindow:DestroyControls()
     self.tabs = nil
     destroyAll(self.footerNotes)
     self.footerNotes = nil
-    self.tagPicker = nil
+    self.tagRail = nil
+    self.tagTitle = nil
     self.editTagButton = nil
     self.searchHint = nil
     self.searchList = nil
