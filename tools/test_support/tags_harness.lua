@@ -147,7 +147,10 @@ function Harness.new(name, options)
     local bankHost = require("tools/test_support/fake_bank_host").install()
     bankHost:InstallSidebarWidgets()
     bankHost:InstallWindowWidgets()
+    -- Import/Share needs the window ComboBox, which has SetEntries
+    local comboBox = prettyui.ComboBox
     bankHost:InstallPanelWidgets()
+    prettyui.ComboBox = comboBox
     placeListRows()
     scrollViews()
     installMiniMenu()
