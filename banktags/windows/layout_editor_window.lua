@@ -33,7 +33,6 @@ local GOLD = Theme.SELECTED_BORDER
 local MUTED = Theme.MUTED_TEXT
 local ERROR = Theme.ERROR_TEXT
 local FRAME = Theme.FRAME
-local INNER_FRAME = Theme.INNER_FRAME
 local ITEM_WIDTH = 36
 local ITEM_HEIGHT = 32
 local PLACEHOLDER_ALPHA = 0.45
@@ -242,18 +241,22 @@ function LayoutEditorWindow:CreateTagRail()
     })
 end
 
--- Build Exit edit mode at the top right of the sorted column
-function LayoutEditorWindow:CreateExitButton()
-    self.exitButton = BankControls.button(self.centerPanel, "Exit edit mode", function() self:Close() end, {
-        x = Size.CENTER_SURFACE_WIDTH - Size.EXIT_WIDTH, y = Size.EXIT_Y,
-        width = Size.EXIT_WIDTH, height = Size.EXIT_HEIGHT,
-        tooltip = "Close the layout editor. Changes save automatically",
-    })
+-- Place a column's tab header at its top over its item area
+local function tabOptions(width, onChange)
+    return {
+        x = 0,
+        y = Size.TAB_Y,
+        width = width,
+        height = Size.TAB_HEADER + Size.AREA_HEIGHT,
+        scrollable = false,
+        onChange = onChange,
+    }
 end
 
--- Close the editor as the title bar's close button does
-function LayoutEditorWindow:Close()
-    if self.window ~= nil then self.window:Close() end
+-- Draw a column's item area, one surface inside one frame
+local function itemArea(parent, width)
+    rectangle(parent, 0, 0, width, Size.AREA_HEIGHT, VIEW_BACKGROUND, true)
+    frame(parent, 0, 0, width, Size.AREA_HEIGHT, FRAME)
 end
 
 -- Create one scrolling grid at a content point, with its own columns
@@ -278,51 +281,69 @@ function LayoutEditorWindow:CreatePane(name, parent, x, y, width, height, column
     }
 end
 
--- Build the Unsorted and Search tabs; their pages start under the tab header
+-- Build the Layout tab over the sorted grid, the open tag named beside it
+function LayoutEditorWindow:CreateLayoutTab()
+    local width = Size.CENTER_SURFACE_WIDTH
+    self.layoutTabs = prettyui.Tabs.new(self.centerPanel, {
+        { kind = "text", text = "Layout", value = "layout" },
+    }, tabOptions(width))
+    local page = self.layoutTabs:GetPage(1).content
+    itemArea(page, width)
+    self.panes = {
+        sorted = self:CreatePane("sorted", page, Size.VIEW_INSET, Size.VIEW_INSET,
+            Size.CENTER_VIEW_WIDTH, Size.SORTED_VIEW_HEIGHT, Size.CENTER_COLUMNS),
+    }
+    self.tagName = prettyui.Text.new(self.centerPanel, {
+        text = "",
+        x = Size.TAG_NAME_X,
+        y = Size.TAG_NAME_Y,
+        width = width - Size.TAG_NAME_X - Size.VIEW_INSET,
+        height = Size.TAG_NAME_HEIGHT,
+        colour = MUTED,
+        alignVertical = ui.AlignMode.CENTRE,
+        maxLines = 1,
+    })
+    self.tagName.clickthrough = true
+end
+
+-- Build the Unsorted and Search tabs over the right item area
 function LayoutEditorWindow:CreateRightTabs()
+    local width = Size.RIGHT_WIDTH
     self.tabs = prettyui.Tabs.new(self.rightPanel, {
         { kind = "text", text = BankGrid.UNSORTED_LABEL, value = "unsorted" },
         { kind = "text", text = "Search", value = "search" },
-    }, {
-        x = Size.RIGHT_INSET,
-        y = Size.TAB_Y,
-        width = Size.RIGHT_VIEW_WIDTH,
-        height = Size.COLUMN_HEIGHT - Size.RIGHT_INSET - Size.TAB_Y,
-        scrollable = false,
-        onChange = function(_, _, value) self:ShowRightTab(value) end,
-    })
+    }, tabOptions(width, function(_, _, value) self:ShowRightTab(value) end))
 
-    local width = Size.RIGHT_VIEW_WIDTH
     local unsortedPage = self.tabs:GetPage(1).content
-    rectangle(unsortedPage, 0, 0, width, Size.UNSORTED_VIEW_HEIGHT, VIEW_BACKGROUND, true)
-    frame(unsortedPage, 0, 0, width, Size.UNSORTED_VIEW_HEIGHT, INNER_FRAME)
-    self.panes.unsorted = self:CreatePane("unsorted", unsortedPage, 0, 0,
-        width, Size.UNSORTED_VIEW_HEIGHT, Size.UNSORTED_COLUMNS)
+    itemArea(unsortedPage, width)
+    self.panes.unsorted = self:CreatePane("unsorted", unsortedPage, Size.VIEW_INSET, Size.VIEW_INSET,
+        Size.RIGHT_VIEW_WIDTH, Size.UNSORTED_VIEW_HEIGHT, Size.UNSORTED_COLUMNS)
 
     local searchPage = self.tabs:GetPage(2).content
-    local listTop = Size.SEARCH_LIST_TOP - Size.TAB_PAGE_Y
+    local inset, listTop = Size.VIEW_INSET, Size.SEARCH_LIST_TOP - Size.TAB_PAGE_Y
+    itemArea(searchPage, width)
     self.itemSearch = prettyui.TextField.new(searchPage, {
-        x = 0, y = 0, width = width, height = Size.SEARCH_FIELD_HEIGHT,
+        x = inset, y = inset, width = Size.RIGHT_VIEW_WIDTH, height = Size.SEARCH_FIELD_HEIGHT,
         placeholder = "Search items...", maxLength = 80,
         onChange = function(_, _, value) self:RunSearch(value) end,
         onSubmit = function(_, value) self:RunSearch(value) end,
     })
     self.searchList = prettyui.List.new(searchPage, {
-        x = 0,
+        x = inset,
         y = listTop,
-        width = width,
+        width = Size.RIGHT_VIEW_WIDTH,
         height = Size.SEARCH_LIST_HEIGHT,
         entryHeight = 32,
         maxSelected = 1,
         backgroundColour = 0x00000000,
-        borderColour = INNER_FRAME,
+        borderColour = 0x00000000,
         selectedColour = ROW_SELECTED,
     })
     self.searchHint = prettyui.Text.new(searchPage, {
         text = Parts.SEARCH_HINT,
-        x = 10,
+        x = inset + 10,
         y = listTop + 10,
-        width = width - 20,
+        width = Size.RIGHT_VIEW_WIDTH - 20,
         height = 120,
         colour = MUTED,
         maxLines = 8,
@@ -351,44 +372,18 @@ function LayoutEditorWindow:CreateActions()
     end
 end
 
--- Build the tag rail, sorted grid, and right tabs
+-- Build the tag rail, the Layout tab, and the right tabs
 function LayoutEditorWindow:CreatePanels()
     self.centerPanel = self:Panel(Size.CENTER_X, Size.CENTER_WIDTH)
     self.rightPanel = self:Panel(Size.RIGHT_X, Size.RIGHT_WIDTH)
-
-    self.centerBackground = tiledSprite(
-        self.centerPanel, 0, 0, Size.CENTER_WIDTH, Size.COLUMN_HEIGHT,
-        NativeUi.SPRITES.PANEL_BACKGROUND
-    )
-    self.centerSurface = rectangle(
-        self.centerPanel, 0, Size.SORTED_TOP,
-        Size.CENTER_SURFACE_WIDTH, Size.CENTER_SURFACE_HEIGHT,
-        VIEW_BACKGROUND, true
-    )
-    self.centerFrame = frame(
-        self.centerPanel, 0, Size.SORTED_TOP,
-        Size.CENTER_SURFACE_WIDTH, Size.CENTER_SURFACE_HEIGHT, FRAME
-    )
-    self.panes = {
-        sorted = self:CreatePane("sorted", self.centerPanel, Size.CENTER_VIEW_X, Size.SORTED_VIEW_Y,
-            Size.CENTER_VIEW_WIDTH, Size.SORTED_VIEW_HEIGHT, Size.CENTER_COLUMNS),
-    }
+    tiledSprite(self.centerPanel, 0, 0, Size.CENTER_WIDTH, Size.COLUMN_HEIGHT, NativeUi.SPRITES.PANEL_BACKGROUND)
+    tiledSprite(self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.COLUMN_HEIGHT, NativeUi.SPRITES.PANEL_BACKGROUND)
+    self:CreateLayoutTab()
     self:CreateTagRail()
-    self:CreateExitButton()
-    self.rightBackground = tiledSprite(
-        self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.COLUMN_HEIGHT,
-        NativeUi.SPRITES.PANEL_BACKGROUND
-    )
-    self.rightFrame = frame(
-        self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.COLUMN_HEIGHT, FRAME
-    )
     self:CreateRightTabs()
     self:CreateActions()
     self:RunSearch("")
     self:CreateDragSurfaces()
-    for _, edges in ipairs({ self.centerFrame, self.rightFrame }) do
-        for _, edge in ipairs(edges) do edge:MoveToFront() end
-    end
     self:ShowRightTab("unsorted")
 end
 
@@ -469,10 +464,16 @@ function LayoutEditorWindow:HideError()
     if banner ~= nil then pcall(function() banner.root:Destroy() end) end
 end
 
--- Show every tag in the rail, the open one outlined
+-- Show every tag in the rail, the open one outlined and named
 function LayoutEditorWindow:RefreshTags()
     if self.tagRail == nil then return end
-    self.tagRail:SetTags(TagRail.Entries(self.store), self.selectedTag)
+    local entries = TagRail.Entries(self.store)
+    self.tagRail:SetTags(entries, self.selectedTag)
+    local name = ""
+    for _, entry in ipairs(entries) do
+        if entry.id == self.selectedTag then name = entry.label end
+    end
+    self.tagName.content = name
 end
 
 -- Keep the open tag open under its new name
@@ -801,15 +802,18 @@ function LayoutEditorWindow:DestroyControls()
         self.removeButton,
         self.duplicateButton,
         self.tagRail,
-        self.exitButton,
+        self.tagName,
     }) do
         if control ~= nil then pcall(function() control:Destroy() end) end
     end
     -- The tabs own their pages and destroy them
-    if self.tabs ~= nil then pcall(function() self.tabs:Destroy() end) end
+    for _, tabs in ipairs({ self.layoutTabs, self.tabs }) do
+        pcall(function() tabs:Destroy() end)
+    end
     self.tabs = nil
+    self.layoutTabs = nil
     self.tagRail = nil
-    self.exitButton = nil
+    self.tagName = nil
     self.searchHint = nil
     self.searchList = nil
     self.itemSearch = nil

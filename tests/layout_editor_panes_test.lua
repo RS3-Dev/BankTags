@@ -35,6 +35,7 @@ h:Tick(2)
 app.windows:OpenLayoutEditor("gear")
 local editor = app.windows.layoutEditor
 local editorSize = h:TagsModule("banktags/windows/layout_editor_parts").size
+local editorTheme = h:TagsModule("banktags/ui/theme")
 local changes = 0
 local onChanged = editor.onChanged
 editor.onChanged = function()
@@ -113,19 +114,29 @@ local function cells(pane)
 end
 
 -- The sorted grid fills the center at Bank Core's columns, with no Unsorted heading
--- It sits beside the tag rail, under a quiet band holding Exit edit mode
-assert(editorSize.SORTED_TOP == editorSize.TAB_PAGE_Y and editorSize.CENTER_SURFACE_HEIGHT == editorSize.UNSORTED_VIEW_HEIGHT)
+-- It sits beside the tag rail, under its own Layout tab
+assert(editorSize.SORTED_TOP == editorSize.TAB_PAGE_Y and editorSize.CENTER_SURFACE_HEIGHT == editorSize.AREA_HEIGHT)
 assert(sorted.x == editorSize.CENTER_X + 4 and sorted.y == editorSize.PANEL_TOP + editorSize.SORTED_TOP + 4)
-assert(sorted.height == editorSize.CENTER_SURFACE_HEIGHT - 8)
+assert(sorted.height == editorSize.AREA_HEIGHT - 8 and sorted.width == editorSize.CENTER_SURFACE_WIDTH - 8)
+-- The rail and both columns start right under the title bar
+assert(editorSize.PANEL_TOP == 0 and editor.centerPanel.y == 0 and editor.rightPanel.y == 0)
 local rail = editor.tagRail.root
 assert(rail.x == editorSize.RAIL_X and rail.y == editorSize.PANEL_TOP and rail.height == editorSize.PANEL_HEIGHT)
 assert(rail.x + rail.width + editorSize.RAIL_GAP == editorSize.CENTER_X and editorSize.CENTER_X == 48)
--- No title or Rename; Exit edit mode sits at the band's right, above the grid
+-- A single PrettyUI Layout tab heads the sorted grid, the open tag named beside it
+local layoutTabs = editor.layoutTabs
+assert(layoutTabs.root.parent == editor.centerPanel and #layoutTabs.tabs == 1 and layoutTabs:GetTab(1).text == "Layout")
+assert(sorted.view.root.parent == layoutTabs:GetPage(1).content)
+assert(editor.tagName.parent == editor.centerPanel and editor.tagName.x == editorSize.TAG_NAME_X)
+assert(editor.tagName.y + editor.tagName.height <= editorSize.TAB_PAGE_Y)
 assert(editor.tagTitle == nil and editor.editTagButton == nil and Harness.Find(editor.content, "Rename") == nil)
-local exit = editor.exitButton
-assert(exit.parent == editor.centerPanel and exit.root == Harness.Find(editor.content, "Exit edit mode"))
-assert(exit.x + exit.width == editorSize.CENTER_SURFACE_WIDTH and exit.y + exit.height < editorSize.SORTED_TOP)
-assert(exit.y == editorSize.TAB_Y + 8 and exit.height == 30)
+assert(editor.exitButton == nil and Harness.Find(editor.content, "Exit edit mode") == nil)
+-- Both headers share their top, height, and width with their item area
+for _, tabs in ipairs({ layoutTabs, editor.tabs }) do
+    assert(tabs.root.x == 0 and tabs.root.y == editorSize.TAB_Y)
+    assert(tabs.root.height == editorSize.TAB_HEADER + editorSize.AREA_HEIGHT)
+end
+assert(layoutTabs.root.width == editorSize.CENTER_SURFACE_WIDTH and editor.tabs.root.width == editorSize.RIGHT_WIDTH)
 -- Shortcuts, the saved note, and the drag help moved into tooltips
 assert(editor.footerNotes == nil and editor.actionsHelp == nil)
 assert(Harness.Find(editor.content, "Saved automatically") == nil)
@@ -137,15 +148,28 @@ assert(sorted.columns == editorSize.CENTER_COLUMNS and sorted.columns == 10)
 assert(Harness.Find(editor.centerPanel, "Unsorted") == nil)
 assert(Harness.Find(editor.centerPanel, "Create Copy") == nil and Harness.Find(editor.rightPanel, "New label") == nil)
 -- Unsorted fills the right column, at nine columns of its own
-assert(unsorted.x == editorSize.RIGHT_X + 8 and unsorted.width == editorSize.RIGHT_WIDTH - 16)
-assert(unsorted.y == editorSize.PANEL_TOP + editorSize.TAB_PAGE_Y and unsorted.columns == 9)
+assert(unsorted.x == editorSize.RIGHT_X + 4 and unsorted.width == editorSize.RIGHT_WIDTH - 8)
+assert(unsorted.y == editorSize.PANEL_TOP + editorSize.TAB_PAGE_Y + 4 and unsorted.columns == 9)
 local itemWidth = unsorted.width - editorSize.SCROLLBAR_RESERVE - editorSize.GRID_LEFT
 assert(9 * 44 - 4 <= itemWidth and 10 * 44 - 4 > itemWidth, "nine columns fit beside the scrollbar")
--- Sorted and Unsorted frames share their top and bottom
-assert(editorSize.PANEL_TOP + editorSize.SORTED_TOP == unsorted.y)
-assert(editorSize.SORTED_TOP + editorSize.CENTER_SURFACE_HEIGHT == editorSize.TAB_PAGE_Y + unsorted.height)
-assert(unsorted.y + unsorted.height + 8 == editorSize.PANEL_TOP + editorSize.COLUMN_HEIGHT)
+-- Sorted and Unsorted share their top, bottom, and inset
+assert(sorted.y == unsorted.y and sorted.height == unsorted.height)
+assert(unsorted.y + unsorted.height + 4 + editorSize.AREA_BOTTOM == editorSize.PANEL_TOP + editorSize.COLUMN_HEIGHT)
 assert(editorSize.COLUMN_HEIGHT + editorSize.ACTIONS_GAP == editorSize.ACTIONS_Y)
+-- The freed band under the title bar goes to the grids; the actions stay put
+assert(editorSize.PANEL_TOP + editorSize.ACTIONS_Y == 578 and sorted.height == 512)
+-- Each item area has one outer frame and no outline inside it
+local function frames(parent)
+    local edges = 0
+    for _, node in ipairs(parent.children) do
+        if not node.destroyed and node.rgba == editorTheme.FRAME and (node.width == 1 or node.height == 1) then
+            edges = edges + 1
+        end
+    end
+    return edges
+end
+assert(frames(page("unsorted").content) == 4 and frames(page("search").content) == 4)
+assert(frames(layoutTabs:GetPage(1).content) == 4 and frames(editor.rightPanel) == 0)
 -- One row of four equal actions spans both columns, from the rail's gap to the right edge
 local actions = { editor.duplicateButton, editor.removeButton, editor.unsortButton, editor.newLabelButton }
 for index, button in ipairs(actions) do
@@ -159,7 +183,7 @@ assert(editor.unsortButton.width >= 140, "Move to Unsorted keeps the width its l
 assert(editor.newLabelButton.x == editorSize.LABEL_BUTTON_X and editor.newLabelButton.y == editorSize.LABEL_BUTTON_Y)
 assert(editor.unsortButton.tooltipText ~= nil and string.find(editor.unsortButton.tooltipText, "Unsorted", 1, true) ~= nil)
 -- The Search list ends where Unsorted does
-assert(editorSize.SEARCH_LIST_TOP + editorSize.SEARCH_LIST_HEIGHT == editorSize.TAB_PAGE_Y + editorSize.UNSORTED_VIEW_HEIGHT)
+assert(editorSize.SEARCH_LIST_TOP + editorSize.SEARCH_LIST_HEIGHT == editorSize.TAB_PAGE_Y + 4 + editorSize.UNSORTED_VIEW_HEIGHT)
 -- A taller bank grows the sorted grid and both tabs, keeping the actions at the bottom
 do
     local Parts = h:TagsModule("banktags/windows/layout_editor_parts")
@@ -185,7 +209,8 @@ assert(editor.rightTab == "unsorted" and editor.tabs:GetActiveIndex() == 1)
 assert(not page("unsorted").root.hidden and page("search").root.hidden)
 assert(editor.searchDragSurface.hidden and not unsorted.surface.hidden)
 assert(editor.itemSearch.root.parent == page("search").content and unsorted.view.root.parent == page("unsorted").content)
-assert(editor.itemSearch.root.y == 0 and editor.searchList.root.y == editorSize.SEARCH_LIST_TOP - editorSize.TAB_PAGE_Y)
+assert(editor.itemSearch.root.y == 4 and editor.searchList.root.y == editorSize.SEARCH_LIST_TOP - editorSize.TAB_PAGE_Y)
+assert(editor.itemSearch.root.x == 4 and editor.searchList.root.x == 4)
 
 -- Each wheel scrolls only its own grid, clamped to that grid's content
 local unsortedMost = 4 + 15 * 44 - unsorted.height
@@ -332,7 +357,7 @@ pressResult(10)
 ghost = editor.drag.ghost
 showTab("unsorted")
 assert(editor.drag == nil and ghost.destroyed and editor.searchDragSurface.hidden)
-assert(editor.searchDragSurface.x == editorSize.RIGHT_X + 8 and editor.searchDragSurface.y == resultsTop)
+assert(editor.searchDragSurface.x == editorSize.RIGHT_X + editorSize.VIEW_INSET and editor.searchDragSurface.y == resultsTop)
 -- The hidden Search list takes no press or wheel, and keeps its text and scroll
 editor.searchDragSurface.hooks.click(nil, 12, 10)
 assert(editor.drag == nil and editor.searchDragSurface.hooks.wheel(nil, 1) == true)

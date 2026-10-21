@@ -21,7 +21,7 @@ local LayoutEditorDrag = {}
 function LayoutEditorDrag:RestoreDragSurface(surface, kind)
     if surface == nil then return end
     local pane = self.panes ~= nil and self.panes[kind] or nil
-    local rightX = Size.RIGHT_X + Size.RIGHT_INSET
+    local rightX = Size.RIGHT_X + Size.VIEW_INSET
     if pane ~= nil then
         surface:SetPos(pane.x, pane.y)
         surface:SetSize(pane.width - Size.SCROLLBAR_RESERVE, pane.height)
@@ -64,7 +64,7 @@ end
 function LayoutEditorDrag:OnSearchList(x, y)
     x, y = tonumber(x), tonumber(y)
     if x == nil or y == nil or self.rightTab ~= "search" then return false end
-    local left, top = Size.RIGHT_X + Size.RIGHT_INSET, Size.PANEL_TOP + Size.SEARCH_LIST_TOP
+    local left, top = Size.RIGHT_X + Size.VIEW_INSET, Size.PANEL_TOP + Size.SEARCH_LIST_TOP
     return x >= left and x < left + Size.RIGHT_VIEW_WIDTH
         and y >= top and y < top + Size.SEARCH_LIST_HEIGHT
 end

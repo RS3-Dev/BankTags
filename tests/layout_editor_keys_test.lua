@@ -312,8 +312,8 @@ assert(editor.errorBanner == nil)
 app.windows:OpenLayoutEditor("food")
 assert(app.windows.layoutEditor ~= editor and listener("KeyDown") ~= nil)
 assert(editor.window == nil)
--- Exit edit mode closes it the way the title bar does
-app.windows.layoutEditor.exitButton.root.hooks.pressed()
+-- The title bar's close button closes it
+app.windows.layoutEditor.window:Close()
 assert(app.windows.layoutEditor == nil)
 for _, event in ipairs({ "KeyDown", "KeyUp", "WindowFocusChanged" }) do
     assert(listener(event) == nil, "closing left " .. event)

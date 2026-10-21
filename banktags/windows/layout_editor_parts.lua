@@ -16,13 +16,16 @@ Parts.SEARCH_HINT = "Search for an item, then drag it into the layout."
 Size.SIDEBAR_WIDTH = 32 + 8 + 244
 Size.DEFAULT_WIDTH = 714 + Size.SIDEBAR_WIDTH
 Size.DEFAULT_HEIGHT = 650
-Size.PANEL_TOP = 12
-Size.DEFAULT_PANEL_HEIGHT = 594
+-- The rail and both columns start right under the title bar
+Size.PANEL_TOP = 0
+Size.DEFAULT_PANEL_HEIGHT = 606
 -- The tag rail runs down the left edge, like Bank Core's tab rail
 Size.RAIL_X = 8
 Size.RAIL_GAP = 8
 Size.CENTER_X = Size.RAIL_X + TagRail.WIDTH + Size.RAIL_GAP
-Size.DEFAULT_CENTER_WIDTH = 477
+-- Each column draws its items in one framed area, its view inset alike
+Size.VIEW_INSET = 4
+Size.COLUMN_GAP = 4
 -- The right column ends where the window's border begins
 Size.RIGHT_MARGIN = 20
 -- The editor grid starts 4px in, not the bank's 8px
@@ -33,27 +36,29 @@ Size.GRID_SLOT_SIZE = BankGrid.SLOT_SIZE
 Size.LABEL_LINE_OFFSET = BankGrid.LABEL_LINE_OFFSET
 Size.LABEL_GHOST_WIDTH = 180
 Size.LABEL_GHOST_HEIGHT = 28
-Size.DEFAULT_SURFACE_WIDTH = 473
 -- A 467px view leaves 449px for items after PrettyUI's scrollbar
 Size.DEFAULT_VIEW_WIDTH = 467
+Size.DEFAULT_SURFACE_WIDTH = Size.DEFAULT_VIEW_WIDTH + 2 * Size.VIEW_INSET
+Size.DEFAULT_CENTER_WIDTH = Size.DEFAULT_SURFACE_WIDTH + Size.COLUMN_GAP
 -- PrettyUI reserves this much for a scroll list's scrollbar and its gap
 Size.SCROLLBAR_RESERVE = 18
--- The right column: Unsorted and Search tabs
-Size.RIGHT_INSET = 8
-Size.TAB_Y = 4
+-- Both columns open with a PrettyUI tab header: Layout, then Unsorted and Search
+Size.TAB_Y = 0
 -- PrettyUI's tab header; pages start under it
 Size.TAB_HEADER = 42
 Size.TAB_PAGE_Y = Size.TAB_Y + Size.TAB_HEADER
+-- The open tag's name follows PrettyUI's narrowest text tab, 90px
+Size.TAG_NAME_X = 90 + 10
+Size.TAG_NAME_Y = Size.TAB_Y + 7
+Size.TAG_NAME_HEIGHT = 32
+-- Space under both item areas, above the actions
+Size.AREA_BOTTOM = 8
 Size.SEARCH_FIELD_HEIGHT = 26
-Size.SEARCH_LIST_TOP = Size.TAB_PAGE_Y + Size.SEARCH_FIELD_HEIGHT + 8
+Size.SEARCH_LIST_TOP = Size.TAB_PAGE_Y + Size.VIEW_INSET + Size.SEARCH_FIELD_HEIGHT + Size.VIEW_INSET
 -- The sorted grid starts level with the Unsorted grid, under the tab header
 Size.SORTED_TOP = Size.TAB_PAGE_Y
-Size.CENTER_VIEW_X = 4
-Size.SORTED_VIEW_Y = Size.SORTED_TOP + 4
--- Exit edit mode sits right of the tab header's band, level with the tabs
-Size.EXIT_WIDTH = 128
-Size.EXIT_Y = Size.TAB_Y + 8
-Size.EXIT_HEIGHT = 30
+Size.CENTER_VIEW_X = Size.VIEW_INSET
+Size.SORTED_VIEW_Y = Size.SORTED_TOP + Size.VIEW_INSET
 -- One row of item actions runs under both columns
 Size.BUTTON_HEIGHT = 28
 Size.BUTTON_GAP = 4
@@ -76,18 +81,19 @@ function Parts.SizeToBank(columns, bankWidth, bankHeight)
     -- The right column takes the rest of the width
     Size.RIGHT_X = Size.CENTER_X + Size.CENTER_WIDTH
     Size.RIGHT_WIDTH = Size.WIDTH - Size.RIGHT_MARGIN - Size.RIGHT_X
-    Size.RIGHT_VIEW_WIDTH = Size.RIGHT_WIDTH - 2 * Size.RIGHT_INSET
+    Size.RIGHT_VIEW_WIDTH = Size.RIGHT_WIDTH - 2 * Size.VIEW_INSET
     -- Unsorted fits as many columns as the right view holds
     Size.UNSORTED_COLUMNS = (Size.RIGHT_VIEW_WIDTH - Size.SCROLLBAR_RESERVE - Size.GRID_LEFT
         + Size.GRID_STEP - Size.GRID_SLOT_SIZE) // Size.GRID_STEP
     -- The actions end the panel; a taller bank grows both columns above them
     Size.ACTIONS_Y = Size.PANEL_HEIGHT - Size.BUTTON_HEIGHT
     Size.COLUMN_HEIGHT = Size.ACTIONS_Y - Size.ACTIONS_GAP
-    -- Sorted and Unsorted share their top and height
-    Size.UNSORTED_VIEW_HEIGHT = Size.COLUMN_HEIGHT - Size.RIGHT_INSET - Size.TAB_PAGE_Y
-    Size.CENTER_SURFACE_HEIGHT = Size.UNSORTED_VIEW_HEIGHT
-    Size.SORTED_VIEW_HEIGHT = Size.CENTER_SURFACE_HEIGHT - 8
-    Size.SEARCH_LIST_HEIGHT = Size.COLUMN_HEIGHT - Size.RIGHT_INSET - Size.SEARCH_LIST_TOP
+    -- Both item areas share their top and height
+    Size.AREA_HEIGHT = Size.COLUMN_HEIGHT - Size.AREA_BOTTOM - Size.TAB_PAGE_Y
+    Size.CENTER_SURFACE_HEIGHT = Size.AREA_HEIGHT
+    Size.SORTED_VIEW_HEIGHT = Size.AREA_HEIGHT - 2 * Size.VIEW_INSET
+    Size.UNSORTED_VIEW_HEIGHT = Size.SORTED_VIEW_HEIGHT
+    Size.SEARCH_LIST_HEIGHT = Size.TAB_PAGE_Y + Size.AREA_HEIGHT - Size.VIEW_INSET - Size.SEARCH_LIST_TOP
     -- Four equal buttons span both columns; the last takes any leftover pixels
     local actionsWidth = Size.WIDTH - Size.RIGHT_MARGIN - Size.CENTER_X
     local gaps = (Size.ACTION_COUNT - 1) * Size.BUTTON_GAP
