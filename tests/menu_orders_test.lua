@@ -80,13 +80,13 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         local ARROW = " <col=ffffff><gt></col>"
         local addRanged = "Add to folder <col=f2c66d>Ranged</col>" .. ARROW
         local moveMelee = "Move to folder <col=f2c66d>Melee</col>" .. ARROW
-        local labels = named({ "Select", "Edit", "Select items", "Remove" }, "Ranged")
-        labels[5] = addRanged
+        local labels = named({ "Select", "Edit", "Rename", "Select items", "Remove" }, "Ranged")
+        labels[6] = addRanged
         local menu = shows("ranged", labels)
         assert(#Harness.Submenus(menu) == 1 and Harness.Submenu(menu, addRanged).options.title == "Add to folder", where)
-        labels = named({ "Select", "Edit", "Select items", "Remove", "Remove from folder" }, "Melee")
-        labels[5] = "Remove from folder <col=f2c66d>Combat</col>"
-        labels[6] = moveMelee
+        labels = named({ "Select", "Edit", "Rename", "Select items", "Remove", "Remove from folder" }, "Melee")
+        labels[6] = "Remove from folder <col=f2c66d>Combat</col>"
+        labels[7] = moveMelee
         menu = shows("melee", labels)
         assert(Harness.Submenu(menu, moveMelee).options.title == "Move to folder", where)
 

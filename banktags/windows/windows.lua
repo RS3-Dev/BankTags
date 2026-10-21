@@ -238,7 +238,7 @@ function Windows:OpenTagSettings(tag, isNew, onSaved)
     if parent == nil then return end
     local editor
     editor = TagSettingsEditor.new(parent, {
-        title = isNew and "Create Bank Tag" or "Edit Bank Tag",
+        title = isNew and "Create Bank Tag" or "Rename Bank Tag",
         tag = tag,
         spriteObjectID = not isNew and app.store:GetTagSprite(tag) or nil,
         onChooseSprite = function()

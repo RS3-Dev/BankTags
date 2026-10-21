@@ -77,8 +77,8 @@ for _, node in ipairs(rail.root.children) do
     if node.associatedObjectID == 4151 and not node.destroyed then railIcon = node end
 end
 assert(railIcon ~= nil and railIcon.clickthrough and railIcon.y > melee.y and railIcon.y < melee.y + melee.height)
--- The open tag's name sits beside Edit tag, with no picker
-assert(editor.tagTitle.content == "Combat / Melee" and Harness.Find(editor.content, "Edit tag") == editor.editTagButton.root)
+-- The open tag's name sits beside Rename, with no picker
+assert(editor.tagTitle.content == "Combat / Melee" and Harness.Find(editor.content, "Rename") == editor.editTagButton.root)
 -- New Tag and Import/Share stay in the Tags tab, and the window's own close button closes it
 assert(Harness.Find(editor.content, "New Tag") == nil)
 -- The sorted grid sits beside the rail, below the name and above the shortcuts
@@ -182,7 +182,7 @@ assert(#editor.searchResults == 1 and editor.searchResults[1].objectId == 385)
 railButton("food").root.hooks.pressed()
 assert(railOpen("food") and editor.tagTitle.content == "Food")
 assert(editor.selectedTag == "food" and #editor.panes.sorted.slots == 0 and #editor.panes.unsorted.slots == 0)
--- Edit tag opens the open tag's settings in front of the editor
+-- Rename opens the open tag's settings in front of the editor
 editor.editTagButton.root.hooks.pressed()
 local tagSettings = app.windows.tagSettingsEditor
 assert(tagSettings ~= nil and tagSettings.field.text == "food" and not editor.keysOnGrid)

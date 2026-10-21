@@ -244,7 +244,7 @@ function LayoutEditorWindow:CreateTagRail()
     })
 end
 
--- Build the open tag's name and Edit tag above the sorted grid
+-- Build the open tag's name and Rename above the sorted grid
 function LayoutEditorWindow:CreateTitle()
     local x, y = Size.CENTER_X, Size.PANEL_TOP
     self.tagTitle = prettyui.Text.new(self.content, {
@@ -256,7 +256,7 @@ function LayoutEditorWindow:CreateTitle()
         colour = LABEL_TEXT_COLOUR,
         maxLines = 1,
     })
-    self.editTagButton = BankControls.button(self.content, "Edit tag", function() self:EditTag() end, {
+    self.editTagButton = BankControls.button(self.content, "Rename", function() self:EditTag() end, {
         x = x + Size.CENTER_SURFACE_WIDTH - Size.EDIT_TAG_WIDTH, y = y,
         width = Size.EDIT_TAG_WIDTH, height = Size.TITLE_HEIGHT,
         tooltip = "Rename this tag or change its icon",

@@ -30,7 +30,7 @@ Size.CENTER_X = Size.RAIL_X + TagRail.WIDTH + Size.RAIL_GAP
 Size.DEFAULT_CENTER_WIDTH = 477
 -- The right column ends where the window's border begins
 Size.RIGHT_MARGIN = 20
--- The open tag's name and Edit tag sit above the sorted grid
+-- The open tag's name and Rename sit above the sorted grid
 Size.TITLE_HEIGHT = 30
 Size.EDIT_TAG_WIDTH = 96
 Size.SORTED_TOP = Size.TITLE_HEIGHT + 10

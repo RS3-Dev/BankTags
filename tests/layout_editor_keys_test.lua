@@ -228,7 +228,7 @@ assert(app.store:HasTag("melee", WHIP) and whipCopies() == before)
 app.windows:Close("textPrompt")
 assert(#editor.overlayWindows == 0)
 
--- Edit tag opens tag settings, with a field of its own, in front of the editor
+-- Rename opens tag settings, with a field of its own, in front of the editor
 selectWhip()
 editor.editTagButton.root.hooks.pressed()
 assert(app.windows.tagSettingsEditor ~= nil and editor.overlayWindows[1] == app.windows.tagSettingsEditor.window)

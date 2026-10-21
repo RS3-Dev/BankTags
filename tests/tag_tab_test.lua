@@ -131,7 +131,7 @@ assert(melee.root.y > list.list.root.height, "melee starts below the visible lis
 
 -- Right-clicking a tag row offers its actions; Select shows it on a later tick
 local menu = h:ContentMenu()
-for _, labelText in ipairs({ "Select", "Edit", "Select items", "Remove", "Remove from folder",
+for _, labelText in ipairs({ "Select", "Edit", "Rename", "Select items", "Remove", "Remove from folder",
     "Move to folder" }) do
     local found = false
     for _, entry in ipairs(menu.entries) do
@@ -161,6 +161,21 @@ h:Tick(1)
 assert(app.store:GetTagFolder("melee") == nil)
 assert(app.store:CreateFolder("Numbers", "melee"))
 app:Changed()
+-- Edit opens the layout editor; Rename opens the name and icon settings
+pointAtRow("melee")
+menu = h:ContentMenu()
+Harness.Choose(menu, "Edit <col=f2c66d>Melee</col>")
+h:Tick(1)
+assert(app.windows.layoutEditor ~= nil and app.windows.layoutEditor.selectedTag == "melee")
+assert(app.windows.tagSettingsEditor == nil)
+app.windows:Close("layoutEditor")
+pointAtRow("melee")
+menu = h:ContentMenu()
+Harness.Choose(menu, "Rename <col=f2c66d>Melee</col>")
+h:Tick(1)
+assert(app.windows.tagSettingsEditor ~= nil and app.windows.tagSettingsEditor.field.text == "melee")
+assert(app.windows.layoutEditor == nil)
+app.windows:Close("tagSettingsEditor")
 -- Without PrettyUI's MiniMenu the row keeps its other actions
 local MiniMenu = prettyui.MiniMenu
 prettyui.MiniMenu = nil

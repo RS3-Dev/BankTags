@@ -35,7 +35,7 @@ function TagSettingsEditor.new(parent, options)
     }, TagSettingsEditor)
 
     self.window = prettyui.Window.new(parent, {
-        title = options.title or "Edit Bank Tag",
+        title = options.title or "Rename Bank Tag",
         x = -math.floor(WIDTH / 2),
         y = -math.floor(HEIGHT / 2),
         xAnchor = 0.5,
