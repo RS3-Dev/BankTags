@@ -120,8 +120,8 @@ local function findSlot(layoutKey)
 end
 local function saved() return Json.encode(store.data) end
 
--- The editor listens to presses only while it is open; releases need no tracking
-assert(listener("KeyDown") ~= nil and listener("WindowFocusChanged") ~= nil and listener("KeyUp") == nil)
+-- The temporary logger watches presses and releases only while the editor is open
+assert(listener("KeyDown") ~= nil and listener("WindowFocusChanged") ~= nil and listener("KeyUp") ~= nil)
 -- The buttons name their keys
 assert(editor.copyButton.tooltipText == "Copy the selected item or group (Ctrl+C)")
 assert(editor.pasteButton.tooltipText == "Click an empty cell, then paste the copied items there (Ctrl+V)")
@@ -352,10 +352,19 @@ assert(changes == changesBefore and editor.errorBanner == nil and editor.clipboa
 
 -- Debug logging names each chord and shortcut key, and what blocked it; plain typing is not logged
 local logged = {}
-h.host.globals.log = function(...) logged[#logged + 1] = table.concat({ ... }) end
+local rawLogged = {}
+h.host.globals.log = function(...)
+    local message = table.concat({ ... })
+    if message:find("Bank Tags raw key", 1, true) then
+        rawLogged[#rawLogged + 1] = message
+    else
+        logged[#logged + 1] = message
+    end
+end
 press(GAME.A, NONE)
 undo()
 assert(#logged == 0, "nothing is logged while debug logging is off")
+assert(#rawLogged > 0 and rawLogged[1]:find("gameKey=", 1, true))
 assert(app:SetSetting("enableDebug", true))
 clickSlot("sorted", 9, 5)
 press(GAME.A, NONE)

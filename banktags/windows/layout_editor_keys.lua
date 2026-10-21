@@ -14,11 +14,30 @@ local ANY_MODIFIER = 7
 
 local LayoutEditorKeys = {}
 
+-- Temporary raw event logging while the editor is open
+local function traceRawKey(kind, event)
+    local values = { "Bank Tags raw key ", kind, " eventType=", type(event) }
+    for _, field in ipairs({ "gameKey", "systemKey", "modifiers", "isRepeat" }) do
+        local ok, value = pcall(function() return event[field] end)
+        values[#values + 1] = " " .. field .. "=" .. (ok and tostring(value) or "unreadable")
+    end
+    for _, field in ipairs({ "IsControlDown", "IsShiftDown", "IsAltDown" }) do
+        local ok, value = pcall(function() return Keyboard[field]() end)
+        values[#values + 1] = " " .. field .. "=" .. (ok and tostring(value) or "unavailable")
+    end
+    if type(log) == "function" then log(table.concat(values)) end
+end
+
 -- Listen for shortcut keys while the editor is open
 function LayoutEditorKeys:StartShortcuts()
     self.keysOnGrid = false
     self.menuOnGrid = false
-    Event.KeyDown.Subscribe(KEY_EVENT, function(event) self:KeyPressed(event) end)
+    Event.KeyDown.Subscribe(KEY_EVENT, function(event)
+        traceRawKey("down", event)
+        local ok, message = pcall(function() self:KeyPressed(event) end)
+        if not ok and type(log) == "function" then log("Bank Tags key handler failed: ", tostring(message)) end
+    end)
+    Event.KeyUp.Subscribe(KEY_EVENT, function(event) traceRawKey("up", event) end)
     -- Another menu may lead to a window with its own text field; the grid's own row menu does not
     Event.MiniMenuOpened.Subscribe(KEY_EVENT, function()
         if not self.menuOnGrid then self.keysOnGrid = false end
@@ -35,6 +54,7 @@ end
 -- Stop listening for shortcut keys
 function LayoutEditorKeys:StopShortcuts()
     Event.KeyDown.Unsubscribe(KEY_EVENT)
+    Event.KeyUp.Unsubscribe(KEY_EVENT)
     Event.MiniMenuOpened.Unsubscribe(KEY_EVENT)
     Event.WindowFocusChanged.Unsubscribe(KEY_EVENT)
     self.keysOnGrid = false
