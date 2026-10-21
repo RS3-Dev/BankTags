@@ -273,12 +273,12 @@ app.windows.tagDeleteConfirm.deleteButton.root.hooks.click()
 h:Tick(2)
 assert(app.store.data.tags.snacks == nil and app.shownTag == nil and layout.selectedTag == nil)
 
--- The window's close button closes the editor, as does Bank Core unloading
+-- The footer Close button closes the editor, as does Bank Core unloading
 assert(app:ShowTag("melee"))
 h:Tick(2)
 app.windows:OpenLayoutEditor("melee")
 editor = app.windows.layoutEditor
-editor.window:Close()
+editor.closeButton.root.hooks.pressed()
 assert(app.windows.layoutEditor == nil and editor.window == nil)
 assert(editor.panes == nil and editor.onClose == nil)
 assert(editor.tabs == nil and editor.layoutTabs == nil and editor.tagName == nil)

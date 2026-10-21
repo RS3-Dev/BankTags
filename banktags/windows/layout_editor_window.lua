@@ -364,6 +364,9 @@ function LayoutEditorWindow:CreateActions()
             "Leave the selected item unsorted, or drag it to Unsorted" },
         -- Its drag surface handles clicks too, so the button has no action
         { "newLabelButton", "New label", nil, "Click to add a label above the selection, or drag it onto a row" },
+        { "closeButton", "Close", function()
+            if self.window ~= nil then self.window:Close() end
+        end, "Close the layout editor" },
     }) do
         self[action[1]] = BankControls.button(self.content, action[2], action[3], {
             x = Size.ACTION_X[index], y = y,
@@ -371,6 +374,7 @@ function LayoutEditorWindow:CreateActions()
             tooltip = action[4],
         })
     end
+    self.closeButton.root.stylesheetID = id.StyleSheet.BUTTON_CORNERED_BOLD_NEGATIVE
 end
 
 -- Build the tag rail, the Layout tab, and the right tabs
@@ -851,6 +855,7 @@ function LayoutEditorWindow:DestroyControls()
         self.duplicateButton,
         self.tagRail,
         self.tagName,
+        self.closeButton,
     }) do
         if control ~= nil then pcall(function() control:Destroy() end) end
     end
@@ -867,6 +872,7 @@ function LayoutEditorWindow:DestroyControls()
     self.itemSearch = nil
     self:HideError()
     self.newLabelButton = nil
+    self.closeButton = nil
     self.unsortButton = nil
     self.removeButton = nil
     self.duplicateButton = nil

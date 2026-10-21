@@ -63,7 +63,7 @@ Size.SORTED_VIEW_Y = Size.SORTED_TOP + Size.VIEW_INSET
 Size.BUTTON_HEIGHT = 28
 Size.BUTTON_GAP = 4
 Size.ACTIONS_GAP = 8
-Size.ACTION_COUNT = 4
+Size.ACTION_COUNT = 5
 
 -- Size the editor to cover the bank at Bank Core's columns
 -- Only one editor is open, so sizes live in Size
@@ -94,7 +94,7 @@ function Parts.SizeToBank(columns, bankWidth, bankHeight)
     Size.SORTED_VIEW_HEIGHT = Size.AREA_HEIGHT - 2 * Size.VIEW_INSET
     Size.UNSORTED_VIEW_HEIGHT = Size.SORTED_VIEW_HEIGHT
     Size.SEARCH_LIST_HEIGHT = Size.TAB_PAGE_Y + Size.AREA_HEIGHT - Size.VIEW_INSET - Size.SEARCH_LIST_TOP
-    -- Four equal buttons span both columns; the last takes any leftover pixels
+    -- Five buttons span both columns; the last takes any leftover pixels
     local actionsWidth = Size.WIDTH - Size.RIGHT_MARGIN - Size.CENTER_X
     local gaps = (Size.ACTION_COUNT - 1) * Size.BUTTON_GAP
     local width = (actionsWidth - gaps) // Size.ACTION_COUNT
@@ -104,10 +104,10 @@ function Parts.SizeToBank(columns, bankWidth, bankHeight)
         Size.ACTION_WIDTH[index] = width
     end
     Size.ACTION_WIDTH[Size.ACTION_COUNT] = Size.WIDTH - Size.RIGHT_MARGIN - Size.ACTION_X[Size.ACTION_COUNT]
-    -- New label is last; its drag surface covers it
-    Size.LABEL_BUTTON_X = Size.ACTION_X[Size.ACTION_COUNT]
+    -- New label's drag surface covers the fourth button
+    Size.LABEL_BUTTON_X = Size.ACTION_X[4]
     Size.LABEL_BUTTON_Y = Size.PANEL_TOP + Size.ACTIONS_Y
-    Size.LABEL_BUTTON_WIDTH = Size.ACTION_WIDTH[Size.ACTION_COUNT]
+    Size.LABEL_BUTTON_WIDTH = Size.ACTION_WIDTH[4]
 end
 Parts.SizeToBank(BankGrid.DEFAULT_COLUMNS)
 
