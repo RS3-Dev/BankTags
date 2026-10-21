@@ -207,6 +207,17 @@ function Harness.new(name, options)
     scrollViews()
     standInTabs()
     installMiniMenu()
+    -- An attached PrettyUI tooltip records its target, text, and whether it is shown
+    local attach = prettyui.Tooltip.attach
+    prettyui.Tooltip.attach = function(target, parent, value)
+        local tooltip = attach(target, parent, value)
+        tooltip.target, tooltip.parent, tooltip.text, tooltip.shown = target, parent, value, false
+        function tooltip:SetText(text) self.text = text end
+        function tooltip:Show() self.shown = true end
+        function tooltip:Hide() self.shown = false end
+        function tooltip:Destroy() self.destroyed, self.shown = true, false end
+        return tooltip
+    end
     prettyui.ItemGrid = { new = function(parent)
         local grid = { root = ui.Layer.new(parent), slots = {} }
         function grid:SetObjects(objects) self.objects = objects end

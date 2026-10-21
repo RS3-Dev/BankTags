@@ -83,8 +83,11 @@ local longName = string.rep("a", 79) .. "z"
 assert(store:CreateTag(longName))
 store.data.tags[longName].rows = record.rows
 store.data.tags[longName].unsorted = record.unsorted
-local page, notice = TagPage.Build(store, longName, { mount = function() end })
+-- The tag's items draw in one block, with a pixel-high block for the names mount
+local mounts = { notice = { mount = function() end }, names = { mount = function() end } }
+local page, notice = TagPage.Build(store, longName, mounts)
 assert(notice == nil and page.key == "tag:" .. longName and #page.title == 80)
+assert(page.mount == mounts.names and page.body[1].items == TagPage.ITEMS_BLOCK and page.body[2].height == 1)
 assert(accepts(page))
 assert(TagPage.Build(store, "missing") == nil)
 
@@ -107,7 +110,7 @@ full.rows[1] = { kind = "row", slots = slots }
 full.unsorted = { item(4151, 1) }
 assert(TagData.EntryCount(full) == TagData.EDIT_ENTRY_LIMIT)
 assert(store:Save())
-page, notice = TagPage.Build(store, "full", { mount = function() end })
+page, notice = TagPage.Build(store, "full", mounts)
 local _, pageEntries = TagPage.Rows(full)
 assert(notice == nil and pageEntries == TagPage.MAX_ENTRIES)
 assert(accepts(page))
@@ -136,8 +139,8 @@ assert(ChunkedStringStore.Write({ manifestKey = "banktags:tags:v3:manifest",
     chunkPrefix = "banktags:tags:v3:" }, legacyText))
 local legacy = TagStore.new()
 assert(legacy.loadError == nil and TagData.EntryCount(legacy.data.tags.full) == TagData.MAX_TAG_ENTRIES)
-page, notice = TagPage.Build(legacy, "full", { mount = function() end })
-assert(notice ~= nil and page.body ~= nil and page.layout == nil)
+page, notice = TagPage.Build(legacy, "full", mounts)
+assert(notice ~= nil and page.body[1].ui == "notice" and page.mount == mounts.notice)
 assert(string.find(notice, tostring(TagData.MAX_TAG_ENTRIES + 2), 1, true))
 assert(accepts(page))
 -- Loading, unrelated edits, and saving keep the oversized tag whole
@@ -147,8 +150,8 @@ assert(TagData.Encode(legacy.data, "full") == TagData.Encode(TagData.Decode(lega
 -- It may not grow, but it may shrink until it fits again
 assert(not legacy:AddTag("full", 385, key(385, 3)))
 assert(legacy:RemoveTag("full", key(4151, 2)) and legacy:RemoveTag("full", key(4151, 1)))
-page, notice = TagPage.Build(legacy, "full", { mount = function() end })
-assert(notice == nil and page.layout ~= nil and accepts(page))
+page, notice = TagPage.Build(legacy, "full", mounts)
+assert(notice == nil and page.body[1].layout ~= nil and accepts(page))
 -- Its share code is refused as an import, which must leave room to show the tag
 local imported, importReason = TagData.Decode(legacyText)
 assert(imported == nil and string.find(importReason, tostring(TagData.EDIT_ENTRY_LIMIT), 1, true))

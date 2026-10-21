@@ -16,10 +16,11 @@ local Theme = require("banktags/ui/theme")
 
 local LayoutEditorWindow = {}
 LayoutEditorWindow.__index = LayoutEditorWindow
--- Drag gestures, catalog search, and shortcut keys live in their own files
+-- Drag gestures, catalog search, shortcut keys, and item names live in their own files
 require("banktags/windows/layout_editor_drag").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_search").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_keys").install(LayoutEditorWindow)
+require("banktags/windows/layout_editor_names").install(LayoutEditorWindow)
 
 -- Errors show over the grid's bottom for about four seconds
 local ERROR_HEIGHT = 40
@@ -384,6 +385,7 @@ function LayoutEditorWindow:CreatePanels()
     self:CreateActions()
     self:RunSearch("")
     self:CreateDragSurfaces()
+    self:CreateItemNames()
     self:ShowRightTab("unsorted")
 end
 
@@ -690,10 +692,11 @@ function LayoutEditorWindow:PaneAt(x, y)
     return nil
 end
 
--- Keep the editor above native bank redraws
+-- Keep the editor above native bank redraws and name the hovered item
 function LayoutEditorWindow:PollDrag()
     self:KeepOnTop()
     self:TickError()
+    self:UpdateItemName()
 end
 
 -- Stop the listener that keeps the editor on top
@@ -781,6 +784,7 @@ end
 
 -- Remove the editor controls and release their callbacks
 function LayoutEditorWindow:DestroyControls()
+    self:DestroyItemNames()
     for _, name in ipairs(PANE_NAMES) do
         local pane = self.panes ~= nil and self.panes[name] or nil
         if pane ~= nil then
