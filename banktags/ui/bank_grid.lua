@@ -46,14 +46,6 @@ function BankGrid.LabelY(row)
     return BankGrid.RowItemY(row) + GRID_SLOT_SIZE - LABEL_LINE_OFFSET - 2
 end
 
--- Return the Unsorted heading row when items follow the layout
-function BankGrid.UnsortedRow(slots, boundary, columnCount)
-    boundary = math.tointeger(tonumber(boundary))
-    columnCount = math.max(1, math.tointeger(tonumber(columnCount)) or 1)
-    if boundary == nil or #(slots or {}) <= boundary then return nil end
-    return boundary // columnCount
-end
-
 -- Convert a slot index into a row and column
 function BankGrid.PositionForIndex(index, columnCount)
     local zeroIndex = math.max(0, (math.tointeger(tonumber(index)) or 1) - 1)
@@ -69,18 +61,6 @@ function BankGrid.RowAtContentY(contentY)
     contentY = tonumber(contentY)
     if contentY == nil or contentY < 0 then return nil end
     return math.floor(contentY / GRID_STEP)
-end
-
--- Measure a labelled page through its last used row
-function BankGrid.LabelledContentHeight(slotCount, columnCount, labels)
-    columnCount = math.max(1, math.tointeger(tonumber(columnCount)) or 1)
-    slotCount = tonumber(slotCount) or 0
-    local lastRow = slotCount > 0 and math.floor((slotCount - 1) / columnCount) or -1
-    for _, label in ipairs(labels or {}) do
-        lastRow = math.max(lastRow, tonumber(label.row) or -1)
-    end
-    if lastRow < 0 then return 0 end
-    return BankGrid.RowItemY(lastRow) + GRID_STEP
 end
 
 -- Measure the page from its sections or occupied rows

@@ -114,6 +114,32 @@ local function placeListRows()
     end
 end
 
+-- Give stand-in views a place and PrettyUI's scroll: clamped to the content,
+-- moved by the wheel a step at a time, and reporting whether it moved
+local function scrollViews()
+    local newView = prettyui.SimpleView.new
+    prettyui.SimpleView.new = function(parent, options)
+        local view = newView(parent, options)
+        view.root:SetPos(options.x or 0, options.y or 0)
+        view.root:SetSize(options.width, options.height)
+        view.height, view.scrollY, view.scrollStep = options.height, 0, options.scrollStep or 32
+        function view:SetScrollPosition(position)
+            local most = math.max(0, (self.content.height or 0) - self.height)
+            self.scrollY = math.max(0, math.min(math.floor(position or 0), most))
+        end
+        function view:SetContentHeight(height)
+            self.content.height = height
+            self:SetScrollPosition(self.scrollY)
+        end
+        function view._onScrollWheel(_, delta)
+            local before = view.scrollY
+            view:SetScrollPosition(view.scrollY + delta * view.scrollStep)
+            return view.scrollY == before
+        end
+        return view
+    end
+end
+
 -- Install the stand-in host, build Bank Tags, and create a loader
 function Harness.new(name, options)
     options = options or {}
@@ -123,6 +149,7 @@ function Harness.new(name, options)
     bankHost:InstallWindowWidgets()
     bankHost:InstallPanelWidgets()
     placeListRows()
+    scrollViews()
     installMiniMenu()
     prettyui.ItemGrid = { new = function(parent)
         local grid = { root = ui.Layer.new(parent), slots = {} }

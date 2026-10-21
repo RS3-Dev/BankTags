@@ -62,27 +62,28 @@ assert(spriteFor(1944).alpha < 1)
 editor.window.tooltipContext = { position = function()
     return Geometry.absolutePosition(editor.content)
 end }
--- Point at the centre of a grid slot, counted from zero
-local function pointAtSlot(column, row)
+-- Point at the centre of a pane's grid slot, counted from zero
+local function pointAtSlot(paneName, column, row)
     local left, top = Geometry.absolutePosition(editor.content)
-    local x = left + editorSize.CENTER_X + editorSize.CENTER_VIEW_X + editorSize.GRID_LEFT + column * 44 + 20
-    local y = top + editorSize.PANEL_TOP + editorSize.CENTER_VIEW_Y + 4 + row * 44 + 20
-    host.mouse = { x = x, y = y }
-    return x - left - editorSize.CENTER_X - editorSize.CENTER_VIEW_X,
-        y - top - editorSize.PANEL_TOP - editorSize.CENTER_VIEW_Y
+    local pane = editor.panes[paneName]
+    local x, y = editorSize.GRID_LEFT + column * 44 + 20, 4 + row * 44 + 20 - pane.view.scrollY
+    host.mouse = { x = left + editorSize.CENTER_X + editorSize.CENTER_VIEW_X + x,
+        y = top + editorSize.PANEL_TOP + pane.y + y }
+    return x, y
 end
 -- Press on a slot and release over another, as dragging an item does
-local function drag(fromColumn, fromRow, toColumn, toRow)
-    local surface = editor.centerDragSurface
-    surface.hooks.click(nil, pointAtSlot(fromColumn, fromRow))
-    pointAtSlot(toColumn, toRow)
+local function drag(fromPane, fromColumn, fromRow, toPane, toColumn, toRow)
+    local surface = editor.panes[fromPane].surface
+    surface.hooks.click(nil, pointAtSlot(fromPane, fromColumn, fromRow))
+    pointAtSlot(toPane, toColumn, toRow)
     surface.hooks.release()
 end
 
+-- Sorted rows and Unsorted are separate grids; the shark leads Unsorted
+local sorted, unsorted = editor.panes.sorted, editor.panes.unsorted
+assert(sorted.slots[1].layoutKey == key(4151, 1) and unsorted.slots[1].layoutKey == key(385, 1))
 -- Drag the shark into column 12, which only 13 columns allow
-local slots = editor.centerSlots
-assert(slots[1].layoutKey == key(4151, 1) and editor.centerUnsortedRow == 1)
-drag(0, 2, 11, 0)
+drag("unsorted", 0, 0, "sorted", 11, 0)
 local row = app.store.data.tags.melee.rows[1].slots
 assert(#row == 12 and row[12].layoutKey == key(385, 1), "the shark landed at row 1, column 12")
 h:Tick(4)
@@ -95,7 +96,7 @@ end
 assert(whipY ~= nil and sharkY == whipY and sharkX == 8 + 11 * 44, tostring(sharkX))
 
 -- Select the whip, then copy it; the ghost opens copy 1
-drag(0, 0, 0, 0)
+drag("sorted", 0, 0, "sorted", 0, 0)
 assert(editor.selectedLayoutKey == key(4151, 1))
 Harness.Find(editor.centerPanel, "Create Copy").hooks.pressed()
 assert(editor.selectedLayoutKey == key(4151, 2))
@@ -109,7 +110,7 @@ Harness.Find(editor.centerPanel, "Move to Unsorted").hooks.pressed()
 local unsorted = app.store.data.tags.melee.unsorted
 assert(unsorted[#unsorted].layoutKey == key(4151, 2) and app.store:HasTag("melee", key(4151, 2)))
 -- Remove takes the selected copy out of the tag
-drag(0, 0, 0, 0)
+drag("sorted", 0, 0, "sorted", 0, 0)
 Harness.Find(editor.centerPanel, "Remove").hooks.pressed()
 assert(not app.store:HasTag("melee", key(4151, 1)) and app.store:HasTag("melee", key(4151, 2)))
 -- With nothing selected the buttons explain instead of acting
@@ -141,7 +142,7 @@ assert(#editor.searchResults == 1 and editor.searchResults[1].objectId == 385)
 
 -- Choosing another tag in the editor's list opens that tag
 editor.tagList.list:Click("food")
-assert(editor.selectedTag == "food" and #editor.centerSlots == 0)
+assert(editor.selectedTag == "food" and #editor.panes.sorted.slots == 0 and #editor.panes.unsorted.slots == 0)
 
 -- Moving the bank moves the editor once Bank Core reports the new bounds
 local window = host.window

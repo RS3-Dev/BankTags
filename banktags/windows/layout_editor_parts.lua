@@ -37,10 +37,16 @@ Size.LABEL_GHOST_WIDTH = 180
 Size.LABEL_GHOST_HEIGHT = 28
 Size.DEFAULT_SURFACE_WIDTH = 473
 Size.DEFAULT_SURFACE_HEIGHT = 550
+-- Sorted and Unsorted views share this x and width
 Size.CENTER_VIEW_X = 4
-Size.CENTER_VIEW_Y = 4
+Size.SORTED_VIEW_Y = 4
 -- A 467px view leaves 449px for items after PrettyUI's scrollbar
 Size.DEFAULT_VIEW_WIDTH = 467
+-- Unsorted sits under the sorted grid: a heading, then four item rows
+Size.UNSORTED_ROWS = 4
+Size.UNSORTED_HEADING_HEIGHT = 26
+Size.UNSORTED_VIEW_HEIGHT = BankGrid.TOP + Size.UNSORTED_ROWS * BankGrid.STEP
+Size.PANE_GAP = 4
 -- Grid actions share a footer row 8px below the grid
 Size.DEFAULT_FOOTER_Y = 558
 Size.FOOTER_HEIGHT = 28
@@ -65,7 +71,11 @@ function Parts.SizeToBank(columns, bankWidth, bankHeight)
     Size.CENTER_SURFACE_WIDTH = Size.DEFAULT_SURFACE_WIDTH + extraWidth
     Size.CENTER_SURFACE_HEIGHT = Size.DEFAULT_SURFACE_HEIGHT + extraHeight
     Size.CENTER_VIEW_WIDTH = Size.DEFAULT_VIEW_WIDTH + extraWidth
-    Size.CENTER_VIEW_HEIGHT = Size.CENTER_SURFACE_HEIGHT - 8
+    -- A taller bank grows only the sorted view
+    Size.SORTED_VIEW_HEIGHT = Size.CENTER_SURFACE_HEIGHT - 8 - Size.PANE_GAP
+        - Size.UNSORTED_HEADING_HEIGHT - Size.UNSORTED_VIEW_HEIGHT
+    Size.UNSORTED_HEADING_Y = Size.SORTED_VIEW_Y + Size.SORTED_VIEW_HEIGHT + Size.PANE_GAP
+    Size.UNSORTED_VIEW_Y = Size.UNSORTED_HEADING_Y + Size.UNSORTED_HEADING_HEIGHT
     Size.RIGHT_X = Size.CENTER_X + Size.CENTER_WIDTH
     Size.LABEL_BUTTON_X = Size.CENTER_SURFACE_WIDTH - Size.LABEL_BUTTON_WIDTH
     Size.FOOTER_Y = Size.DEFAULT_FOOTER_Y + extraHeight

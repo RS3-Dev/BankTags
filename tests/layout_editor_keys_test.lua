@@ -62,20 +62,19 @@ local function copyKeys()
     release(CONTROL)
 end
 
--- Press and release on a grid slot, which selects its item
--- The tag starts with its items under the Unsorted heading on row 0
+-- Press and release on a pane's grid slot, which selects its item
+-- The tag starts with its items in Unsorted
 editor.window.tooltipContext = { position = function()
     return Geometry.absolutePosition(editor.content)
 end }
-local function clickSlot(column, row)
+local function clickSlot(paneName, column, row)
     local left, top = Geometry.absolutePosition(editor.content)
-    local x = left + editorSize.CENTER_X + editorSize.CENTER_VIEW_X + editorSize.GRID_LEFT + column * 44 + 20
-    local y = top + editorSize.PANEL_TOP + editorSize.CENTER_VIEW_Y + 4 + row * 44 + 20
-    host.mouse = { x = x, y = y }
-    local surface = editor.centerDragSurface
-    surface.hooks.click(nil, x - left - editorSize.CENTER_X - editorSize.CENTER_VIEW_X,
-        y - top - editorSize.PANEL_TOP - editorSize.CENTER_VIEW_Y)
-    surface.hooks.release()
+    local pane = editor.panes[paneName]
+    local x, y = editorSize.GRID_LEFT + column * 44 + 20, 4 + row * 44 + 20
+    host.mouse = { x = left + editorSize.CENTER_X + editorSize.CENTER_VIEW_X + x,
+        y = top + editorSize.PANEL_TOP + pane.y + y }
+    pane.surface.hooks.click(nil, x, y)
+    pane.surface.hooks.release()
 end
 -- Count the tag's whip copies
 local function whipCopies()
@@ -86,8 +85,16 @@ local function whipCopies()
     return count
 end
 local function selectWhip()
-    clickSlot(0, 1)
+    clickSlot("unsorted", 0, 0)
     assert(editor.selectedLayoutKey == WHIP)
+end
+-- Count the gold outlines drawn on either grid
+local function outlines()
+    local count = 0
+    for _, node in ipairs(editor.centerNodes) do
+        if node.fill == false then count = count + 1 end
+    end
+    return count
 end
 
 -- The editor listens only while it is open
@@ -114,6 +121,21 @@ for _, entries in ipairs({ melee.rows[1].slots, melee.unsorted }) do
     end
 end
 assert(copy ~= nil and copy.sourceLayoutKey == WHIP, "the copy is a ghost of the whip")
+-- The copy of an Unsorted item lands in the sorted grid, outlined alone
+assert(editor.panes.sorted.slots[1].layoutKey == key(4151, 2) and outlines() == 1)
+-- Ctrl+C and Delete act on a sorted selection too
+clickSlot("sorted", 0, 0)
+copyKeys()
+assert(whipCopies() == 3 and editor.selectedLayoutKey == key(4151, 3) and outlines() == 1)
+tap(DELETE, NONE)
+assert(whipCopies() == 2 and not app.store:HasTag("melee", key(4151, 3)) and changes == 3)
+-- Clicking an empty cell clears the selection
+clickSlot("sorted", 0, 0)
+clickSlot("unsorted", 5, 3)
+assert(editor.selectedLayoutKey == nil and outlines() == 0)
+clickSlot("sorted", 0, 0)
+assert(editor.selectedLayoutKey == key(4151, 2))
+changes = 1
 
 -- Holding C copies once, through OS repeats and a second press report
 press(CONTROL, CONTROL_HELD)
@@ -239,8 +261,8 @@ assert(whipCopies() == before and app.store:HasTag("melee", WHIP))
 
 -- A drag in progress blocks them
 selectWhip()
-local surface = editor.centerDragSurface
-surface.hooks.click(nil, editorSize.GRID_LEFT + 20, 4 + 44 + 20)
+local surface = editor.panes.unsorted.surface
+surface.hooks.click(nil, editorSize.GRID_LEFT + 20, 4 + 20)
 assert(editor.drag ~= nil)
 tap(DELETE, NONE)
 assert(app.store:HasTag("melee", WHIP))

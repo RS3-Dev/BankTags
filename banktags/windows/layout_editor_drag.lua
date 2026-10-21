@@ -20,9 +20,10 @@ local LayoutEditorDrag = {}
 -- Shrink a drag surface back over its own panel
 function LayoutEditorDrag:RestoreDragSurface(surface, kind)
     if surface == nil then return end
-    if kind == "center" then
-        surface:SetPos(Size.CENTER_X + Size.CENTER_VIEW_X, Size.PANEL_TOP + Size.CENTER_VIEW_Y)
-        surface:SetSize(Size.CENTER_VIEW_WIDTH - Size.SCROLLBAR_RESERVE, Size.CENTER_VIEW_HEIGHT)
+    local pane = self.panes ~= nil and self.panes[kind] or nil
+    if pane ~= nil then
+        surface:SetPos(Size.CENTER_X + Size.CENTER_VIEW_X, Size.PANEL_TOP + pane.y)
+        surface:SetSize(Size.CENTER_VIEW_WIDTH - Size.SCROLLBAR_RESERVE, pane.height)
     elseif kind == "search" then
         surface:SetPos(Size.RIGHT_X + 8, Size.PANEL_TOP + Size.SEARCH_LIST_TOP)
         surface:SetSize(Size.RIGHT_WIDTH - 16 - Size.SCROLLBAR_RESERVE,
@@ -50,11 +51,6 @@ function LayoutEditorDrag:CaptureDragSurface(surface, kind)
     return true
 end
 
--- Find the layout slot under a center-panel point
-function LayoutEditorDrag:CenterSurfaceSlot(x, y)
-    return self:SlotIndexAt(tonumber(x), tonumber(y))
-end
-
 -- Find the search result under a search-panel point
 function LayoutEditorDrag:SearchSurfaceResult(y)
     y = tonumber(y)
@@ -64,8 +60,31 @@ function LayoutEditorDrag:SearchSurfaceResult(y)
     return self.searchResults[index]
 end
 
--- Pass a surface's press, drag, and release to the editor
-function LayoutEditorDrag:BindDragSurface(surface, onPress, onScroll)
+-- Check whether an editor content point is over the search results
+function LayoutEditorDrag:OnSearchList(x, y)
+    x, y = tonumber(x), tonumber(y)
+    if x == nil or y == nil then return false end
+    local left, top = Size.RIGHT_X + 8, Size.PANEL_TOP + Size.SEARCH_LIST_TOP
+    return x >= left and x < left + Size.RIGHT_WIDTH - 16
+        and y >= top and y < Size.PANEL_TOP + Size.PANEL_HEIGHT - Size.SEARCH_LIST_BOTTOM
+end
+
+-- Scroll the list a surface covers, or during a drag the one under the pointer
+-- A drag stretches its surface over the editor, so it hears every wheel turn
+function LayoutEditorDrag:ScrollWheel(component, delta, kind)
+    if self.drag ~= nil then
+        local x, y = self:ContentPointer()
+        local pane = self:PaneAt(x, y)
+        kind = pane ~= nil and pane.name or (self:OnSearchList(x, y) and "search" or nil)
+    end
+    local pane = self.panes ~= nil and self.panes[kind] or nil
+    if pane ~= nil then return pane.view._onScrollWheel(component, delta) end
+    if kind == "search" then return self.searchList:_OnScrollWheel(component, delta) end
+    return true
+end
+
+-- Pass a surface's press, drag, release, and wheel to the editor
+function LayoutEditorDrag:BindDragSurface(surface, kind, onPress)
     surface:Subscribe(ui.Hook.ONCLICK, function(_, x, y)
         if self.drag ~= nil then return false end
         return onPress(x, y)
@@ -84,7 +103,9 @@ function LayoutEditorDrag:BindDragSurface(surface, onPress, onScroll)
     end
     surface:Subscribe(ui.Hook.ONRELEASE, release)
     surface:Subscribe(ui.Hook.ONDRAGCOMPLETE, release)
-    if onScroll ~= nil then surface:Subscribe(ui.Hook.ONSCROLLWHEEL, onScroll) end
+    surface:Subscribe(ui.Hook.ONSCROLLWHEEL, function(component, delta)
+        return self:ScrollWheel(component, delta, kind)
+    end)
 end
 
 -- Create one input surface at its panel bounds
@@ -97,32 +118,30 @@ end
 
 -- Bind the surfaces that move entries and add search results
 function LayoutEditorDrag:CreateDragSurfaces()
-    self.centerDragSurface = self:CreateDragSurface("center")
-    self:BindDragSurface(self.centerDragSurface, function(x, y)
-        -- A press here takes focus from any text field
-        self.keysOnGrid = true
-        -- Label rows sit beneath this surface, so pressing one drags it
-        local labelRow = self:LabelRowAt(x, y)
-        if labelRow ~= nil then
-            return self:BeginLabelDrag(labelRow, self.centerDragSurface, "center", x, y)
-        end
-        local index = self:CenterSurfaceSlot(x, y)
-        return self:BeginCenterDrag(index, self.centerDragSurface, x, y)
-    end, function(component, delta)
-        return self.centerView._onScrollWheel(component, delta)
-    end)
+    for _, pane in ipairs({ self.panes.sorted, self.panes.unsorted }) do
+        local surface = self:CreateDragSurface(pane.name)
+        pane.surface = surface
+        self:BindDragSurface(surface, pane.name, function(x, y)
+            -- A press here takes focus from any text field
+            self.keysOnGrid = true
+            -- Label rows sit beneath this surface, so pressing one drags it
+            local labelRow = self:LabelRowAt(pane, x, y)
+            if labelRow ~= nil then
+                return self:BeginLabelDrag(labelRow, surface, pane.name, x, y)
+            end
+            return self:BeginCenterDrag(pane, self:SlotIndexAt(pane, x, y), surface, x, y)
+        end)
+    end
 
     self.searchDragSurface = self:CreateDragSurface("search")
-    self:BindDragSurface(self.searchDragSurface, function(_, y)
+    self:BindDragSurface(self.searchDragSurface, "search", function(_, y)
         return self:BeginSearchDrag(
             self:SearchSurfaceResult(y), self.searchDragSurface
         )
-    end, function(component, delta)
-        return self.searchList:_OnScrollWheel(component, delta)
     end)
 
     self.labelDragSurface = self:CreateDragSurface("label")
-    self:BindDragSurface(self.labelDragSurface, function(x, y)
+    self:BindDragSurface(self.labelDragSurface, "label", function(x, y)
         return self:BeginLabelDrag(nil, self.labelDragSurface, "label", x, y)
     end)
 end
@@ -172,9 +191,9 @@ function LayoutEditorDrag:CommitDragFromMouse()
     return self:CommitDragAt(x, y)
 end
 
--- Start dragging the selected layout entry
-function LayoutEditorDrag:BeginCenterDrag(index, hit, x, y)
-    local slot = index ~= nil and self.centerSlots[index] or nil
+-- Start dragging a pane's item, or clear the selection on an empty cell
+function LayoutEditorDrag:BeginCenterDrag(pane, index, hit, x, y)
+    local slot = index ~= nil and pane.slots[index] or nil
     if type(slot) ~= "table" or slot.kind ~= "item" then
         self.selectedLayoutKey = nil
         self:RefreshCenter()
@@ -183,11 +202,11 @@ function LayoutEditorDrag:BeginCenterDrag(index, hit, x, y)
     self.selectedLayoutKey = slot.layoutKey
     local pointX, pointY = self:ContentPointer()
     if pointX == nil then
+        -- The surface sits over the view, so its points are unscrolled
         pointX, pointY = relativePosition(hit, self.content)
         if pointX == nil then return false end
         pointX = pointX + (tonumber(x) or Size.GRID_SLOT_SIZE / 2)
         pointY = pointY + (tonumber(y) or Size.GRID_SLOT_SIZE / 2)
-            - (tonumber(self.centerView.scrollY) or 0)
     end
     local ghost, ghostWidth, ghostHeight = self:CreateDragGhost(
         slot.objectID, pointX, pointY, slot.layoutKey, true
@@ -202,31 +221,38 @@ function LayoutEditorDrag:BeginCenterDrag(index, hit, x, y)
         ghostWidth = ghostWidth,
         ghostHeight = ghostHeight,
         sourceSurface = hit,
-        sourceSurfaceKind = "center",
+        sourceSurfaceKind = pane.name,
     }
-    self:CaptureDragSurface(hit, "center")
+    self:CaptureDragSurface(hit, pane.name)
     return false
 end
 
 -- Save a moved item, leaving a plain click as selection
+-- A sorted cell takes the item; Unsorted takes only a sorted item
 function LayoutEditorDrag:FinishCenterDrag(x, y)
     if self.drag == nil or self.drag.kind ~= "layout" then return false end
     local drag = self.drag
-    local destination = self:DestinationFromContentPoint(x, y)
+    local pane, paneX, paneY = self:PaneAt(x, y)
     self.drag = nil
     if drag.ghost ~= nil then pcall(function() drag.ghost:Destroy() end) end
     self:RestoreDragSurface(drag.sourceSurface, drag.sourceSurfaceKind)
-    if destination ~= nil then
-        local saved, reason, changed = self.store:MoveLayoutItem(
-            self.selectedTag, drag.layoutKey, destination, Size.CENTER_COLUMNS)
-        self:RefreshCenter()
-        if not saved then
-            self:ShowError(reason or "Could not save the layout position.")
-        elseif changed then
-            self:NotifyChanged()
+    local saved, reason, changed = true, nil, false
+    if pane ~= nil and pane.name == "sorted" then
+        local destination = self:SlotIndexAt(pane, paneX, paneY)
+        if destination ~= nil then
+            saved, reason, changed = self.store:MoveLayoutItem(
+                self.selectedTag, drag.layoutKey, destination, Size.CENTER_COLUMNS)
         end
-    else
-        self:RefreshCenter()
+    elseif pane ~= nil and drag.sourceSurfaceKind == "sorted" then
+        -- The same as Move to Unsorted
+        saved, reason = self.store:UnarrangeLayoutItem(self.selectedTag, drag.layoutKey)
+        changed = saved
+    end
+    self:RefreshCenter()
+    if not saved then
+        self:ShowError(reason or "Could not save the layout position.")
+    elseif changed then
+        self:NotifyChanged()
     end
     return false
 end
@@ -289,15 +315,11 @@ function LayoutEditorDrag:UpdateDragAt(x, y)
     return false
 end
 
--- Find the grid row under a content point
+-- Find the sorted grid row under a content point; labels stay out of Unsorted
 function LayoutEditorDrag:RowFromContentPoint(x, y)
-    x, y = tonumber(x), tonumber(y)
-    if x == nil or y == nil then return nil end
-    local viewX = Size.CENTER_X + Size.CENTER_VIEW_X
-    local viewY = Size.PANEL_TOP + Size.CENTER_VIEW_Y
-    if x < viewX or x >= viewX + Size.CENTER_VIEW_WIDTH
-        or y < viewY or y >= viewY + Size.CENTER_VIEW_HEIGHT then return nil end
-    return self:RowAt(x - viewX, y - viewY)
+    local pane, paneX, paneY = self:PaneAt(x, y)
+    if pane == nil or pane.name ~= "sorted" then return nil end
+    return self:RowAt(pane, paneX, paneY)
 end
 
 -- Shade the row a dragged label would take
@@ -309,7 +331,7 @@ function LayoutEditorDrag:ShowLabelDropRow(row)
     end
     local width = Size.CENTER_COLUMNS * Size.GRID_STEP - (Size.GRID_STEP - Size.GRID_SLOT_SIZE)
     if self.drag.highlight == nil then
-        self.drag.highlight = rectangle(self.centerView.content, Size.GRID_LEFT, 0,
+        self.drag.highlight = rectangle(self.panes.sorted.view.content, Size.GRID_LEFT, 0,
             width, Size.GRID_SLOT_SIZE, LABEL_DROP_COLOUR, true)
     end
     self.drag.highlight:SetPos(Size.GRID_LEFT, BankGrid.RowItemY(row))
@@ -385,8 +407,8 @@ end
 
 -- Pick a new label's row: above the selection, or after the items
 function LayoutEditorDrag:DefaultLabelRow()
-    for index, slot in ipairs(self.centerSlots) do
-        if type(slot) == "table" and slot.kind == "item" and not slot.unarranged
+    for index, slot in ipairs(self.panes.sorted.slots) do
+        if type(slot) == "table" and slot.kind == "item"
             and slot.layoutKey == self.selectedLayoutKey then
             return math.floor((index - 1) / Size.CENTER_COLUMNS)
         end
@@ -418,24 +440,19 @@ function LayoutEditorDrag:FinishLabelDrag(x, y)
     return false
 end
 
--- Find a layout slot under a content point
-function LayoutEditorDrag:DestinationFromContentPoint(x, y)
-    local viewX = Size.CENTER_X + Size.CENTER_VIEW_X
-    local viewY = Size.PANEL_TOP + Size.CENTER_VIEW_Y
-    if x < viewX or x >= viewX + Size.CENTER_VIEW_WIDTH
-        or y < viewY or y >= viewY + Size.CENTER_VIEW_HEIGHT then return nil end
-    return self:SlotIndexAt(x - viewX, y - viewY)
-end
-
--- Add the dragged result when dropped on a layout slot
+-- Add the dragged result at a sorted slot, or to Unsorted
 function LayoutEditorDrag:FinishSearchDrag(x, y)
     if self.drag == nil or self.drag.kind ~= "search" then return false end
     local drag = self.drag
-    local destination = self:DestinationFromContentPoint(x, y)
+    local pane, paneX, paneY = self:PaneAt(x, y)
+    local destination = pane ~= nil and pane.name == "sorted"
+        and self:SlotIndexAt(pane, paneX, paneY) or nil
     self.drag = nil
     if drag.ghost ~= nil then pcall(function() drag.ghost:Destroy() end) end
     self:RestoreDragSurface(drag.sourceSurface, drag.sourceSurfaceKind)
-    if destination ~= nil then self:AddCatalogResult(drag.result, destination) end
+    if destination ~= nil or (pane ~= nil and pane.name == "unsorted") then
+        self:AddCatalogResult(drag.result, destination)
+    end
     return false
 end
 

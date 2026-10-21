@@ -1,4 +1,4 @@
--- Build the layout editor over the bank: tag column, grid, labels, and buttons
+-- Build the layout editor over the bank: tag column, grids, labels, and buttons
 
 local Config = require("banktags/core/config")
 local NativeUi = require("banktags/ui/native_ui")
@@ -44,6 +44,8 @@ local LABEL_TEXT_COLOUR = Theme.HEADING_TEXT
 local LABEL_LINE_COLOUR = Theme.HEADING_LINE
 local DRAG_EVENT = Config.PLUGIN_REF .. "_layout_editor"
 local FOOTER_BUTTON_GAP = 8
+-- Panes in the center column, top to bottom
+local PANE_NAMES = { "sorted", "unsorted" }
 local ICON_BUTTON_SIZE = 28
 
 -- Destroy saved UI parts newest first, skipping ones already gone
@@ -70,7 +72,6 @@ function LayoutEditorWindow.new(parent, options)
         listState = { searchQuery = "" },
         searchResults = {},
         centerNodes = {},
-        centerSlots = {},
         centerLabels = {},
         selectedLayoutKey = nil,
         drag = nil,
@@ -154,7 +155,7 @@ function LayoutEditorWindow:SetBankItems(items)
     end
     self.styles = { byKey = byKey, byObject = byObject }
     self.bankItemList = items or {}
-    if self.centerView ~= nil then self:RefreshCenter() end
+    if self.panes ~= nil then self:RefreshCenter() end
 end
 
 -- Show outside changes, keeping the open tag if it still exists
@@ -281,7 +282,25 @@ function LayoutEditorWindow:CreateTagColumn()
     self.columnFrame = frame(column, 0, 0, Size.COLUMN_WIDTH, Size.PANEL_HEIGHT, FRAME)
 end
 
--- Build the tag column, grid, and search columns
+-- Create one scrolling grid in the center column
+function LayoutEditorWindow:CreatePane(name, y, height)
+    return {
+        name = name,
+        y = y,
+        height = height,
+        slots = {},
+        view = prettyui.SimpleView.new(self.centerPanel, {
+            x = Size.CENTER_VIEW_X,
+            y = y,
+            width = Size.CENTER_VIEW_WIDTH,
+            height = height,
+            contentHeight = height,
+            scrollStep = Size.GRID_STEP,
+        }),
+    }
+end
+
+-- Build the tag column, grids, and search columns
 function LayoutEditorWindow:CreatePanels()
     self:CreateTagColumn()
     self.centerPanel = self:Panel(Size.CENTER_X, Size.CENTER_WIDTH)
@@ -300,14 +319,13 @@ function LayoutEditorWindow:CreatePanels()
         self.centerPanel, 0, 0,
         Size.CENTER_SURFACE_WIDTH, Size.CENTER_SURFACE_HEIGHT, FRAME
     )
-    self.centerView = prettyui.SimpleView.new(self.centerPanel, {
-        x = Size.CENTER_VIEW_X,
-        y = Size.CENTER_VIEW_Y,
-        width = Size.CENTER_VIEW_WIDTH,
-        height = Size.CENTER_VIEW_HEIGHT,
-        contentHeight = Size.CENTER_VIEW_HEIGHT,
-        scrollStep = Size.GRID_STEP,
-    })
+    -- Sorted rows scroll on top, and Unsorted scrolls on its own below
+    self.panes = {
+        sorted = self:CreatePane("sorted", Size.SORTED_VIEW_Y, Size.SORTED_VIEW_HEIGHT),
+        unsorted = self:CreatePane("unsorted", Size.UNSORTED_VIEW_Y, Size.UNSORTED_VIEW_HEIGHT),
+    }
+    self:CreateHeading(self.centerPanel, Size.CENTER_VIEW_X + Size.GRID_LEFT,
+        Size.UNSORTED_HEADING_Y, BankGrid.UNSORTED_LABEL)
     -- These replace the right-click menu, which only Bank Core may change
     self.duplicateButton = BankControls.button(
         self.centerPanel, "Create Copy", function() self:DuplicateSelected() end,
@@ -438,11 +456,12 @@ end
 
 -- End drags and load the selected tag's layout
 function LayoutEditorWindow:SelectTag(tag)
-    if type(tag) ~= "string" or tag == "" then
-        self.selectedTag = nil
-    else
-        self.selectedTag = tag
+    if type(tag) ~= "string" or tag == "" then tag = nil end
+    -- Another tag starts both grids at the top
+    if tag ~= self.selectedTag then
+        for _, name in ipairs(PANE_NAMES) do self.panes[name].view:SetScrollPosition(0) end
     end
+    self.selectedTag = tag
     self.selectedLayoutKey = nil
     self:RefreshTags()
     self:RefreshCenter()
@@ -454,61 +473,64 @@ function LayoutEditorWindow:DestroyCenterNodes()
     self.centerNodes = {}
 end
 
--- Rebuild slots and item sprites from the saved layout
+-- Rebuild both grids from the saved layout, keeping each one's scroll
 function LayoutEditorWindow:RefreshCenter()
     self:FinishDrag(false)
     self:DestroyCenterNodes()
-    self.centerSlots = {}
+    local sorted, unsorted = self.panes.sorted, self.panes.unsorted
+    sorted.slots, unsorted.slots, self.centerLabels = {}, {}, {}
     if self.selectedTag == nil then
-        self.centerView:SetContentHeight(Size.CENTER_VIEW_HEIGHT)
+        for _, name in ipairs(PANE_NAMES) do
+            local pane = self.panes[name]
+            pane.view:SetContentHeight(pane.height)
+        end
         return
     end
 
-    local slots, boundary, labels = self.store:GetLayout(self.selectedTag, Size.CENTER_COLUMNS)
-    self.centerSlots = slots
-    self.centerPreservedBoundary = boundary
+    local columns = Size.CENTER_COLUMNS
+    local slots, boundary, labels = self.store:GetLayout(self.selectedTag, columns)
+    -- The rows end at the boundary; Unsorted items follow their heading
+    for index, slot in ipairs(slots) do
+        if index <= boundary then
+            sorted.slots[index] = slot
+        elseif slot.unarranged then
+            unsorted.slots[#unsorted.slots + 1] = slot
+        end
+    end
     self.centerLabels = labels
-    local visibleRows = math.ceil((Size.CENTER_VIEW_HEIGHT - Size.GRID_TOP) / Size.GRID_STEP)
-    local occupiedRows = math.ceil(#slots / Size.CENTER_COLUMNS)
-    for _, label in ipairs(labels) do occupiedRows = math.max(occupiedRows, label.row + 1) end
-    -- Keep one empty drop row after the last occupied row
-    local rowCount = math.max(visibleRows,
-        occupiedRows + (occupiedRows > 0 and 1 or 0))
-    local contentHeight = BankGrid.LabelledContentHeight(
-        rowCount * Size.CENTER_COLUMNS, Size.CENTER_COLUMNS, labels)
-    self.centerView:SetContentHeight(math.max(Size.CENTER_VIEW_HEIGHT, contentHeight))
     local labelRows = {}
     for _, label in ipairs(labels) do
         labelRows[label.row] = true
-        self:CreateLabelHeader(label)
+        self.centerNodes[#self.centerNodes + 1] = self:CreateHeading(
+            sorted.view.content, Size.GRID_LEFT, BankGrid.LabelY(label.row), label.text)
     end
-    -- Unsorted items sit under a fixed heading drawn like a label
-    self.centerUnsortedRow = BankGrid.UnsortedRow(slots, boundary, Size.CENTER_COLUMNS)
-    if self.centerUnsortedRow ~= nil then
-        labelRows[self.centerUnsortedRow] = true
-        self:CreateLabelHeader({
-            row = self.centerUnsortedRow,
-            text = BankGrid.UNSORTED_LABEL,
-        })
-    end
+    local visibleRows = math.ceil((sorted.height - Size.GRID_TOP) / Size.GRID_STEP)
+    local usedRows = boundary // columns
+    -- Keep one empty drop row after the last used row
+    self:DrawPane(sorted, math.max(visibleRows, usedRows + (usedRows > 0 and 1 or 0)), labelRows)
+    -- Unsorted packs its items and always shows its four rows
+    self:DrawPane(unsorted, math.max(Size.UNSORTED_ROWS, math.ceil(#unsorted.slots / columns)), {})
+end
 
-    for index = 1, rowCount * Size.CENTER_COLUMNS do
+-- Size a pane to its rows and draw each cell not under a label
+function LayoutEditorWindow:DrawPane(pane, rowCount, labelRows)
+    local columns = Size.CENTER_COLUMNS
+    pane.view:SetContentHeight(math.max(pane.height, BankGrid.RowItemY(rowCount)))
+    for index = 1, rowCount * columns do
         local zero = index - 1
-        local x = Size.GRID_LEFT + (zero % Size.CENTER_COLUMNS) * Size.GRID_STEP
         -- Rows match the live page; columns keep the editor inset
-        local row = math.floor(zero / Size.CENTER_COLUMNS)
-        local y = BankGrid.RowItemY(row)
-        -- Label rows show their heading instead of empty cells
+        local row = math.floor(zero / columns)
         if not labelRows[row] then
-            self:CreateGridCell(x, y, slots[index])
+            self:CreateGridCell(pane.view.content, Size.GRID_LEFT + (zero % columns) * Size.GRID_STEP,
+                BankGrid.RowItemY(row), pane.slots[index])
         end
     end
-    if self.centerDragSurface ~= nil then self.centerDragSurface:MoveToFront() end
+    if pane.surface ~= nil then pane.surface:MoveToFront() end
 end
 
 -- Draw one grid cell and the item saved in it, if any
-function LayoutEditorWindow:CreateGridCell(x, y, slot)
-    local grid = ui.Sprite.new(self.centerView.content)
+function LayoutEditorWindow:CreateGridCell(parent, x, y, slot)
+    local grid = ui.Sprite.new(parent)
     grid:SetPos(x, y)
     grid:SetSize(Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE)
     grid.spriteID = GRID_SLOT_SPRITE
@@ -519,7 +541,7 @@ function LayoutEditorWindow:CreateGridCell(x, y, slot)
     if type(slot) ~= "table" or slot.kind ~= "item" then return end
     local objectID = math.tointeger(tonumber(slot.objectID))
     if objectID ~= nil then
-        local sprite = ui.Sprite.new(self.centerView.content)
+        local sprite = ui.Sprite.new(parent)
         local width, height = self:ApplyRuntimeObjectSprite(
             sprite, objectID, slot.layoutKey, true
         )
@@ -531,22 +553,21 @@ function LayoutEditorWindow:CreateGridCell(x, y, slot)
     end
     if slot.layoutKey == self.selectedLayoutKey then
         local selection = rectangle(
-            self.centerView.content,
-            x, y, Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE, GOLD, false
+            parent, x, y, Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE, GOLD, false
         )
         self.centerNodes[#self.centerNodes + 1] = selection
     end
 end
 
--- Draw a label row like the bank's own headings
-function LayoutEditorWindow:CreateLabelHeader(label)
+-- Draw a heading like the bank's own, text over a line
+function LayoutEditorWindow:CreateHeading(parent, x, y, value)
     local width = Size.CENTER_COLUMNS * Size.GRID_STEP - (Size.GRID_STEP - Size.GRID_SLOT_SIZE)
-    local header = ui.Layer.new(self.centerView.content)
-    header:SetPos(Size.GRID_LEFT, BankGrid.LabelY(label.row))
+    local header = ui.Layer.new(parent)
+    header:SetPos(x, y)
     header:SetSize(width, Size.LABEL_LINE_OFFSET + 1)
     header.clickthrough = true
     local text = prettyui.Text.new(header, {
-        text = label.text,
+        text = value,
         x = 0, y = 0, width = width, height = Size.LABEL_LINE_OFFSET,
         colour = LABEL_TEXT_COLOUR,
         font = id.Font.MUSEO_SANS_11PT_REGULAR,
@@ -554,20 +575,21 @@ function LayoutEditorWindow:CreateLabelHeader(label)
     })
     text.clickthrough = true
     rectangle(header, 0, Size.LABEL_LINE_OFFSET, width, 1, LABEL_LINE_COLOUR, true)
-    self.centerNodes[#self.centerNodes + 1] = header
+    return header
 end
 
--- Return the grid row under a center-view point
-function LayoutEditorWindow:RowAt(x, y)
+-- Return the grid row under a point in a pane's view, counting its scroll
+function LayoutEditorWindow:RowAt(pane, x, y)
     x, y = tonumber(x), tonumber(y)
-    if x == nil or y == nil or x < Size.GRID_LEFT or y < 0
-        or x >= Size.CENTER_VIEW_WIDTH or y >= Size.CENTER_VIEW_HEIGHT then return nil end
-    return BankGrid.RowAtContentY(y + (tonumber(self.centerView.scrollY) or 0))
+    if pane == nil or x == nil or y == nil or x < Size.GRID_LEFT or y < 0
+        or x >= Size.CENTER_VIEW_WIDTH or y >= pane.height then return nil end
+    return BankGrid.RowAtContentY(y + (tonumber(pane.view.scrollY) or 0))
 end
 
--- Return the label row under a center-view point
-function LayoutEditorWindow:LabelRowAt(x, y)
-    local row = self:RowAt(x, y)
+-- Return the label row under a pane point; only the sorted pane has labels
+function LayoutEditorWindow:LabelRowAt(pane, x, y)
+    if pane == nil or pane.name ~= "sorted" then return nil end
+    local row = self:RowAt(pane, x, y)
     for _, label in ipairs(self.centerLabels) do
         if label.row == row then return row end
     end
@@ -618,14 +640,27 @@ function LayoutEditorWindow:PromptNewLabel(row)
     return true
 end
 
--- Convert content coordinates to a grid slot, skipping headings
-function LayoutEditorWindow:SlotIndexAt(x, y)
-    local row = self:RowAt(x, y)
-    if row == nil or row == self.centerUnsortedRow
-        or self:LabelRowAt(x, y) ~= nil then return nil end
+-- Convert a pane point to its grid slot, skipping label rows
+function LayoutEditorWindow:SlotIndexAt(pane, x, y)
+    local row = self:RowAt(pane, x, y)
+    if row == nil or self:LabelRowAt(pane, x, y) ~= nil then return nil end
     local column = math.floor((tonumber(x) - Size.GRID_LEFT) / Size.GRID_STEP)
     if column < 0 or column >= Size.CENTER_COLUMNS then return nil end
     return row * Size.CENTER_COLUMNS + column + 1
+end
+
+-- Find the pane under an editor content point, and the point in its view
+function LayoutEditorWindow:PaneAt(x, y)
+    x, y = tonumber(x), tonumber(y)
+    if x == nil or y == nil or self.panes == nil then return nil end
+    local left = Size.CENTER_X + Size.CENTER_VIEW_X
+    if x < left or x >= left + Size.CENTER_VIEW_WIDTH then return nil end
+    for _, name in ipairs(PANE_NAMES) do
+        local pane = self.panes[name]
+        local top = Size.PANEL_TOP + pane.y
+        if y >= top and y < top + pane.height then return pane, x - left, y - top end
+    end
+    return nil
 end
 
 -- Keep the editor above native bank redraws
@@ -639,12 +674,14 @@ function LayoutEditorWindow:StopDragPolling()
     Event.Logic.Unsubscribe(DRAG_EVENT)
 end
 
--- Find the layout entry matching the selection
+-- Find the layout entry matching the selection in either pane
 function LayoutEditorWindow:SelectedEntry()
-    if self.selectedLayoutKey == nil then return nil end
-    for _, slot in ipairs(self.centerSlots) do
-        if type(slot) == "table" and slot.kind == "item"
-            and slot.layoutKey == self.selectedLayoutKey then return slot end
+    if self.selectedLayoutKey == nil or self.panes == nil then return nil end
+    for _, name in ipairs(PANE_NAMES) do
+        for _, slot in ipairs(self.panes[name].slots) do
+            if type(slot) == "table" and slot.kind == "item"
+                and slot.layoutKey == self.selectedLayoutKey then return slot end
+        end
     end
     return nil
 end
@@ -717,14 +754,16 @@ end
 
 -- Remove the editor controls and release their callbacks
 function LayoutEditorWindow:DestroyControls()
-    for _, surface in ipairs({
-        self.centerDragSurface,
-        self.searchDragSurface,
-        self.labelDragSurface,
-    }) do
+    for _, name in ipairs(PANE_NAMES) do
+        local pane = self.panes ~= nil and self.panes[name] or nil
+        if pane ~= nil then
+            for _, part in ipairs({ pane.surface, pane.view }) do pcall(function() part:Destroy() end) end
+        end
+    end
+    self.panes = nil
+    for _, surface in ipairs({ self.searchDragSurface, self.labelDragSurface }) do
         if surface ~= nil then pcall(function() surface:Destroy() end) end
     end
-    self.centerDragSurface = nil
     self.searchDragSurface = nil
     self.labelDragSurface = nil
     for _, control in ipairs({
@@ -735,7 +774,6 @@ function LayoutEditorWindow:DestroyControls()
         self.unsortButton,
         self.removeButton,
         self.duplicateButton,
-        self.centerView,
     }) do
         if control ~= nil then pcall(function() control:Destroy() end) end
     end
@@ -754,7 +792,6 @@ function LayoutEditorWindow:DestroyControls()
     self.unsortButton = nil
     self.removeButton = nil
     self.duplicateButton = nil
-    self.centerView = nil
 end
 
 -- Stop events and drags, then destroy the editor
