@@ -119,7 +119,7 @@ assert(editorSize.SORTED_TOP == editorSize.TAB_PAGE_Y and editorSize.CENTER_SURF
 assert(sorted.x == editorSize.CENTER_X + 4 and sorted.y == editorSize.PANEL_TOP + editorSize.SORTED_TOP + 4)
 assert(sorted.height == editorSize.AREA_HEIGHT - 8 and sorted.width == editorSize.CENTER_SURFACE_WIDTH - 8)
 -- The rail and both columns start right under the title bar
-assert(editorSize.PANEL_TOP == 12 and editor.centerPanel.y == 12 and editor.rightPanel.y == 12)
+assert(editorSize.PANEL_TOP == 6 and editor.centerPanel.y == 6 and editor.rightPanel.y == 6)
 local rail = editor.tagRail.root
 assert(rail.x == editorSize.RAIL_X and rail.y == editorSize.PANEL_TOP and rail.height == editorSize.PANEL_HEIGHT)
 assert(rail.x + rail.width + editorSize.RAIL_GAP == editorSize.CENTER_X and editorSize.CENTER_X == 48)
@@ -157,7 +157,7 @@ assert(sorted.y == unsorted.y and sorted.height == unsorted.height)
 assert(unsorted.y + unsorted.height + 4 + editorSize.AREA_BOTTOM == editorSize.PANEL_TOP + editorSize.COLUMN_HEIGHT)
 assert(editorSize.COLUMN_HEIGHT + editorSize.ACTIONS_GAP == editorSize.ACTIONS_Y)
 -- The freed band under the title bar goes to the grids; the actions stay put
-assert(editorSize.PANEL_TOP + editorSize.ACTIONS_Y == 578 and sorted.height == 500)
+assert(editorSize.PANEL_TOP + editorSize.ACTIONS_Y == 578 and sorted.height == 506)
 -- Each item area has one outer frame and no outline inside it
 local function frames(parent)
     local edges = 0
