@@ -276,7 +276,9 @@ function Harness.new(name, options)
         Mouse = Mouse, Keyboard = Keyboard, MiniMenuActionType = MiniMenuActionType,
         MiniMenuEntryType = MiniMenuEntryType,
         MiniMenu = { IsOpen = function() return input.menuOpen end },
-        GameKey = { BACKSPACE = 85, DELETE = 101, C = 67, CONTROL = 82 },
+        -- Values from the client docs' GameKey table
+        GameKey = { Y = 37, Z = 64, C = 66, CONTROL = 82, BACKSPACE = 85,
+            LEFT = 96, RIGHT = 97, UP = 98, DOWN = 99, DELETE = 101 },
         Player = { IsAvailable = function() return true end }, GameState = { GAME = 30 },
         log = function() end }
     local databases = {}

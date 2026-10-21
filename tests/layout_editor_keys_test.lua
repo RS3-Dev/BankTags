@@ -41,7 +41,7 @@ local function listener(event)
     end
     return nil
 end
-local DELETE, BACKSPACE, C, CONTROL = 101, 85, 67, 82
+local DELETE, BACKSPACE, C, CONTROL = 101, 85, 66, 82
 local NONE, SHIFT_HELD, CONTROL_HELD = 0, 1, 2
 -- Send a key press, optionally as the OS's held-key repeat
 local function press(gameKey, modifiers, isRepeat)
@@ -100,7 +100,8 @@ end
 assert(listener("KeyDown") ~= nil and listener("KeyUp") ~= nil and listener("WindowFocusChanged") ~= nil)
 -- The buttons name their keys
 assert(editor.duplicateButton.tooltipText == "Copy the selected item (Ctrl+C)")
-assert(editor.removeButton.tooltipText == "Remove the selected item (Delete)")
+assert(editor.removeButton.tooltipText == "Remove the selected item (Delete). Arrow keys move the selection;"
+    .. " Ctrl+Z undoes and Ctrl+Y redoes")
 
 -- Before any press on the grid, keys do nothing
 editor.selectedLayoutKey = WHIP

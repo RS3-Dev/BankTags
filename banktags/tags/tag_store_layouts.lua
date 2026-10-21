@@ -149,6 +149,7 @@ function TagStoreLayouts:PlanLayoutItemsMove(tag, layoutKeys, anchorKey, destina
         local move = { layoutKey = layoutKey, source = source, line = line, column = column }
         if line < 0 or column < 0 or column >= columns then
             move.reason = "The selected items do not fit there."
+            plan.offGrid = true
         elseif line < view.lines and view.cells[line * columns + column + 1] == nil then
             move.reason = "A label takes up its whole row."
         else
@@ -235,6 +236,59 @@ function TagStoreLayouts:InsertLayoutRow(tag, line, columnCount)
         table.insert(rows, index, { kind = "row", slots = tail })
     end
     for _ = 1, added do table.insert(rows, index, { kind = "row", slots = {} }) end
+    return self:Commit(nextData, "Could not save the layout.")
+end
+
+-- Check whether a laid-out line is in a row and holds nothing at all
+-- Labels, reserved blanks, items, and lines past the layout do not count
+function TagStoreLayouts:IsEmptyLayoutLine(tag, line, columnCount)
+    local record = self.data.tags[tag]
+    line = math.tointeger(tonumber(line))
+    if record == nil or line == nil or line < 0 then return false end
+    local view = TagLayouts.Render(record.rows, columnCount)
+    if line >= view.lines then return false end
+    for cell = line * view.columns + 1, (line + 1) * view.columns do
+        if view.cells[cell] == nil or not TagLayouts.IsOpen(view.slots[cell]) then return false end
+    end
+    return true
+end
+
+-- Remove one empty grid line, moving every line after it up
+-- Only that line of a wrapped row goes; Unsorted is untouched
+function TagStoreLayouts:RemoveEmptyLayoutRow(tag, line, columnCount)
+    if not self:IsEmptyLayoutLine(tag, line, columnCount) then
+        return false, "Only an empty row can be removed."
+    end
+    line = math.tointeger(tonumber(line))
+    local nextData = copy(self.data)
+    local rows = nextData.tags[tag].rows
+    local view = TagLayouts.Render(rows, columnCount)
+    local index = TagLayouts.EntryAtLine(view, rows, line)
+    local slots = rows[index].slots
+    if #slots <= view.columns then
+        table.remove(rows, index)
+    else
+        local first = (line - view.starts[index]) * view.columns + 1
+        for position = math.min(first + view.columns - 1, #slots), first, -1 do
+            table.remove(slots, position)
+        end
+    end
+    return self:Commit(nextData, "Could not save the layout.")
+end
+
+-- Copy a tag's rows and Unsorted list, the part the layout editor changes
+function TagStoreLayouts:LayoutState(tag)
+    local record = self.data.tags[tag]
+    if record == nil then return nil end
+    return { rows = copy(record.rows), unsorted = copy(record.unsorted) }
+end
+
+-- Put back a tag's rows and Unsorted list, keeping its name, icon, and folder
+function TagStoreLayouts:RestoreLayoutState(tag, state)
+    if self.data.tags[tag] == nil then return false, "The tag no longer exists." end
+    local nextData = copy(self.data)
+    nextData.tags[tag].rows = copy(state.rows)
+    nextData.tags[tag].unsorted = copy(state.unsorted)
     return self:Commit(nextData, "Could not save the layout.")
 end
 

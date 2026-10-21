@@ -109,20 +109,24 @@ function LayoutEditorSearch:AddCatalogResult(result, destination)
     for _, item in ipairs(self.store:GetTaggedItems(self.selectedTag)) do
         if item.objectID == objectID then source = source or item end
     end
-    -- An item already in the tag gets a ghost copy
-    local saved, layoutKey, reason
-    if source == nil then
-        layoutKey = ItemIdentity.LayoutKey(objectID, 1)
-        saved, reason = self.store:AddTag(self.selectedTag, objectID, layoutKey)
-    else
-        saved, layoutKey, reason = self.store:DuplicateLayoutItem(self.selectedTag, source.layoutKey)
-    end
+    -- Adding and placing the item undo together
+    local saved, layoutKey, reason, positioned, positionReason
+    self:RecordEdit(self.selectedTag, function()
+        -- An item already in the tag gets a ghost copy
+        if source == nil then
+            layoutKey = ItemIdentity.LayoutKey(objectID, 1)
+            saved, reason = self.store:AddTag(self.selectedTag, objectID, layoutKey)
+        else
+            saved, layoutKey, reason = self.store:DuplicateLayoutItem(self.selectedTag, source.layoutKey)
+        end
+        if not saved then return end
+        positioned, positionReason = self.store:MoveLayoutItem(
+            self.selectedTag, layoutKey, destination, Size.CENTER_COLUMNS)
+    end)
     if not saved then
         self:ShowError(reason or "Could not add the item to this tag.")
         return false
     end
-    local positioned, positionReason = self.store:MoveLayoutItem(
-        self.selectedTag, layoutKey, destination, Size.CENTER_COLUMNS)
     self:SelectOnly(layoutKey)
     self:RefreshCenter()
     if not positioned then

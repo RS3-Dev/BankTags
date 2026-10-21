@@ -258,12 +258,16 @@ function LayoutEditorDrag:FinishCenterDrag(x, y)
     if pane ~= nil and pane.name == "sorted" then
         local destination = self:SlotIndexAt(pane, paneX, paneY)
         if destination ~= nil then
-            saved, reason, changed = self.store:MoveLayoutItem(
-                self.selectedTag, drag.layoutKey, destination, Size.CENTER_COLUMNS)
+            saved, reason, changed = self:RecordEdit(self.selectedTag, function()
+                return self.store:MoveLayoutItem(
+                    self.selectedTag, drag.layoutKey, destination, Size.CENTER_COLUMNS)
+            end)
         end
     elseif pane ~= nil and drag.sourceSurfaceKind == "sorted" then
         -- The same as Move to Unsorted
-        saved, reason = self.store:UnarrangeLayoutItem(self.selectedTag, drag.layoutKey)
+        saved, reason = self:RecordEdit(self.selectedTag, function()
+            return self.store:UnarrangeLayoutItem(self.selectedTag, drag.layoutKey)
+        end)
         changed = saved
     end
     self:RefreshCenter()
@@ -449,8 +453,9 @@ function LayoutEditorDrag:FinishLabelDrag(x, y)
     if row == nil then return false end
     if drag.fromRow == nil then return self:PromptNewLabel(row) end
     if row == drag.fromRow then return self:EditLabel(row) end
-    local saved, reason, changed = self.store:MoveLabel(
-        self.selectedTag, drag.fromRow, row, Size.CENTER_COLUMNS)
+    local saved, reason, changed = self:RecordEdit(self.selectedTag, function()
+        return self.store:MoveLabel(self.selectedTag, drag.fromRow, row, Size.CENTER_COLUMNS)
+    end)
     self:RefreshCenter()
     if not saved then
         self:ShowError(reason or "Could not move the label.")

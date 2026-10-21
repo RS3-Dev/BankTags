@@ -224,30 +224,35 @@ function TagMenus:AddRowEntries(menu)
     if entry.kind == "tag" then self:AddFolderSubmenu(menu, entry.tag, 5, chosen, current) end
 end
 
--- Add row inserts for the layout editor's sorted grid row under the pointer
--- Like a Tags row, they act only when picked from the opened menu, and only once
+-- Add the Edit row submenu for the layout editor's sorted grid row under the pointer
+-- Cancel stays the left click; a child acts once, only when picked from the opened menu
 -- Another save, tag, size, drag, or a closed editor makes the menu out of date
 function TagMenus:AddEditorEntries(menu)
     local windows = self.app.windows
     local editor = windows.layoutEditor
     local target = editor:RowMenuTarget()
-    if target == nil then return end
+    local MiniMenu = prettyui.MiniMenu
+    if target == nil or MiniMenu == nil then return end
     local current = function() return windows.layoutEditor == editor and editor:RowTargetCurrent(target) end
     local rowMenu = { id = "editor row " .. target.row, opened = false, used = false }
-    local entries = {}
-    -- Rows past the layout are already empty, so they offer nothing
-    local function offer(label, line)
-        if line >= target.usedRows then return end
-        local deferred = self:Defer(current, function() editor:InsertEmptyRow(line) end, true)
-        entries[#entries + 1] = { label = label, action = function()
+    local children = {}
+    local function offer(label, action)
+        local deferred = self:Defer(current, action, true)
+        children[#children + 1] = { label = label, action = function()
             if not rowMenu.opened or rowMenu.used then return end
             rowMenu.used = true
             deferred()
         end }
     end
-    offer("Add empty row above", target.row)
-    offer("Add empty row below", target.row + 1)
-    if #entries == 0 or not MenuEntries.AddTop(menu, entries) then return end
+    -- Rows past the layout are already empty, so they offer nothing
+    local row = target.row
+    if row < target.usedRows then offer("Add row above", function() editor:InsertEmptyRow(row) end) end
+    if row + 1 < target.usedRows then offer("Add row below", function() editor:InsertEmptyRow(row + 1) end) end
+    if target.emptyRow then offer("Remove empty row", function() editor:RemoveEmptyRow(row) end) end
+    if #children == 0 then return end
+    children[#children + 1] = { label = "Cancel", action = function() end }
+    MiniMenu.AddSubmenu(menu, "Edit row", children, { title = "Edit row" })
+    MenuEntries.PromoteCancel(menu)
     self.rowMenu = rowMenu
 end
 

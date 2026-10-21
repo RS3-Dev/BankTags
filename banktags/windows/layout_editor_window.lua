@@ -16,12 +16,13 @@ local Theme = require("banktags/ui/theme")
 
 local LayoutEditorWindow = {}
 LayoutEditorWindow.__index = LayoutEditorWindow
--- Drag gestures, catalog search, shortcut keys, item names, and groups live in their own files
+-- Drag gestures, catalog search, shortcut keys, item names, groups, and undo live in their own files
 require("banktags/windows/layout_editor_drag").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_search").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_keys").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_names").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_group").install(LayoutEditorWindow)
+require("banktags/windows/layout_editor_history").install(LayoutEditorWindow)
 
 -- Errors show over the grid's bottom for about four seconds
 local ERROR_HEIGHT = 40
@@ -75,7 +76,8 @@ function LayoutEditorWindow.new(parent, options)
         groupKeys = nil,
         actionTooltips = {
             duplicateButton = "Copy the selected item (Ctrl+C)",
-            removeButton = "Remove the selected item (Delete)",
+            removeButton = "Remove the selected item (Delete). Arrow keys move the selection;"
+                .. " Ctrl+Z undoes and Ctrl+Y redoes",
             unsortButton = "Leave the selected item unsorted, or drag it to Unsorted",
         },
         drag = nil,
@@ -101,6 +103,7 @@ function LayoutEditorWindow.new(parent, options)
         onClose = function()
             self:StopDragPolling()
             self:StopShortcuts()
+            self:ClearHistory()
             self:FinishDrag(false)
             self:ClearSearchInteractions()
             self:DestroyCenterNodes()
@@ -169,6 +172,7 @@ function LayoutEditorWindow:StoreChanged()
         self:SelectTag(self.store:AllTags()[1])
         return
     end
+    self:CheckHistory()
     self:RefreshTags()
     self:RefreshCenter()
 end
@@ -496,13 +500,15 @@ end
 -- Keep the open tag open under its new name
 function LayoutEditorWindow:TagRenamed(oldTag, newTag)
     if self.selectedTag == oldTag then self.selectedTag = newTag end
+    if self.history ~= nil and self.history.tag == oldTag then self.history.tag = newTag end
 end
 
 -- End drags and load the selected tag's layout
 function LayoutEditorWindow:SelectTag(tag)
     if type(tag) ~= "string" or tag == "" then tag = nil end
-    -- Another tag starts both grids at the top
+    -- Another tag starts both grids at the top, with no undo steps
     if tag ~= self.selectedTag then
+        self:ClearHistory()
         for _, name in ipairs(PANE_NAMES) do self.panes[name].view:SetScrollPosition(0) end
     end
     self.selectedTag = tag
@@ -661,13 +667,17 @@ function LayoutEditorWindow:EditLabel(row)
     self.onPromptLabel({
         text = current,
         onSave = function(value)
-            local saved, reason = self.store:SetLabel(tag, row, value, Size.CENTER_COLUMNS)
+            local saved, reason = self:RecordEdit(tag, function()
+                return self.store:SetLabel(tag, row, value, Size.CENTER_COLUMNS)
+            end)
             if not saved then return false, reason end
             self:LabelChanged(tag)
             return true, nil
         end,
         onDelete = function()
-            local saved, reason = self.store:RemoveLabel(tag, row, Size.CENTER_COLUMNS)
+            local saved, reason = self:RecordEdit(tag, function()
+                return self.store:RemoveLabel(tag, row, Size.CENTER_COLUMNS)
+            end)
             if not saved then return false, reason end
             self:LabelChanged(tag)
             return true, nil
@@ -682,7 +692,9 @@ function LayoutEditorWindow:PromptNewLabel(row)
     if tag == nil or self.onPromptLabel == nil then return false end
     self.onPromptLabel({
         onSave = function(value)
-            local saved, reason = self.store:InsertLabel(tag, row, value, Size.CENTER_COLUMNS)
+            local saved, reason = self:RecordEdit(tag, function()
+                return self.store:InsertLabel(tag, row, value, Size.CENTER_COLUMNS)
+            end)
             if not saved then return false, reason end
             self:LabelChanged(tag)
             return true, nil
@@ -705,6 +717,7 @@ function LayoutEditorWindow:RowMenuTarget()
         tag = self.selectedTag,
         row = row,
         usedRows = self.usedRows,
+        emptyRow = self.store:IsEmptyLayoutLine(self.selectedTag, row, Size.CENTER_COLUMNS),
         columns = Size.CENTER_COLUMNS,
         data = self.store.data,
     }
@@ -720,9 +733,25 @@ end
 
 -- Insert an empty row at a grid line, moving the rows below it down
 function LayoutEditorWindow:InsertEmptyRow(line)
-    local saved, reason = self.store:InsertLayoutRow(self.selectedTag, line, Size.CENTER_COLUMNS)
+    local saved, reason = self:RecordEdit(self.selectedTag, function()
+        return self.store:InsertLayoutRow(self.selectedTag, line, Size.CENTER_COLUMNS)
+    end)
     if not saved then
         self:ShowError(reason or "Could not add the row.")
+        return false
+    end
+    self:RefreshCenter()
+    self:NotifyChanged()
+    return true
+end
+
+-- Remove an empty grid line, moving the rows below it up
+function LayoutEditorWindow:RemoveEmptyRow(line)
+    local saved, reason = self:RecordEdit(self.selectedTag, function()
+        return self.store:RemoveEmptyLayoutRow(self.selectedTag, line, Size.CENTER_COLUMNS)
+    end)
+    if not saved then
+        self:ShowError(reason or "Could not remove the row.")
         return false
     end
     self:RefreshCenter()
@@ -789,7 +818,9 @@ function LayoutEditorWindow:UnarrangeSelected()
         self:ShowError("That item is already in Unsorted.")
         return false
     end
-    local saved, reason = self.store:UnarrangeLayoutItem(self.selectedTag, entry.layoutKey)
+    local saved, reason = self:RecordEdit(self.selectedTag, function()
+        return self.store:UnarrangeLayoutItem(self.selectedTag, entry.layoutKey)
+    end)
     if not saved then self:ShowError(reason); return false end
     self.selectedLayoutKey = nil
     self:RefreshCenter()
@@ -805,7 +836,9 @@ function LayoutEditorWindow:DuplicateSelected()
         self:ShowError("Select a layout item first.")
         return false
     end
-    local saved, nextKey, reason = self.store:DuplicateLayoutItem(self.selectedTag, entry.layoutKey)
+    local saved, nextKey, reason = self:RecordEdit(self.selectedTag, function()
+        return self.store:DuplicateLayoutItem(self.selectedTag, entry.layoutKey)
+    end)
     if not saved then
         self:ShowError(reason or "Could not duplicate the item.")
         return false
@@ -824,7 +857,9 @@ function LayoutEditorWindow:RemoveSelected()
         self:ShowError("Select a layout item first.")
         return false
     end
-    local saved, reason = self.store:RemoveTag(self.selectedTag, entry.layoutKey)
+    local saved, reason = self:RecordEdit(self.selectedTag, function()
+        return self.store:RemoveTag(self.selectedTag, entry.layoutKey)
+    end)
     if not saved then
         self:ShowError(reason or "Could not remove the item.")
         return false
@@ -898,6 +933,7 @@ end
 function LayoutEditorWindow:Destroy()
     self:StopDragPolling()
     self:StopShortcuts()
+    self:ClearHistory()
     self:FinishDrag(false)
     self:ClearSearchInteractions()
     self:DestroyCenterNodes()

@@ -188,8 +188,10 @@ function LayoutEditorGroup:FinishGroupDrag(x, y)
         return false
     end
     if destination == nil then return false end
-    local saved, reason, changed = self.store:MoveLayoutItems(
-        self.selectedTag, drag.keys, drag.anchorKey, destination, Size.CENTER_COLUMNS)
+    local saved, reason, changed = self:RecordEdit(self.selectedTag, function()
+        return self.store:MoveLayoutItems(
+            self.selectedTag, drag.keys, drag.anchorKey, destination, Size.CENTER_COLUMNS)
+    end)
     if not saved then
         self:ShowError(reason or "Could not move the items.")
     elseif changed then
