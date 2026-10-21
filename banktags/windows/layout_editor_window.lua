@@ -387,6 +387,9 @@ function LayoutEditorWindow:CreatePanels()
     self:CreateDragSurfaces()
     self:CreateItemNames()
     self:ShowRightTab("unsorted")
+    -- Match the bank's outer panel outlines around each header and item area
+    frame(self.centerPanel, 0, 0, Size.CENTER_SURFACE_WIDTH, Size.COLUMN_HEIGHT, FRAME)
+    frame(self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.COLUMN_HEIGHT, FRAME)
 end
 
 -- Show one right tab, ending any drag and hiding the other tab's input

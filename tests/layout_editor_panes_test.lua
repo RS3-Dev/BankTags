@@ -169,7 +169,8 @@ local function frames(parent)
     return edges
 end
 assert(frames(page("unsorted").content) == 4 and frames(page("search").content) == 4)
-assert(frames(layoutTabs:GetPage(1).content) == 4 and frames(editor.rightPanel) == 0)
+assert(frames(layoutTabs:GetPage(1).content) == 4)
+assert(frames(editor.centerPanel) == 4 and frames(editor.rightPanel) == 4)
 -- One row of four equal actions spans both columns, from the rail's gap to the right edge
 local actions = { editor.duplicateButton, editor.removeButton, editor.unsortButton, editor.newLabelButton }
 for index, button in ipairs(actions) do
