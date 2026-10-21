@@ -1,6 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Name every item in the layout editor's grids and search results
+-- Name grid items without repeating names over search results
 -- Bank Core names a shown tag page's items itself; Bank Tags adds nothing over the page
 -- FAKE HOST: stand-in components, pointer, hover, and tooltips, not the game client
 
@@ -139,23 +139,22 @@ pointAt("unsorted", 0, 0)
 h:Tick()
 assert(not nameTooltip.shown)
 
--- Search results name the item at its icon
+-- Search results already show their names and have no tooltip
 editor:RunSearch("whip")
 assert(#editor.searchResults >= 1)
 editor.searchDragSurface.hooks.mouseover()
 local left, top = Geometry.absolutePosition(editor.content)
 host.mouse = { x = left + editorSize.RIGHT_X + 4 + 100, y = top + editorSize.PANEL_TOP + editorSize.SEARCH_LIST_TOP + 10 }
 h:Tick()
-assert(nameTooltip.shown and nameTooltip.text == "Abyssal whip", tostring(nameTooltip.text))
-assert(anchor.x == editorSize.RIGHT_X + 4 + 7 and anchor.width == 24)
-assert(anchor.y == editorSize.PANEL_TOP + editorSize.SEARCH_LIST_TOP + 4)
+assert(not nameTooltip.shown)
 -- Below the last result there is nothing to name
 host.mouse.y = host.mouse.y + 32 * #editor.searchResults
 h:Tick()
 assert(not nameTooltip.shown)
 
 -- Closing the editor destroys the tooltip
-host.mouse.y = top + editorSize.PANEL_TOP + editorSize.SEARCH_LIST_TOP + 10
+pointAt("sorted", 0, 0)
+sorted.surface.hooks.mouseover()
 h:Tick()
 assert(nameTooltip.shown)
 editor.window:Close()

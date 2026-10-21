@@ -1,15 +1,10 @@
--- Name the item under the pointer in the layout editor's grids and search results
+-- Name the item under the pointer in the layout editor's grids
 
 local BankGrid = require("banktags/ui/bank_grid")
 local ObjectConfig = require("banktags/core/object_config")
 local Text = require("banktags/core/text")
 local Parts = require("banktags/windows/layout_editor_parts")
 local Size = Parts.size
-
--- Search rows are 32px tall with a 24px icon 7px in
-local SEARCH_ROW_HEIGHT = 32
-local SEARCH_ICON_X = 7
-local SEARCH_ICON_SIZE = 24
 
 local LayoutEditorNames = {}
 
@@ -21,7 +16,7 @@ function LayoutEditorNames:CreateItemNames()
     self.nameAnchor.clickthrough = true
     self.nameShown = nil
     self.nameSurface = nil
-    for _, surface in ipairs({ self.panes.sorted.surface, self.panes.unsorted.surface, self.searchDragSurface }) do
+    for _, surface in ipairs({ self.panes.sorted.surface, self.panes.unsorted.surface }) do
         surface:Subscribe(ui.Hook.ONMOUSEOVER, function()
             self.nameSurface = surface
             return true
@@ -32,6 +27,11 @@ function LayoutEditorNames:CreateItemNames()
             return true
         end)
     end
+    self.searchDragSurface:Subscribe(ui.Hook.ONMOUSEOVER, function()
+        self.nameSurface = nil
+        self:HideItemName()
+        return true
+    end)
 end
 
 -- Find a grid item's name and cell under a content point
@@ -54,22 +54,6 @@ function LayoutEditorNames:GridItemAt(x, y)
     }
 end
 
--- Find a search result's name and icon under a content point
-function LayoutEditorNames:SearchItemAt(x, y)
-    if not self:OnSearchList(x, y) then return nil end
-    local top = Size.PANEL_TOP + Size.SEARCH_LIST_TOP
-    local scrollY = tonumber(self.searchList.scrollY) or 0
-    local index = (y - top + scrollY) // SEARCH_ROW_HEIGHT + 1
-    local result = self.searchResults[index]
-    if result == nil then return nil end
-    return {
-        name = result.displayName or ObjectConfig.DisplayName(result.objectId),
-        x = Size.RIGHT_X + Size.VIEW_INSET + SEARCH_ICON_X,
-        y = top + (index - 1) * SEARCH_ROW_HEIGHT - scrollY + (SEARCH_ROW_HEIGHT - SEARCH_ICON_SIZE) // 2,
-        size = SEARCH_ICON_SIZE,
-    }
-end
-
 -- Show the name of the item under the pointer, or hide it
 -- Runs every tick, since moving within a surface raises no hover event
 -- A window opened over the editor or a menu may cover the grids without a leave
@@ -80,7 +64,7 @@ function LayoutEditorNames:UpdateItemName()
         return self:HideItemName()
     end
     local x, y = self:ContentPointer()
-    local item = x ~= nil and (self:GridItemAt(x, y) or self:SearchItemAt(x, y)) or nil
+    local item = x ~= nil and self:GridItemAt(x, y) or nil
     local name = item ~= nil and Text.plain(item.name) or ""
     -- An item the client cannot name shows nothing
     if name == "" then return self:HideItemName() end
