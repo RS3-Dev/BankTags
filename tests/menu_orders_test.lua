@@ -444,6 +444,51 @@ h:Tick(2)
 assert(app.store:HasTag("ranged", key(4151, 2)) and app.select:Stop())
 layout.DetectNativeViewAll = detect
 
+-- The layout editor covers the bank, so rows and items beneath it get no entries
+resetTags()
+local removeRanged = "Remove <col=f2c66d>Ranged</col>"
+local addItem = "Add to Ranged <col=f2c66d>Item</col>"
+pointAtRow("ranged")
+local before = h:ContentMenu()
+Harness.Open(before)
+assert(app.select:Toggle("ranged"))
+h:Tick(2)
+assert(app.store:RemoveTag("ranged", key(4151, 1)))
+local itemBefore = h:MenuFor(host.items[1])
+assert(Harness.Has(itemBefore, addItem))
+app.windows:OpenLayoutEditor("ranged")
+assert(app.windows.layoutEditor ~= nil)
+pointAtRow("ranged")
+local covered = h:ContentMenu()
+assert(table.concat(Harness.DisplayedLabels(covered), "|") == "Cancel")
+Harness.Open(covered)
+assert(not Harness.Has(h:MenuFor(host.items[1]), addItem))
+-- Entries from menus built before the editor opened do nothing
+Harness.Choose(before, removeRanged)
+leftClick(itemBefore)
+h:Tick(2)
+assert(app.windows.tagDeleteConfirm == nil and not app.store:HasTag("ranged", key(4151, 1)))
+-- Closing the editor brings the entries back at once
+app.windows.layoutEditor.window:Close()
+assert(app.windows.layoutEditor == nil)
+assert(Harness.Has(h:MenuFor(host.items[1]), addItem))
+assert(app.select:Stop())
+h:Tick(2)
+pointAtRow("ranged")
+local menu = h:ContentMenu()
+assert(Harness.Has(menu, removeRanged))
+-- An entry chosen just before the editor opens does not run after it
+Harness.Choose(menu, removeRanged)
+app.windows:OpenLayoutEditor("ranged")
+h:Tick(2)
+assert(app.windows.tagDeleteConfirm == nil)
+app.windows.layoutEditor.window:Close()
+pointAtRow("ranged")
+Harness.Choose(h:ContentMenu(), removeRanged)
+h:Tick(2)
+assert(app.windows.tagDeleteConfirm ~= nil)
+app.windows:Close("tagDeleteConfirm")
+
 -- Disconnecting drops the menu subscription
 app:Disconnect()
 assert(h.menuSubscriptions.banktags_menu == nil)

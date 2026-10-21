@@ -58,12 +58,18 @@ function TagMenus:Stop()
     self.pending = {}
 end
 
--- Run an action next tick if current() still returns true
+-- Report whether the layout editor covers the bank
+function TagMenus:EditorOpen()
+    return self.app.windows.layoutEditor ~= nil
+end
+
+-- Run an action next tick if current() still returns true and the editor stayed closed
 function TagMenus:Defer(current, action)
+    local function live() return not self:EditorOpen() and current() end
     return function()
-        if not current() then return end
+        if not live() then return end
         self.pending[#self.pending + 1] = function()
-            if current() then action() end
+            if live() then action() end
         end
         Event.Logic.Subscribe(ACTION_EVENT, function()
             Event.Logic.Unsubscribe(ACTION_EVENT)
@@ -88,10 +94,11 @@ function TagMenus:ItemCheck(item, extra)
 end
 
 -- Answer one menu: entries for the bank item beneath the pointer, or for the Tags row
+-- The layout editor covers the bank, so nothing beneath it gets entries
 function TagMenus:HandleMenu(menu)
     self.rowMenu = nil
     local handle = self.app.handle
-    if handle == nil then return end
+    if handle == nil or self:EditorOpen() then return end
     local item = handle:GetMenuItem(menu)
     if item ~= nil then
         self:AddItemEntries(menu, item)
