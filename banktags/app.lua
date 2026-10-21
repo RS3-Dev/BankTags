@@ -250,6 +250,7 @@ end
 -- Follow a renamed tag before showing the change
 function App:Renamed(oldTag, newTag)
     self.select:Rename(oldTag, newTag)
+    self.windows:TagRenamed(oldTag, newTag)
     if self.shownTag == oldTag and self.handle ~= nil then
         self.shownTag = newTag
         self:PutPage(newTag)

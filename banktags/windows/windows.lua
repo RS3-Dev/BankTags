@@ -14,6 +14,8 @@ Windows.__index = Windows
 
 -- Windows that close with the bank
 local BANK_WINDOWS = { "textPrompt", "layoutEditor", "tagSettingsEditor", "tagDeleteConfirm" }
+-- Windows kept in front of the layout editor, the last frontmost
+local EDITOR_OVERLAYS = { "tagSettingsEditor", "spritePicker", "textPrompt" }
 
 -- Find the layer standalone windows open on
 local function windowParent()
@@ -37,8 +39,17 @@ function Windows:Close(name)
         self:Close("spritePicker")
     end
     pcall(function() window:Destroy() end)
-    -- A label prompt covers the layout editor while open
-    if name == "textPrompt" and self.layoutEditor ~= nil then self.layoutEditor:SetOverlay(nil) end
+    self:SyncEditorOverlays()
+end
+
+-- Keep prompts, tag settings, and the sprite picker in front of the layout editor
+function Windows:SyncEditorOverlays()
+    if self.layoutEditor == nil then return end
+    local overlays = {}
+    for _, name in ipairs(EDITOR_OVERLAYS) do
+        if self[name] ~= nil then overlays[#overlays + 1] = self[name].window end
+    end
+    self.layoutEditor:SetOverlays(overlays)
 end
 
 -- Close every window that needs the open bank; Import/Share stays
@@ -123,9 +134,7 @@ function Windows:OpenPageLabelPrompt(options)
         end,
         onDelete = options.onDelete,
     })
-    if self.layoutEditor ~= nil and self.textPrompt ~= nil then
-        self.layoutEditor:SetOverlay(self.textPrompt.window)
-    end
+    self:SyncEditorOverlays()
 end
 
 -- Open the layout editor sized to the bank
@@ -145,12 +154,7 @@ function Windows:OpenLayoutEditor(tag)
         bounds = state.bounds,
         bankItems = app:BankItems(),
         onChanged = function() app:Changed() end,
-        onOpenImport = function() self:OpenImportShare() end,
-        onCreateTag = function(onCreated)
-            self:OpenTagSettings(app.store:NextPlaceholderTagName(), true, function(newTag)
-                if self.layoutEditor == editor then onCreated(newTag) end
-            end)
-        end,
+        onEditTag = function(value) self:OpenTagSettings(value, false) end,
         onPromptLabel = function(options) self:OpenPageLabelPrompt(options) end,
         onClose = function(value)
             if self.layoutEditor == value then
@@ -162,6 +166,12 @@ function Windows:OpenLayoutEditor(tag)
     })
     self.layoutEditor = editor
     editor:Show()
+    self:SyncEditorOverlays()
+end
+
+-- Keep a renamed tag open in the layout editor
+function Windows:TagRenamed(oldTag, newTag)
+    if self.layoutEditor ~= nil then self.layoutEditor:TagRenamed(oldTag, newTag) end
 end
 
 -- Move the editor with the bank, reopening it after a resize
@@ -217,6 +227,7 @@ function Windows:OpenSpritePicker(owner, onSelected)
         end,
     })
     self.spritePicker:Show()
+    self:SyncEditorOverlays()
 end
 
 -- Open tag settings for an existing or new tag
@@ -249,6 +260,7 @@ function Windows:OpenTagSettings(tag, isNew, onSaved)
     })
     self.tagSettingsEditor = editor
     editor:Show()
+    self:SyncEditorOverlays()
 end
 
 -- Show current import sources in an open Import/Share window

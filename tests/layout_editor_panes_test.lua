@@ -22,14 +22,14 @@ h:Tick(12)
 local key = require("banktags/tags/item_identity").LayoutKey
 local store = app.store
 -- Sorted: a label, then 195 items wrapping onto twenty rows, with one blank
--- Unsorted: 45 items, twelve rows at four columns
+-- Unsorted: 120 items, twelve rows at ten columns
 assert(store:CreateTag("gear") and store:CreateTag("food"))
 store:SetLayoutPlacement(false)
 for objectID = 1001, 1195 do assert(store:AddTag("gear", objectID)) end
 assert(store:InsertLabel("gear", 0, "Weapons", 10))
 assert(store:RemoveTag("gear", key(1045)))
 store:SetLayoutPlacement(true)
-for objectID = 2001, 2045 do assert(store:AddTag("gear", objectID)) end
+for objectID = 2001, 2120 do assert(store:AddTag("gear", objectID)) end
 app:Changed()
 h:Tick(2)
 app.windows:OpenLayoutEditor("gear")
@@ -106,28 +106,41 @@ local function cells(pane)
 end
 
 -- The sorted grid fills the center at Bank Core's columns, with no Unsorted heading
-assert(editorSize.CENTER_SURFACE_HEIGHT == editorSize.PANEL_HEIGHT)
-assert(sorted.y == editorSize.PANEL_TOP + 4 and sorted.height == editorSize.PANEL_HEIGHT - 8)
+-- It sits where the tag column was, under the tag picker and over the shortcuts
+assert(editorSize.CENTER_SURFACE_HEIGHT == editorSize.PANEL_HEIGHT - editorSize.SORTED_TOP - editorSize.FOOTER_HEIGHT)
+assert(sorted.x == editorSize.CENTER_X + 4 and sorted.y == editorSize.PANEL_TOP + editorSize.SORTED_TOP + 4)
+assert(sorted.height == editorSize.CENTER_SURFACE_HEIGHT - 8)
+local tagPicker = editor.tagPicker.root
+assert(tagPicker.x == editorSize.CENTER_X and tagPicker.y == editorSize.PANEL_TOP)
+assert(tagPicker.y + tagPicker.height < sorted.y and editor.editTagButton.root.y == tagPicker.y)
+assert(editor.editTagButton.root.x > tagPicker.x + tagPicker.width)
+assert(editor.editTagButton.root.x + editor.editTagButton.root.width <= editorSize.CENTER_X + editorSize.CENTER_SURFACE_WIDTH)
+assert(editor.footerNotes[1].y == editorSize.FOOTER_Y and string.find(editor.footerNotes[1].content, "Ctrl+C", 1, true) ~= nil)
+assert(editorSize.PANEL_TOP + editorSize.FOOTER_Y + editorSize.FOOTER_HEIGHT == editorSize.PANEL_TOP + editorSize.PANEL_HEIGHT)
+-- The right column takes the freed width, about half the window
+assert(editorSize.RIGHT_X == editorSize.CENTER_X + editorSize.CENTER_WIDTH and editorSize.RIGHT_WIDTH >= editorSize.CENTER_WIDTH)
 assert(sorted.columns == editorSize.CENTER_COLUMNS and sorted.columns == 10)
 assert(Harness.Find(editor.centerPanel, "Unsorted") == nil)
 assert(Harness.Find(editor.centerPanel, "Create Copy") == nil and Harness.Find(editor.centerPanel, "New label") == nil)
--- Unsorted fills the right column above the actions, at four columns of its own
+-- Unsorted fills the right column above the actions, at ten columns of its own
 assert(unsorted.x == editorSize.RIGHT_X + 8 and unsorted.width == editorSize.RIGHT_WIDTH - 16)
-assert(unsorted.y == editorSize.PANEL_TOP + editorSize.TAB_PAGE_Y and unsorted.columns == 4)
+assert(unsorted.y == editorSize.PANEL_TOP + editorSize.TAB_PAGE_Y and unsorted.columns == 10)
 local itemWidth = unsorted.width - editorSize.SCROLLBAR_RESERVE - editorSize.GRID_LEFT
-assert(4 * 44 - 4 <= itemWidth and 5 * 44 - 4 > itemWidth, "four columns fit beside the scrollbar")
+assert(10 * 44 - 4 <= itemWidth and 11 * 44 - 4 > itemWidth, "ten columns fit beside the scrollbar")
 assert(unsorted.y + unsorted.height + 8 == editorSize.PANEL_TOP + editorSize.ACTIONS_Y)
--- The actions sit inside the right column under both tabs, the help last
+-- The actions sit inside the right column under both tabs, two a row, the help last
 for _, button in ipairs({ editor.duplicateButton, editor.removeButton, editor.unsortButton, editor.newLabelButton }) do
     assert(button.parent == editor.rightPanel and button.x >= 8 and button.x + button.width <= editorSize.RIGHT_WIDTH - 8)
     assert(button.y >= editorSize.ACTIONS_Y and button.y + button.height <= editorSize.PANEL_HEIGHT - 8)
 end
 assert(editor.duplicateButton.y == editor.removeButton.y and editor.duplicateButton.x + editor.duplicateButton.width < editor.removeButton.x)
 assert(editor.unsortButton.width >= 140, "Move to Unsorted keeps the width its label fit")
-assert(editor.newLabelButton.y == editorSize.LABEL_BUTTON_Y and editor.newLabelButton.y > editor.unsortButton.y)
+assert(editor.unsortButton.y == editor.newLabelButton.y and editor.unsortButton.x == editor.duplicateButton.x)
+assert(editor.newLabelButton.x == editor.removeButton.x and editor.unsortButton.x + editor.unsortButton.width < editor.newLabelButton.x)
+assert(editor.newLabelButton.y == editorSize.LABEL_BUTTON_Y and editor.newLabelButton.y > editor.duplicateButton.y)
 assert(editor.actionsHelp.y >= editor.newLabelButton.y + editor.newLabelButton.height)
 assert(editor.actionsHelp.y + editor.actionsHelp.height == editorSize.PANEL_HEIGHT - 8)
-assert(string.find(editor.actionsHelp.content, "Ctrl+C", 1, true) ~= nil)
+assert(string.find(editor.actionsHelp.content, "unsorted", 1, true) ~= nil)
 -- The Search list ends where Unsorted does
 assert(editorSize.SEARCH_LIST_TOP + editorSize.SEARCH_LIST_HEIGHT == editorSize.TAB_PAGE_Y + editorSize.UNSORTED_VIEW_HEIGHT)
 -- A taller bank grows the sorted grid and both tabs, keeping the actions at the bottom
@@ -138,13 +151,13 @@ do
     Parts.SizeToBank(editorSize.CENTER_COLUMNS, editor.bounds.width, editorSize.HEIGHT + 88)
     assert(editorSize.SORTED_VIEW_HEIGHT == before.sorted + 88 and editorSize.UNSORTED_VIEW_HEIGHT == before.unsorted + 88)
     assert(editorSize.SEARCH_LIST_HEIGHT == before.search + 88 and editorSize.ACTIONS_Y == before.actions + 88)
-    assert(editorSize.UNSORTED_COLUMNS == 4)
+    assert(editorSize.UNSORTED_COLUMNS == 10)
     Parts.SizeToBank(editor.columns, editor.bounds.width, editor.bounds.height)
 end
--- The label, twenty item rows, and an empty drop row; Unsorted packs twelve rows of four
-assert(#sorted.slots == 210 and #unsorted.slots == 45 and editor.centerLabels[1].row == 0)
+-- The label, twenty item rows, and an empty drop row; Unsorted packs twelve rows of ten
+assert(#sorted.slots == 210 and #unsorted.slots == 120 and editor.centerLabels[1].row == 0)
 assert(sorted.view.content.height == 4 + 22 * 44 and unsorted.view.content.height == 4 + 12 * 44)
-assert(cells(unsorted) == 12 * 4 and unsorted.slots[45].layoutKey == key(2045))
+assert(cells(unsorted) == 12 * 10 and unsorted.slots[120].layoutKey == key(2120))
 assert(sorted.slots[55].kind == "blank" and gear().rows[2].slots[45].kind == "blank")
 
 -- Unsorted shows first; Search's page and input are hidden
@@ -174,11 +187,11 @@ wheel("sorted", 3)
 assert(sorted.view.scrollY == 132 and unsorted.view.scrollY == unsortedMost - 44)
 
 -- With both scrolled, an Unsorted item drops into the exact sorted cell
--- Unsorted row 10, column 2 is item 2043; sorted row 5, column 4 is the blank
+-- Unsorted row 10, column 2 is item 2103; sorted row 5, column 4 is the blank
 drag("unsorted", 2, 10, "sorted", 4, 5)
-assert(gear().rows[2].slots[45].layoutKey == key(2043) and unsortedIndex(key(2043)) == nil)
-assert(#gear().unsorted == 44 and store:HasTag("gear", key(2043)) and changes == 1)
-assert(sorted.slots[55].layoutKey == key(2043) and editor.selectedLayoutKey == key(2043) and outlines() == 1)
+assert(gear().rows[2].slots[45].layoutKey == key(2103) and unsortedIndex(key(2103)) == nil)
+assert(#gear().unsorted == 119 and store:HasTag("gear", key(2103)) and changes == 1)
+assert(sorted.slots[55].layoutKey == key(2103) and editor.selectedLayoutKey == key(2103) and outlines() == 1)
 -- Its neighbours, the label, and the scroll of each grid are unchanged
 assert(gear().rows[1].kind == "label" and gear().rows[1].text == "Weapons")
 assert(gear().rows[2].slots[44].layoutKey == key(1044) and gear().rows[2].slots[46].layoutKey == key(1046))
@@ -187,18 +200,18 @@ assert(sorted.view.scrollY == 132 and unsorted.view.scrollY == unsortedMost - 44
 -- A sorted item dropped on Unsorted leaves a blank and joins the end of Unsorted
 -- Sorted row 6, column 0 is item 1051
 drag("sorted", 0, 6, "unsorted", 3, 4)
-assert(gear().rows[2].slots[51].kind == "blank" and unsortedIndex(key(1051)) == 45)
+assert(gear().rows[2].slots[51].kind == "blank" and unsortedIndex(key(1051)) == 120)
 assert(store:HasTag("gear", key(1051)) and changes == 2 and editor.selectedLayoutKey == key(1051))
-assert(unsorted.slots[45].layoutKey == key(1051) and outlines() == 1)
+assert(unsorted.slots[120].layoutKey == key(1051) and outlines() == 1)
 assert(sorted.view.scrollY == 132 and unsorted.view.scrollY == unsortedMost - 44)
 
 -- Unsorted has no order to edit, so a drag within it only selects
 local before = saved()
 drag("unsorted", 0, 3, "unsorted", 3, 5)
-assert(saved() == before and changes == 2 and editor.selectedLayoutKey == gear().unsorted[13].layoutKey)
+assert(saved() == before and changes == 2 and editor.selectedLayoutKey == gear().unsorted[31].layoutKey)
 
--- Drops on the tag column, the tabs, the actions, or a label change nothing
-drag("sorted", 1, 6, editorSize.COLUMN_X + 10, editorSize.PANEL_TOP + 10)
+-- Drops on the tag picker, the tabs, the actions, or a label change nothing
+drag("sorted", 1, 6, editorSize.CENTER_X + 10, editorSize.PANEL_TOP + 10)
 drag("sorted", 1, 6, editorSize.RIGHT_X + 20, editorSize.PANEL_TOP + editorSize.TAB_Y + 10)
 drag("unsorted", 1, 3, editorSize.RIGHT_X + 20, editorSize.PANEL_TOP + editorSize.ACTIONS_Y + 10)
 wheel("sorted", -10)
@@ -214,7 +227,7 @@ assert(unsorted.view.scrollY == unsortedMost - 88 and sorted.view.scrollY == 0)
 pointAt("sorted", 2, 2)
 editor.panes.sorted.surface.hooks.wheel(nil, 1)
 assert(sorted.view.scrollY == 44)
-pointAtContent(editorSize.COLUMN_X + 10, editorSize.PANEL_TOP + 10)
+pointAtContent(editorSize.CENTER_X + 10, editorSize.PANEL_TOP + 10)
 editor.panes.sorted.surface.hooks.release()
 assert(saved() == before and editor.drag == nil)
 wheel("sorted", -1)
@@ -227,10 +240,10 @@ editor.panes.sorted.surface.hooks.release()
 assert(saved() == before and editor.centerLabels[1].row == 0)
 -- New label sits in the right column's actions; released over Unsorted it asks for nothing
 local labelSurface = editor.labelDragSurface
-assert(labelSurface.x == editorSize.RIGHT_X + 8 and labelSurface.y == editorSize.PANEL_TOP + editorSize.LABEL_BUTTON_Y)
+assert(labelSurface.x == editorSize.RIGHT_X + editorSize.LABEL_BUTTON_X and labelSurface.y == editorSize.PANEL_TOP + editorSize.LABEL_BUTTON_Y)
 assert(labelSurface.width == editor.newLabelButton.width and labelSurface.height == editor.newLabelButton.height)
 local function pointAtNewLabel()
-    pointAtContent(editorSize.RIGHT_X + 8 + 10, editorSize.PANEL_TOP + editorSize.LABEL_BUTTON_Y + 10)
+    pointAtContent(editorSize.RIGHT_X + editorSize.LABEL_BUTTON_X + 10, editorSize.PANEL_TOP + editorSize.LABEL_BUTTON_Y + 10)
 end
 pointAtNewLabel()
 labelSurface.hooks.click(nil, 10, 10)
@@ -317,28 +330,28 @@ labelSurface.hooks.hold()
 assert(not editor.drag.ghost.hidden and not editor.drag.highlight.hidden)
 labelSurface.hooks.release()
 local prompt = app.windows.textPrompt
-assert(prompt ~= nil and editor.overlayWindow == prompt.window)
+assert(prompt ~= nil and editor.overlayWindows[#editor.overlayWindows] == prompt.window)
 prompt.field:SetText("Armour")
 prompt.buttons[#prompt.buttons].root.hooks.click()
 -- The store starts it at the run of items holding that row
 assert(editor.centerLabels[2].row == 1 and editor.centerLabels[2].text == "Armour")
-assert(labelSurface.x == editorSize.RIGHT_X + 8 and labelSurface.y == editorSize.PANEL_TOP + editorSize.LABEL_BUTTON_Y)
+assert(labelSurface.x == editorSize.RIGHT_X + editorSize.LABEL_BUTTON_X and labelSurface.y == editorSize.PANEL_TOP + editorSize.LABEL_BUTTON_Y)
 
 -- Another tag starts both grids at the top and keeps the tab and search
 wheel("unsorted", 1)
 wheel("sorted", 1)
 showTab("search")
-editor.tagList.list:Click("food")
+editor.tagPicker:Select("food", true)
 assert(sorted.view.scrollY == 0 and unsorted.view.scrollY == 0)
 assert(editor.rightTab == "search" and editor.itemSearch.text == "rune")
 showTab("unsorted")
 -- Its empty Unsorted still fills the tab with cells, the last row partly shown
 local unsortedRows = math.ceil((unsorted.height - 4) / 44)
 assert(#unsorted.slots == 0 and unsorted.view.content.height == 4 + unsortedRows * 44)
-assert(cells(unsorted) == unsortedRows * 4)
+assert(cells(unsorted) == unsortedRows * 10)
 
 -- Reopening builds fresh grids on the Unsorted tab; closing destroys them
-editor.tagList.list:Click("gear")
+editor.tagPicker:Select("gear", true)
 showTab("search")
 app.windows:OpenLayoutEditor("gear")
 local reopened = app.windows.layoutEditor
@@ -349,10 +362,10 @@ reopened:ShowRightTab("search")
 assert(reopened.rightTab == "search" and reopened.tabs:GetActiveIndex() == 2 and not reopened.searchDragSurface.hidden)
 reopened:ShowRightTab("unsorted")
 assert(reopened.tabs:GetActiveIndex() == 1 and reopened.searchDragSurface.hidden)
-assert(reopened.panes.sorted.view.scrollY == 0 and #reopened.panes.unsorted.slots == 46)
+assert(reopened.panes.sorted.view.scrollY == 0 and #reopened.panes.unsorted.slots == 121)
 local reopenedPanes, reopenedTabs = reopened.panes, reopened.tabs
 local reopenedPages = { reopenedTabs:GetPage(1), reopenedTabs:GetPage(2) }
-reopened.columnButtons[3].root.hooks.pressed()
+reopened.window:Close()
 assert(app.windows.layoutEditor == nil and reopened.panes == nil and reopened.tabs == nil)
 for _, pane in pairs(reopenedPanes) do
     assert(pane.view.destroyed and pane.surface.destroyed)

@@ -21,13 +21,11 @@ function LayoutEditorKeys:StartShortcuts()
         self.heldKeys = {}
         self.keysOnGrid = false
     end)
-    -- Clicking a search field gives it the keys
-    for _, field in ipairs({ self.itemSearch, self.tagList.search }) do
-        field.root:Subscribe(ui.Hook.ONCLICK, function()
-            self.keysOnGrid = false
-            return true
-        end)
-    end
+    -- Clicking the item search gives it the keys
+    self.itemSearch.root:Subscribe(ui.Hook.ONCLICK, function()
+        self.keysOnGrid = false
+        return true
+    end)
 end
 
 -- Stop listening for shortcut keys
@@ -40,14 +38,22 @@ function LayoutEditorKeys:StopShortcuts()
     self.keysOnGrid = false
 end
 
+-- Check whether a window opened from the editor is showing
+function LayoutEditorKeys:OverlayShown()
+    for _, overlay in ipairs(self.overlayWindows) do
+        if overlay.root ~= nil and not overlay.root.hidden then return true end
+    end
+    return false
+end
+
 -- Check whether a shortcut may act on the selected item
 function LayoutEditorKeys:ShortcutsReady()
-    local overlay = self.overlayWindow
     return self.keysOnGrid
         and self.window ~= nil
         and not self.window.root.hidden
         and self.drag == nil
-        and not (overlay ~= nil and overlay.root ~= nil and not overlay.root.hidden)
+        and not self.tagPicker.open
+        and not self:OverlayShown()
         and not MiniMenu.IsOpen()
         and not prettyui.KeybindField.IsCapturing()
         and self:SelectedEntry() ~= nil

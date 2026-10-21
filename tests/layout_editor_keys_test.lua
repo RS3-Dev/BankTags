@@ -190,7 +190,7 @@ local before = whipCopies()
 selectWhip()
 editor.tabs:GetTab(2).hit.hooks.click()
 assert(editor.selectedLayoutKey == nil and outlines() == 0 and not editor.keysOnGrid)
--- Clicking either search field gives it the keys, so Ctrl+C stays text copy
+-- Clicking the search field gives it the keys, so Ctrl+C stays text copy
 clickSlot("sorted", 0, 0)
 assert(editor.keysOnGrid)
 editor.selectedLayoutKey = WHIP
@@ -200,9 +200,15 @@ tap(DELETE, NONE)
 assert(whipCopies() == before and app.store:HasTag("melee", WHIP))
 editor.tabs:GetTab(1).hit.hooks.click()
 selectWhip()
-editor.tagList.search.root.hooks.click(nil, 4, 4)
+-- The open tag picker takes typing too, from the next tick on
+editor.tagPicker.open = true
 tap(DELETE, NONE)
 assert(app.store:HasTag("melee", WHIP))
+h:Tick(1)
+editor.tagPicker.open = false
+assert(not editor.keysOnGrid)
+tap(DELETE, NONE)
+assert(app.store:HasTag("melee", WHIP), "a closed picker keeps its field's keys until the grid is pressed")
 
 -- An open menu, or one opened since the grid press, blocks the keys
 selectWhip()
@@ -225,25 +231,25 @@ assert(app.store:HasTag("melee", WHIP))
 
 -- The label prompt over the editor blocks them
 selectWhip()
-assert(editor:PromptNewLabel(0) and editor.overlayWindow ~= nil)
+assert(editor:PromptNewLabel(0) and #editor.overlayWindows == 1)
 tap(DELETE, NONE)
 copyKeys()
 assert(app.store:HasTag("melee", WHIP) and whipCopies() == before)
 app.windows:Close("textPrompt")
-assert(editor.overlayWindow == nil)
+assert(#editor.overlayWindows == 0)
 
--- New Tag and Import/Share open windows with their own fields
+-- Edit tag opens tag settings, with a field of its own, in front of the editor
 selectWhip()
-editor:CreateNewTag()
-assert(app.windows.tagSettingsEditor ~= nil)
+editor.editTagButton.root.hooks.pressed()
+assert(app.windows.tagSettingsEditor ~= nil and editor.overlayWindows[1] == app.windows.tagSettingsEditor.window)
+selectWhip()
 tap(DELETE, NONE)
-assert(app.store:HasTag("melee", WHIP))
+assert(app.store:HasTag("melee", WHIP), "tag settings over the editor blocks them")
+-- Its sprite picker joins it in front of the editor
+app.windows.tagSettingsEditor.spriteSlot.root.hooks.click()
+assert(editor.overlayWindows[2] == app.windows.spritePicker.window)
 app.windows:Close("tagSettingsEditor")
-selectWhip()
-editor.columnButtons[1].root.hooks.pressed()
-tap(DELETE, NONE)
-assert(app.store:HasTag("melee", WHIP))
-app.windows:Close("importShare")
+assert(#editor.overlayWindows == 0 and app.windows.spritePicker == nil)
 
 -- The game losing focus clears held keys and blocks them
 selectWhip()
@@ -296,7 +302,7 @@ assert(changes == changesBefore and editor.errorBanner == nil and whipCopies() =
 
 -- Choosing another tag clears the selection, so keys do nothing
 selectWhip()
-editor.tagList.list:Click("food")
+editor.tagPicker:Select("food", true)
 assert(editor.selectedTag == "food" and editor.selectedLayoutKey == nil)
 tap(DELETE, NONE)
 assert(app.store:HasTag("melee", WHIP))
@@ -314,7 +320,7 @@ assert(editor.errorBanner == nil)
 app.windows:OpenLayoutEditor("food")
 assert(app.windows.layoutEditor ~= editor and listener("KeyDown") ~= nil)
 assert(editor.window == nil)
-app.windows.layoutEditor.columnButtons[3].root.hooks.pressed()
+app.windows.layoutEditor.window:Close()
 assert(app.windows.layoutEditor == nil)
 for _, event in ipairs({ "KeyDown", "KeyUp", "WindowFocusChanged" }) do
     assert(listener(event) == nil, "closing left " .. event)

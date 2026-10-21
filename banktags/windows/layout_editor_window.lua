@@ -1,4 +1,4 @@
--- Build the layout editor over the bank: tag column, grids, labels, and buttons
+-- Build the layout editor over the bank: tag picker, grids, labels, and buttons
 
 local Config = require("banktags/core/config")
 local NativeUi = require("banktags/ui/native_ui")
@@ -6,8 +6,7 @@ local BankControls = require("banktags/ui/bank_controls")
 local BankGrid = require("banktags/ui/bank_grid")
 local Geometry = require("banktags/ui/geometry")
 local ItemIdentity = require("banktags/tags/item_identity")
-local SidebarRows = require("banktags/ui/sidebar_rows")
-local TagList = require("banktags/sidebar/tag_list")
+local Text = require("banktags/core/text")
 local Parts = require("banktags/windows/layout_editor_parts")
 local Size = Parts.size
 local rectangle = Parts.rectangle
@@ -43,12 +42,12 @@ local GRID_SLOT_SPRITE = id.Sprite.RS3_ICON_SLOT_40PX_1
 local LABEL_TEXT_COLOUR = Theme.HEADING_TEXT
 local LABEL_LINE_COLOUR = Theme.HEADING_LINE
 local DRAG_EVENT = Config.PLUGIN_REF .. "_layout_editor"
-local FOOTER_BUTTON_GAP = 8
 -- The sorted grid, then the Unsorted grid in the right column
 local PANE_NAMES = { "sorted", "unsorted" }
 -- Right-column tabs, left to right; Unsorted shows first
 local RIGHT_TABS = { "unsorted", "search" }
-local ICON_BUTTON_SIZE = 28
+-- The picker entry shown when there are no tags
+local NO_TAG = ""
 
 -- Destroy saved UI parts newest first, skipping ones already gone
 local function destroyAll(values)
@@ -67,11 +66,9 @@ function LayoutEditorWindow.new(parent, options)
         bounds = options.bounds,
         onChanged = options.onChanged,
         onClose = options.onClose,
-        onOpenImport = options.onOpenImport,
-        onCreateTag = options.onCreateTag,
+        onEditTag = options.onEditTag,
         onPromptLabel = options.onPromptLabel,
-        overlayWindow = nil,
-        listState = { searchQuery = "" },
+        overlayWindows = {},
         searchResults = {},
         centerNodes = {},
         centerLabels = {},
@@ -107,7 +104,8 @@ function LayoutEditorWindow.new(parent, options)
             self.onClose = nil
             self.onChanged = nil
             self.onPromptLabel = nil
-            self.overlayWindow = nil
+            self.onEditTag = nil
+            self.overlayWindows = {}
             -- PrettyUI destroys the window after this returns
             self.window = nil
             if onClose ~= nil then onClose(self) end
@@ -222,66 +220,64 @@ function LayoutEditorWindow:KeepOnTop()
         end
         self.window.root:MoveToFront()
         if self.window._SyncOverlays ~= nil then self.window:_SyncOverlays(false) end
-        -- Keep prompts opened from the editor in front of it
-        local overlay = self.overlayWindow
-        if overlay ~= nil and overlay.root ~= nil and not overlay.root.hidden then
-            overlay.root:MoveToFront()
-            if overlay._SyncOverlays ~= nil then overlay:_SyncOverlays(false) end
+        -- Keep windows opened from the editor in front of it, in order
+        for _, overlay in ipairs(self.overlayWindows) do
+            if overlay.root ~= nil and not overlay.root.hidden then
+                overlay.root:MoveToFront()
+                if overlay._SyncOverlays ~= nil then overlay:_SyncOverlays(false) end
+            end
         end
     end)
 end
 
--- Keep a window opened from the editor in front of it
-function LayoutEditorWindow:SetOverlay(window)
-    self.overlayWindow = window
+-- Keep windows opened from the editor in front of it, the last frontmost
+function LayoutEditorWindow:SetOverlays(windows)
+    self.overlayWindows = windows
     self:KeepOnTop()
 end
 
--- Build the tag column where the bank's own one sits
-function LayoutEditorWindow:CreateTagColumn()
-    local column = ui.Layer.new(self.content)
-    column:SetPos(Size.COLUMN_X, Size.PANEL_TOP)
-    column:SetSize(Size.COLUMN_WIDTH, Size.PANEL_HEIGHT)
-    column.clickthrough = false
-    self.tagColumn = column
-    prettyui.Tooltip.registerContext(column, self.content, function(target)
-        return Geometry.relativePosition(target, self.content)
-    end)
-    tiledSprite(column, 0, 0, Size.COLUMN_WIDTH, Size.PANEL_HEIGHT, NativeUi.SPRITES.PANEL_BACKGROUND)
-    self.tagList = TagList.new(column, {
-        store = self.store,
-        settings = self.settings,
-        state = self.listState,
-        width = Size.COLUMN_WIDTH,
-        listHeight = Size.PANEL_HEIGHT - SidebarRows.LIST_TOP - SidebarRows.FOOTER_HEIGHT,
-        isSelected = function(tag) return tag == self.selectedTag end,
-        onSelect = function(tag) self:SelectTag(tag) end,
-        onChanged = function() self:NotifyChanged() end,
+-- List every tag in sidebar order, folder members under their folder's name
+function LayoutEditorWindow:TagPickerEntries()
+    local entries = {}
+    -- Append one tag, named after its folder when it has one
+    local function add(tag, folderName)
+        local label = Text.titleCase(tag)
+        if folderName ~= nil then label = folderName .. " / " .. label end
+        entries[#entries + 1] = { id = tag, label = label, order = #entries + 1 }
+    end
+    for _, node in ipairs(self.store:TagTree()) do
+        if node.kind == "tag" then
+            add(node.tag, nil)
+        else
+            for _, tag in ipairs(node.tags) do add(tag, node.name) end
+        end
+    end
+    -- Ordered entries make PrettyUI keep this order, so the list needs one
+    if #entries == 0 then entries[1] = { id = NO_TAG, label = "No tags", order = 1 } end
+    return entries
+end
+
+-- Build the tag picker and Edit tag above the sorted grid
+function LayoutEditorWindow:CreateTagPicker()
+    local x, y = Size.CENTER_X, Size.PANEL_TOP
+    local pickerWidth = Size.CENTER_SURFACE_WIDTH - Size.EDIT_TAG_WIDTH - Size.BUTTON_GAP * 2
+    self.tagPicker = prettyui.ComboBox.new(self.content, {
+        x = x,
+        y = y,
+        width = pickerWidth,
+        height = Size.PICKER_HEIGHT,
+        entries = self:TagPickerEntries(),
+        maxVisibleEntries = 12,
+        tooltip = "Choose the tag to edit",
+        onChange = function(_, tag)
+            if tag ~= NO_TAG then self:SelectTag(tag) end
+        end,
     })
-    local width = SidebarRows.ContentWidth(Size.COLUMN_WIDTH)
-    local top = Size.PANEL_HEIGHT - 36
-    local newTagX = SidebarRows.CONTENT_X + ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP
-    local newTagWidth = width - (ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP) * 2
-    self.columnButtons = {
-        BankControls.button(column, nil, function()
-            -- Import/Share has text fields of its own
-            self.keysOnGrid = false
-            if self.onOpenImport ~= nil then self.onOpenImport() end
-        end, {
-            x = SidebarRows.CONTENT_X, y = top, size = ICON_BUTTON_SIZE, iconSize = 18,
-            spriteName = "EXPORT", tooltip = "Import and share bank tags",
-        }),
-        BankControls.button(column, "New Tag", function() self:CreateNewTag() end, {
-            x = newTagX, y = top, width = newTagWidth, height = 28, tooltip = "Create a new bank tag",
-        }),
-        BankControls.button(column, nil, function()
-            if self.window ~= nil then self.window:Close() end
-        end, {
-            x = newTagX + newTagWidth + FOOTER_BUTTON_GAP, y = top, size = ICON_BUTTON_SIZE, iconSize = 18,
-            spriteName = "CROSS", tooltip = "Close layout editor",
-        }),
-    }
-    self.columnFrame = frame(column, 0, 0, Size.COLUMN_WIDTH, Size.PANEL_HEIGHT, FRAME)
+    self.editTagButton = BankControls.button(self.content, "Edit tag", function() self:EditTag() end, {
+        x = x + Size.CENTER_SURFACE_WIDTH - Size.EDIT_TAG_WIDTH, y = y,
+        width = Size.EDIT_TAG_WIDTH, height = Size.PICKER_HEIGHT,
+        tooltip = "Rename this tag or change its icon",
+    })
 end
 
 -- Create one scrolling grid at a content point, with its own columns
@@ -357,41 +353,60 @@ function LayoutEditorWindow:CreateRightTabs()
     })
 end
 
--- Build the item actions and help under the right tabs
+-- Build the item actions and help under the right tabs, two buttons a row
 -- These replace the right-click menu, which only Bank Core may change
 function LayoutEditorWindow:CreateActions()
     local x, y = Size.RIGHT_INSET, Size.ACTIONS_Y
-    local width, height = Size.RIGHT_VIEW_WIDTH, Size.BUTTON_HEIGHT
-    local half = (width - Size.BUTTON_GAP) // 2
+    local half, height = Size.HALF_BUTTON_WIDTH, Size.BUTTON_HEIGHT
     self.duplicateButton = BankControls.button(
         self.rightPanel, "Create Copy", function() self:DuplicateSelected() end,
         { x = x, y = y, width = half, height = height, tooltip = "Copy the selected item (Ctrl+C)" }
     )
     self.removeButton = BankControls.button(
         self.rightPanel, "Remove", function() self:RemoveSelected() end,
-        { x = x + half + Size.BUTTON_GAP, y = y, width = width - half - Size.BUTTON_GAP, height = height,
+        { x = Size.LABEL_BUTTON_X, y = y, width = Size.LABEL_BUTTON_WIDTH, height = height,
             tooltip = "Remove the selected item (Delete)" }
     )
     self.unsortButton = BankControls.button(
         self.rightPanel, "Move to Unsorted", function() self:UnarrangeSelected() end,
-        { x = x, y = y + Size.BUTTON_STEP, width = width, height = height }
+        { x = x, y = Size.LABEL_BUTTON_Y, width = half, height = height }
     )
     -- Its drag surface handles clicks too, so the button has no action
     self.newLabelButton = BankControls.button(self.rightPanel, "New label", nil, {
-        x = x, y = Size.LABEL_BUTTON_Y, width = width, height = height,
+        x = Size.LABEL_BUTTON_X, y = Size.LABEL_BUTTON_Y,
+        width = Size.LABEL_BUTTON_WIDTH, height = height,
     })
     self.actionsHelp = prettyui.Text.new(self.rightPanel, {
         text = Parts.ACTIONS_HELP,
-        x = x, y = Size.LABEL_BUTTON_Y + Size.BUTTON_STEP, width = width, height = Size.HELP_HEIGHT,
+        x = x, y = Size.LABEL_BUTTON_Y + Size.BUTTON_STEP,
+        width = Size.RIGHT_VIEW_WIDTH, height = Size.HELP_HEIGHT,
         colour = MUTED,
         font = id.Font.MUSEO_SANS_11PT_REGULAR,
         maxLines = 2,
     })
 end
 
--- Build the tag column, sorted grid, and right tabs
+-- Build the shortcut and saved notes under the sorted grid
+function LayoutEditorWindow:CreateFooter()
+    local width = Size.CENTER_SURFACE_WIDTH - 8
+    self.footerNotes = {}
+    for _, note in ipairs({
+        { text = Parts.SHORTCUTS, align = ui.AlignMode.TOPLEFT },
+        { text = Parts.SAVED, align = ui.AlignMode.BOTTOMRIGHT },
+    }) do
+        self.footerNotes[#self.footerNotes + 1] = prettyui.Text.new(self.centerPanel, {
+            text = note.text,
+            x = 4, y = Size.FOOTER_Y, width = width, height = Size.FOOTER_HEIGHT,
+            colour = MUTED,
+            font = id.Font.MUSEO_SANS_11PT_REGULAR,
+            alignHorizontal = note.align,
+            maxLines = 1,
+        })
+    end
+end
+
+-- Build the tag picker, sorted grid, and right tabs
 function LayoutEditorWindow:CreatePanels()
-    self:CreateTagColumn()
     self.centerPanel = self:Panel(Size.CENTER_X, Size.CENTER_WIDTH)
     self.rightPanel = self:Panel(Size.RIGHT_X, Size.RIGHT_WIDTH)
 
@@ -400,18 +415,20 @@ function LayoutEditorWindow:CreatePanels()
         NativeUi.SPRITES.PANEL_BACKGROUND
     )
     self.centerSurface = rectangle(
-        self.centerPanel, 0, 0,
+        self.centerPanel, 0, Size.SORTED_TOP,
         Size.CENTER_SURFACE_WIDTH, Size.CENTER_SURFACE_HEIGHT,
         VIEW_BACKGROUND, true
     )
     self.centerFrame = frame(
-        self.centerPanel, 0, 0,
+        self.centerPanel, 0, Size.SORTED_TOP,
         Size.CENTER_SURFACE_WIDTH, Size.CENTER_SURFACE_HEIGHT, FRAME
     )
     self.panes = {
         sorted = self:CreatePane("sorted", self.centerPanel, Size.CENTER_VIEW_X, Size.SORTED_VIEW_Y,
             Size.CENTER_VIEW_WIDTH, Size.SORTED_VIEW_HEIGHT, Size.CENTER_COLUMNS),
     }
+    self:CreateFooter()
+    self:CreateTagPicker()
     self.rightBackground = tiledSprite(
         self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.PANEL_HEIGHT,
         NativeUi.SPRITES.PANEL_BACKGROUND
@@ -463,7 +480,7 @@ function LayoutEditorWindow:ShowError(message)
     if self.centerPanel == nil then return end
     local width = Size.CENTER_SURFACE_WIDTH - ERROR_INSET * 2
     local banner = ui.Layer.new(self.centerPanel)
-    banner:SetPos(ERROR_INSET, Size.CENTER_SURFACE_HEIGHT - ERROR_HEIGHT - ERROR_INSET)
+    banner:SetPos(ERROR_INSET, Size.FOOTER_Y - ERROR_HEIGHT - ERROR_INSET)
     banner:SetSize(width, ERROR_HEIGHT)
     banner.clickthrough = true
     local text = prettyui.Text.new(banner, {
@@ -505,21 +522,25 @@ function LayoutEditorWindow:HideError()
     if banner ~= nil then pcall(function() banner.root:Destroy() end) end
 end
 
--- Show the selected tag and rebuild the tag rows
+-- Show every tag in the picker with the open one chosen
 function LayoutEditorWindow:RefreshTags()
-    if self.tagList ~= nil then self.tagList:Refresh() end
+    if self.tagPicker == nil then return end
+    self.tagPicker:SetEntries(self:TagPickerEntries(), self.selectedTag or NO_TAG)
+    self.tagPicker:SetDisabled(self.selectedTag == nil)
 end
 
--- Open a tag draft, selecting it once its editor saves
-function LayoutEditorWindow:CreateNewTag()
-    if self.onCreateTag == nil then return false end
-    -- The tag draft has a name field of its own
+-- Open the open tag's settings to rename it or change its icon
+function LayoutEditorWindow:EditTag()
+    if self.selectedTag == nil or self.onEditTag == nil then return false end
+    -- Tag settings has a name field of its own
     self.keysOnGrid = false
-    self.onCreateTag(function(tag)
-        self:SelectTag(tag)
-        self:NotifyChanged()
-    end)
+    self.onEditTag(self.selectedTag)
     return true
+end
+
+-- Keep the open tag open under its new name
+function LayoutEditorWindow:TagRenamed(oldTag, newTag)
+    if self.selectedTag == oldTag then self.selectedTag = newTag end
 end
 
 -- End drags and load the selected tag's layout
@@ -732,8 +753,10 @@ function LayoutEditorWindow:PaneAt(x, y)
 end
 
 -- Keep the editor above native bank redraws
+-- The open tag picker takes typing, and PrettyUI owns its clicks
 function LayoutEditorWindow:PollDrag()
     self:KeepOnTop()
+    if self.tagPicker.open then self.keysOnGrid = false end
     self:TickError()
 end
 
@@ -843,19 +866,18 @@ function LayoutEditorWindow:DestroyControls()
         self.removeButton,
         self.duplicateButton,
         self.actionsHelp,
+        self.tagPicker,
+        self.editTagButton,
     }) do
         if control ~= nil then pcall(function() control:Destroy() end) end
     end
     -- The tabs own their pages and destroy them
     if self.tabs ~= nil then pcall(function() self.tabs:Destroy() end) end
     self.tabs = nil
-    if self.tagList ~= nil then
-        self.tagList:Destroy()
-        for _, button in ipairs(self.columnButtons) do pcall(function() button:Destroy() end) end
-        pcall(function() prettyui.Tooltip.unregisterContext(self.tagColumn) end)
-        pcall(function() self.tagColumn:Destroy() end)
-        self.tagList, self.columnButtons, self.tagColumn = nil, nil, nil
-    end
+    destroyAll(self.footerNotes)
+    self.footerNotes = nil
+    self.tagPicker = nil
+    self.editTagButton = nil
     self.searchHint = nil
     self.searchList = nil
     self.itemSearch = nil
@@ -880,10 +902,9 @@ function LayoutEditorWindow:Destroy()
     self.content = nil
     self.onChanged = nil
     self.onClose = nil
-    self.onOpenImport = nil
-    self.onCreateTag = nil
+    self.onEditTag = nil
     self.onPromptLabel = nil
-    self.overlayWindow = nil
+    self.overlayWindows = {}
 end
 
 return LayoutEditorWindow

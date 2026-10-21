@@ -24,6 +24,7 @@ local ItemIdentity = require("banktags/tags/item_identity")
 local key = ItemIdentity.LayoutKey
 assert(app.store:CreateTag("melee"))
 assert(app.store:CreateTag("food"))
+assert(app.store:CreateFolder("Combat", "melee"))
 app.store:SetLayoutPlacement(false)
 assert(app.store:AddTag("melee", 4151, key(4151, 1)))
 app.store:SetLayoutPlacement(true)
@@ -44,9 +45,17 @@ assert(editor ~= nil and editor.selectedTag == "melee")
 local editorSize = h:TagsModule("banktags/windows/layout_editor_parts").size
 assert(editorSize.CENTER_COLUMNS == 13)
 assert(editor.window.root.x == app.state.bounds.x and editor.window.root.y == app.state.bounds.y)
--- Its tag column is the shared list, with the editor's own footer
-assert(editor.tagList:RowFor("melee") ~= nil and editor.tagList:RowFor("food") ~= nil)
-assert(Harness.Find(editor.tagColumn, "New Tag") ~= nil)
+-- A tag picker replaces the tag column: every tag in sidebar order, under its folder
+local picker = editor.tagPicker
+assert(picker.entries[1].id == "melee" and picker.entries[1].label == "Combat / Melee" and picker.entries[1].order == 1)
+assert(picker.entries[2].id == "food" and picker.entries[2].label == "Food" and #picker.entries == 2)
+assert(picker:GetSelectedID() == "melee" and Harness.Find(editor.content, "Edit tag") == editor.editTagButton.root)
+-- New Tag and Import/Share stay in the Tags tab, and the window's own close button closes it
+assert(Harness.Find(editor.content, "New Tag") == nil)
+-- The sorted grid takes the tag column's place, below the picker and above the shortcuts
+assert(editor.centerPanel.x == editorSize.CENTER_X and editorSize.CENTER_X < 44)
+assert(editor.panes.sorted.y > picker.root.y + picker.root.height)
+assert(Harness.Find(editor.centerPanel, "Saved automatically").y == editorSize.FOOTER_Y)
 
 -- Quantities come from Bank Core's snapshot; a placeholder is drawn faded
 local function spriteFor(objectID)
@@ -122,12 +131,12 @@ assert(editor.errorBanner == nil, "the error fades on the editor's own logic sub
 -- New label asks for text and adds the label after the layout
 local labelSurface = editor.labelDragSurface
 local labelLeft, labelTop = Geometry.absolutePosition(editor.content)
-host.mouse = { x = labelLeft + editorSize.RIGHT_X + editorSize.RIGHT_INSET + 10,
+host.mouse = { x = labelLeft + editorSize.RIGHT_X + editorSize.LABEL_BUTTON_X + 10,
     y = labelTop + editorSize.PANEL_TOP + editorSize.LABEL_BUTTON_Y + 10 }
 labelSurface.hooks.click(nil, 10, 10)
 labelSurface.hooks.release()
 local prompt = app.windows.textPrompt
-assert(prompt ~= nil and editor.overlayWindow == prompt.window)
+assert(prompt ~= nil and editor.overlayWindows[#editor.overlayWindows] == prompt.window)
 prompt.field:SetText("Weapons")
 prompt.buttons[#prompt.buttons].root.hooks.click()
 local rows = app.store.data.tags.melee.rows
@@ -140,9 +149,30 @@ assert(string.find(editor.searchHint.content, "Without RuneQL", 1, true) ~= nil)
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "shark")
 assert(#editor.searchResults == 1 and editor.searchResults[1].objectId == 385)
 
--- Choosing another tag in the editor's list opens that tag
-editor.tagList.list:Click("food")
+-- Choosing another tag in the picker opens that tag
+picker:Select("food", true)
 assert(editor.selectedTag == "food" and #editor.panes.sorted.slots == 0 and #editor.panes.unsorted.slots == 0)
+-- Edit tag opens the open tag's settings in front of the editor
+editor.editTagButton.root.hooks.pressed()
+local tagSettings = app.windows.tagSettingsEditor
+assert(tagSettings ~= nil and tagSettings.field.text == "food" and not editor.keysOnGrid)
+assert(editor.overlayWindows[1] == tagSettings.window)
+-- Renaming keeps the tag open and renames it in the picker
+tagSettings.field:SetText("snacks")
+tagSettings.saveButton.root.hooks.click()
+assert(editor.selectedTag == "snacks" and picker:GetSelectedID() == "snacks")
+assert(picker.entries[2].id == "snacks" and picker.entries[2].label == "Snacks")
+assert(app.store:RenameFolder(app.store:GetTagFolder("melee"), "Gear") and app:Changed() == nil)
+assert(picker.entries[1].label == "Gear / Melee" and editor.selectedTag == "snacks")
+-- Deleting the open tag opens the first one and drops it from the picker
+assert(app.store:CreateTag("spare"))
+app:Changed()
+picker:Select("spare", true)
+assert(editor.selectedTag == "spare" and #picker.entries == 3)
+assert(app.store:DeleteTag("spare"))
+app:Changed()
+assert(editor.selectedTag == "melee" and picker:GetSelectedID() == "melee" and #picker.entries == 2)
+picker:Select("snacks", true)
 
 -- Moving the bank moves the editor once Bank Core reports the new bounds
 local window = host.window
@@ -155,7 +185,7 @@ host.itemLayer.width = 448
 h:Tick(12)
 assert(app.state.columns == 10)
 local reopened = app.windows.layoutEditor
-assert(reopened ~= nil and reopened ~= editor and reopened.selectedTag == "food")
+assert(reopened ~= nil and reopened ~= editor and reopened.selectedTag == "snacks")
 assert(editorSize.CENTER_COLUMNS == 10)
 
 -- Closing the bank closes the editor; Import/Share stays open
@@ -182,19 +212,19 @@ settings.saveButton.root.hooks.click()
 assert(app.store:GetTagSprite("melee") == 385)
 
 -- Deleting a tag asks first, and leaves its page when it is shown
-assert(app:ShowTag("food"))
+assert(app:ShowTag("snacks"))
 h:Tick(2)
-app.windows:OpenTagDeleteConfirm("food")
+app.windows:OpenTagDeleteConfirm("snacks")
 app.windows.tagDeleteConfirm.deleteButton.root.hooks.click()
 h:Tick(2)
-assert(app.store.data.tags.food == nil and app.shownTag == nil and layout.selectedTag == nil)
+assert(app.store.data.tags.snacks == nil and app.shownTag == nil and layout.selectedTag == nil)
 
--- The close button closes the editor, as does Bank Core unloading
+-- The window's close button closes the editor, as does Bank Core unloading
 assert(app:ShowTag("melee"))
 h:Tick(2)
 app.windows:OpenLayoutEditor("melee")
 editor = app.windows.layoutEditor
-editor.columnButtons[3].root.hooks.pressed()
+editor.window:Close()
 assert(app.windows.layoutEditor == nil and editor.window == nil)
 app.windows:OpenLayoutEditor("melee")
 assert(app.windows.layoutEditor ~= nil)
