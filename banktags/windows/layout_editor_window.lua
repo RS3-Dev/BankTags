@@ -16,11 +16,12 @@ local Theme = require("banktags/ui/theme")
 
 local LayoutEditorWindow = {}
 LayoutEditorWindow.__index = LayoutEditorWindow
--- Drag gestures, catalog search, shortcut keys, and item names live in their own files
+-- Drag gestures, catalog search, shortcut keys, item names, and groups live in their own files
 require("banktags/windows/layout_editor_drag").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_search").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_keys").install(LayoutEditorWindow)
 require("banktags/windows/layout_editor_names").install(LayoutEditorWindow)
+require("banktags/windows/layout_editor_group").install(LayoutEditorWindow)
 
 -- Errors show over the grid's bottom for about four seconds
 local ERROR_HEIGHT = 40
@@ -70,6 +71,13 @@ function LayoutEditorWindow.new(parent, options)
         centerNodes = {},
         centerLabels = {},
         selectedLayoutKey = nil,
+        -- Set only while two or more sorted items are selected
+        groupKeys = nil,
+        actionTooltips = {
+            duplicateButton = "Copy the selected item (Ctrl+C)",
+            removeButton = "Remove the selected item (Delete)",
+            unsortButton = "Leave the selected item unsorted, or drag it to Unsorted",
+        },
         drag = nil,
         styles = { byKey = {}, byObject = {} },
     }, LayoutEditorWindow)
@@ -357,11 +365,11 @@ function LayoutEditorWindow:CreateActions()
     local y = Size.PANEL_TOP + Size.ACTIONS_Y
     for index, action in ipairs({
         { "duplicateButton", "Create Copy", function() self:DuplicateSelected() end,
-            "Copy the selected item (Ctrl+C)" },
+            self.actionTooltips.duplicateButton },
         { "removeButton", "Remove", function() self:RemoveSelected() end,
-            "Remove the selected item (Delete)" },
+            self.actionTooltips.removeButton },
         { "unsortButton", "Move to Unsorted", function() self:UnarrangeSelected() end,
-            "Leave the selected item unsorted, or drag it to Unsorted" },
+            self.actionTooltips.unsortButton },
         -- Its drag surface handles clicks too, so the button has no action
         { "newLabelButton", "New label", nil, "Click to add a label above the selection, or drag it onto a row" },
         { "closeButton", "Close", function()
@@ -498,7 +506,7 @@ function LayoutEditorWindow:SelectTag(tag)
         for _, name in ipairs(PANE_NAMES) do self.panes[name].view:SetScrollPosition(0) end
     end
     self.selectedTag = tag
-    self.selectedLayoutKey = nil
+    self:SelectOnly(nil)
     self:RefreshTags()
     self:RefreshCenter()
 end
@@ -517,6 +525,8 @@ function LayoutEditorWindow:RefreshCenter()
     sorted.slots, unsorted.slots, self.centerLabels = {}, {}, {}
     self.usedRows = 0
     if self.selectedTag == nil then
+        self:SelectOnly(nil)
+        self:UpdateActionTooltips()
         for _, name in ipairs(PANE_NAMES) do
             local pane = self.panes[name]
             pane.view:SetContentHeight(pane.height)
@@ -534,6 +544,9 @@ function LayoutEditorWindow:RefreshCenter()
             unsorted.slots[#unsorted.slots + 1] = slot
         end
     end
+    -- A group keeps only the items still sorted
+    self:PruneSelection()
+    self:UpdateActionTooltips()
     self.centerLabels = labels
     local labelRows = {}
     for _, label in ipairs(labels) do
@@ -589,7 +602,7 @@ function LayoutEditorWindow:CreateGridCell(parent, x, y, slot)
         )
         self.centerNodes[#self.centerNodes + 1] = sprite
     end
-    if slot.layoutKey == self.selectedLayoutKey then
+    if self:IsSelected(slot.layoutKey) then
         local selection = rectangle(
             parent, x, y, Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE, GOLD, false
         )
@@ -766,6 +779,7 @@ end
 
 -- Move the selected item to Unsorted, keeping it tagged
 function LayoutEditorWindow:UnarrangeSelected()
+    if self:RefuseForGroup() then return false end
     local entry = self:SelectedEntry()
     if entry == nil or self.selectedTag == nil then
         self:ShowError("Select a layout item first.")
@@ -785,6 +799,7 @@ end
 
 -- Add a ghost copy of the selected item
 function LayoutEditorWindow:DuplicateSelected()
+    if self:RefuseForGroup() then return false end
     local entry = self:SelectedEntry()
     if entry == nil or self.selectedTag == nil then
         self:ShowError("Select a layout item first.")
@@ -803,6 +818,7 @@ end
 
 -- Untag the selected item, keeping other grid positions
 function LayoutEditorWindow:RemoveSelected()
+    if self:RefuseForGroup() then return false end
     local entry = self:SelectedEntry()
     if entry == nil or self.selectedTag == nil then
         self:ShowError("Select a layout item first.")

@@ -273,7 +273,8 @@ function Harness.new(name, options)
     local built = Build.Run({ out = out })
     local Loader = require("tools/test_support/fake_plugin_host")
     local globals = { ui = ui, id = id, Event = Event, config = config, Vector4 = Vector4,
-        Mouse = Mouse, MiniMenuActionType = MiniMenuActionType, MiniMenuEntryType = MiniMenuEntryType,
+        Mouse = Mouse, Keyboard = Keyboard, MiniMenuActionType = MiniMenuActionType,
+        MiniMenuEntryType = MiniMenuEntryType,
         MiniMenu = { IsOpen = function() return input.menuOpen end },
         GameKey = { BACKSPACE = 85, DELETE = 101, C = 67, CONTROL = 82 },
         Player = { IsAvailable = function() return true end }, GameState = { GAME = 30 },

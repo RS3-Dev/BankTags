@@ -117,6 +117,97 @@ function TagStoreLayouts:MoveLayoutItem(tag, layoutKey, destinationIndex, column
     return saved, reason, saved
 end
 
+-- Find where arranged items land when one of them moves to a grid index
+-- The others keep their row and column offsets; nothing wraps across the edge
+function TagStoreLayouts:PlanLayoutItemsMove(tag, layoutKeys, anchorKey, destinationIndex, columnCount)
+    destinationIndex = math.tointeger(tonumber(destinationIndex))
+    local record = self.data.tags[tag]
+    if record == nil or destinationIndex == nil or destinationIndex < 1
+        or type(layoutKeys) ~= "table" or #layoutKeys == 0 then
+        return nil, "The requested layout position is invalid."
+    end
+    local view = TagLayouts.Render(record.rows, columnCount)
+    local columns = view.columns
+    local sources = {}
+    for index, slot in ipairs(view.slots) do
+        if slot.kind == "item" then sources[slot.layoutKey] = index end
+    end
+    local anchor = sources[anchorKey]
+    if anchor == nil then return nil, "The selected items are no longer in this layout." end
+    local lineShift = (destinationIndex - 1) // columns - (anchor - 1) // columns
+    local columnShift = (destinationIndex - 1) % columns - (anchor - 1) % columns
+    local plan = { moves = {}, valid = true, changed = lineShift ~= 0 or columnShift ~= 0 }
+    local seen = {}
+    for _, layoutKey in ipairs(layoutKeys) do
+        local source = sources[layoutKey]
+        if source == nil or seen[layoutKey] then
+            return nil, "The selected items are no longer in this layout."
+        end
+        seen[layoutKey] = true
+        local line = (source - 1) // columns + lineShift
+        local column = (source - 1) % columns + columnShift
+        local move = { layoutKey = layoutKey, source = source, line = line, column = column }
+        if line < 0 or column < 0 or column >= columns then
+            move.reason = "The selected items do not fit there."
+        elseif line < view.lines and view.cells[line * columns + column + 1] == nil then
+            move.reason = "A label takes up its whole row."
+        else
+            move.destination = line * columns + column + 1
+        end
+        if move.reason ~= nil and plan.valid then
+            plan.valid, plan.reason = false, move.reason
+        end
+        plan.moves[#plan.moves + 1] = move
+    end
+    if not seen[anchorKey] then return nil, "The selected items are no longer in this layout." end
+    return plan, nil
+end
+
+-- Move arranged items together in one save, keeping their offsets
+-- Whatever sat where they land fills the cells they left, in reading order
+function TagStoreLayouts:MoveLayoutItems(tag, layoutKeys, anchorKey, destinationIndex, columnCount)
+    local plan, reason = self:PlanLayoutItemsMove(tag, layoutKeys, anchorKey, destinationIndex, columnCount)
+    if plan == nil then return false, reason, false end
+    if not plan.valid then return false, plan.reason, false end
+    if not plan.changed then return true, nil, false end
+
+    local nextData = copy(self.data)
+    local rows = nextData.tags[tag].rows
+    local view = TagLayouts.Render(rows, columnCount)
+    local columns, firstAdded = view.columns, #rows + 1
+    local writes, moved = {}, {}
+    for _, move in ipairs(plan.moves) do
+        writes[move.destination] = view.slots[move.source]
+        moved[move.source] = true
+    end
+    local vacated, displaced = {}, {}
+    for _, move in ipairs(plan.moves) do
+        if writes[move.source] == nil then vacated[#vacated + 1] = move.source end
+        if not moved[move.destination] then displaced[#displaced + 1] = move.destination end
+    end
+    table.sort(vacated)
+    table.sort(displaced)
+    for position, index in ipairs(displaced) do
+        writes[vacated[position]] = view.slots[index] or { kind = "blank" }
+    end
+    for index, slot in pairs(writes) do
+        local cell = view.cells[index]
+        local slots, position
+        if cell ~= nil then
+            slots, position = rows[cell.entry].slots, cell.position
+        else
+            -- Below the rows each new line is its own row
+            local entry = firstAdded + (index - 1) // columns - view.lines
+            for added = #rows + 1, entry do rows[added] = { kind = "row", slots = {} } end
+            slots, position = rows[entry].slots, (index - 1) % columns + 1
+        end
+        for padding = #slots + 1, position - 1 do slots[padding] = { kind = "blank" } end
+        slots[position] = slot
+    end
+    local saved, saveReason = self:Commit(nextData, "Could not save the layout.")
+    return saved, saveReason, saved
+end
+
 -- Insert an empty grid row at a line, moving that line and every one after it down
 -- A row wrapped across the line is split there; Unsorted is untouched
 function TagStoreLayouts:InsertLayoutRow(tag, line, columnCount)

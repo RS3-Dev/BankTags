@@ -123,7 +123,7 @@ function LayoutEditorSearch:AddCatalogResult(result, destination)
     end
     local positioned, positionReason = self.store:MoveLayoutItem(
         self.selectedTag, layoutKey, destination, Size.CENTER_COLUMNS)
-    self.selectedLayoutKey = layoutKey
+    self:SelectOnly(layoutKey)
     self:RefreshCenter()
     if not positioned then
         if self.onChanged ~= nil then self.onChanged(self.selectedTag) end

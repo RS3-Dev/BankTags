@@ -195,15 +195,24 @@ function LayoutEditorDrag:CommitDragFromMouse()
     return self:CommitDragAt(x, y)
 end
 
--- Start dragging a pane's item, or clear the selection on an empty cell
+-- Start dragging a pane's item or the group it is in
+-- Shift-click adds or removes a sorted item; an empty cell clears the selection
 function LayoutEditorDrag:BeginCenterDrag(pane, index, hit, x, y)
     local slot = index ~= nil and pane.slots[index] or nil
+    local shift = Keyboard.IsShiftDown()
     if type(slot) ~= "table" or slot.kind ~= "item" then
-        self.selectedLayoutKey = nil
+        -- A Shift-click that misses keeps the group being built
+        if shift then return false end
+        self:SelectOnly(nil)
         self:RefreshCenter()
         return false
     end
-    self.selectedLayoutKey = slot.layoutKey
+    -- Toggling never drags, so a held Shift cannot move the group by accident
+    if shift and pane.name == "sorted" then
+        self:ToggleGroupItem(slot.layoutKey)
+        self:RefreshCenter()
+        return false
+    end
     local pointX, pointY = self:ContentPointer()
     if pointX == nil then
         -- The surface sits over the view, so its points are unscrolled
@@ -212,6 +221,11 @@ function LayoutEditorDrag:BeginCenterDrag(pane, index, hit, x, y)
         pointX = pointX + (tonumber(x) or Size.GRID_SLOT_SIZE / 2)
         pointY = pointY + (tonumber(y) or Size.GRID_SLOT_SIZE / 2)
     end
+    -- Pressing a group item keeps the group so it can be dragged
+    if self:GroupCount() > 1 and self.groupKeys[slot.layoutKey] then
+        return self:BeginGroupDrag(slot, pane, hit, pointX, pointY)
+    end
+    self:SelectOnly(slot.layoutKey)
     local ghost, ghostWidth, ghostHeight = self:CreateDragGhost(
         slot.objectID, pointX, pointY, slot.layoutKey, true
     )
@@ -314,6 +328,8 @@ function LayoutEditorDrag:UpdateDragAt(x, y)
             self.drag.ghost.hidden = false
         end
         self:ShowLabelDropRow(self:RowFromContentPoint(x, y))
+    elseif self.drag.kind == "group" then
+        self:ShowGroupPreview(x, y)
     end
     self.drag.ghost:MoveToFront()
     return false
@@ -466,6 +482,7 @@ function LayoutEditorDrag:CommitDragAt(x, y)
     y = tonumber(y) or (drag ~= nil and drag.pointerY or nil)
     if x == nil or y == nil then return self:FinishDrag(false) end
     if kind == "layout" then return self:FinishCenterDrag(x, y) end
+    if kind == "group" then return self:FinishGroupDrag(x, y) end
     if kind == "search" then return self:FinishSearchDrag(x, y) end
     if kind == "label" then return self:FinishLabelDrag(x, y) end
     return false
@@ -481,6 +498,7 @@ function LayoutEditorDrag:FinishDrag(commit)
     if drag ~= nil and drag.highlight ~= nil then
         pcall(function() drag.highlight:Destroy() end)
     end
+    if drag ~= nil and drag.preview ~= nil then self.ClearGroupPreview(drag) end
     if drag ~= nil then
         self:RestoreDragSurface(drag.sourceSurface, drag.sourceSurfaceKind)
     end
