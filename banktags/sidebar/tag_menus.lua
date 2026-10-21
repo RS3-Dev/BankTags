@@ -210,7 +210,6 @@ function TagMenus:AddRowEntries(menu)
         offer(app.select:Tag() == tag and "Stop selecting items" or "Select items", name, function()
             app.select:Toggle(tag)
         end)
-        offer("Remove", name, function() app.windows:OpenTagDeleteConfirm(tag) end)
         local folderKey = app.store:GetTagFolder(tag)
         if folderKey ~= nil then
             local folder = app.store:GetFolder(folderKey)
@@ -218,10 +217,11 @@ function TagMenus:AddRowEntries(menu)
                 app:MoveTagToFolder(tag, nil)
             end)
         end
+        offer("Remove", name, function() app.windows:OpenTagDeleteConfirm(tag) end)
     end
     if not MenuEntries.AddTop(menu, entries) then return end
     self.rowMenu = rowMenu
-    if entry.kind == "tag" then self:AddFolderSubmenu(menu, entry.tag, #entries + 1, chosen, current) end
+    if entry.kind == "tag" then self:AddFolderSubmenu(menu, entry.tag, 5, chosen, current) end
 end
 
 -- Add row inserts for the layout editor's sorted grid row under the pointer
@@ -251,7 +251,7 @@ function TagMenus:AddEditorEntries(menu)
     self.rowMenu = rowMenu
 end
 
--- Add the folder submenu below the row's other actions
+-- Add the folder submenu between selection and removal actions
 -- It lists the other folders, Create new folder, and Cancel
 function TagMenus:AddFolderSubmenu(menu, tag, position, chosen, isCurrent)
     local MiniMenu = prettyui.MiniMenu
@@ -276,7 +276,9 @@ function TagMenus:AddFolderSubmenu(menu, tag, position, chosen, isCurrent)
         action = chosen("Create new folder", function() app.windows:OpenCreateFolderPrompt(tag) end) }
     children[#children + 1] = { label = "Cancel", action = function() end }
     local label = tagFolder ~= nil and "Move to folder" or "Add to folder"
-    MiniMenu.AddSubmenu(menu, MenuEntries.Text(label, subject(tag)), children, { title = label, position = position })
+    local text = MenuEntries.Text(label, subject(tag))
+    MiniMenu.AddSubmenu(menu, text, children, { title = label, position = position })
+    MenuEntries.PlaceSubmenu(menu, text .. " <col=ffffff><gt></col>", position)
 end
 
 return TagMenus

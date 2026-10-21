@@ -66,6 +66,20 @@ local function move(menu, from, to)
     for current = from, to - step, step do menu:Swap(current, current + step) end
 end
 
+-- Keep Cancel last and place a submenu at its requested visible row
+function MenuEntries.PlaceSubmenu(menu, label, position)
+    local cancel = cancelIndex(menu)
+    if cancel ~= nil then move(menu, cancel, 1) end
+    local wanted = normalize(label)
+    for index, entry in ipairs(menu.entries) do
+        if normalize(entry.overrideText) == wanted or normalize(entry.fullText) == wanted
+            or normalize(entry.verbText) == wanted then
+            move(menu, index, math.max(2, menu.entryCount - position + 1))
+            return
+        end
+    end
+end
+
 -- Add entries at the bottom of the menu, keeping the left click
 -- If placement fails, Cancel becomes the default
 function MenuEntries.AddLow(menu, entries)
