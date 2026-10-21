@@ -72,8 +72,11 @@ end
 
 -- Show the name of the item under the pointer, or hide it
 -- Runs every tick, since moving within a surface raises no hover event
+-- A window opened over the editor or a menu may cover the grids without a leave
 function LayoutEditorNames:UpdateItemName()
-    if self.nameSurface == nil or self.nameSurface.hidden or self.drag ~= nil then
+    if self.nameSurface == nil or self.nameSurface.hidden or self.drag ~= nil
+        or self.window == nil or self.window.root.hidden
+        or self:OverlayShown() or MiniMenu.IsOpen() then
         return self:HideItemName()
     end
     local x, y = self:ContentPointer()

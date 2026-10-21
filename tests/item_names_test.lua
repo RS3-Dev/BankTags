@@ -1,7 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Name items on a shown tag page that have no bank stack, and every item in the layout editor
--- Bank Core's stacks keep their own tooltips; Bank Tags covers only the slots Core leaves empty
+-- Name every item in the layout editor's grids and search results
+-- Bank Core names a shown tag page's items itself; Bank Tags adds nothing over the page
 -- FAKE HOST: stand-in components, pointer, hover, and tooltips, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -16,193 +16,27 @@ host.itemLayer.interfaceID = 517
 h:LoadCore()
 h:LoadTags()
 local app = h:App()
-local session, layout = h:OpenBank()
-h:Tick(2)
+h:OpenBank()
+h:Tick(12)
 
 local key = require("banktags/tags/item_identity").LayoutKey
 local function item(objectID, copy, source)
     return { kind = "item", objectID = objectID, layoutKey = key(objectID, copy),
         sourceLayoutKey = source ~= nil and key(objectID, source) or nil }
 end
-assert(app.store:CreateTag("melee") and app.store:CreateTag("food"))
+assert(app.store:CreateTag("melee"))
 -- A stack, a source copy, a ghost, a placeholder, a copy of a doubled stack, and an unnamed item;
--- then a label and the shark, which is the object's only stack
+-- then a label and a shark, with another shark in Unsorted
 app.store.data.tags.melee.rows = {
     { kind = "row", slots = { item(4151, 1), item(4151, 3, 1), item(536, 1), item(1944, 1),
         item(4151, 4), item(777, 1) } },
     { kind = "label", text = "Food" },
     { kind = "row", slots = { item(385, 2) } },
 }
-app.store.data.tags.food.rows = { { kind = "row", slots = { item(536, 1) } } }
-assert(app.store:Save())
-app:Changed()
-
-local names = app.pageNames
--- Return the page's hover areas by their cell position
-local function targetsAt()
-    local positions = {}
-    for _, target in ipairs(names.targets) do
-        assert(not target.destroyed)
-        positions[target.x .. "," .. target.y] = target
-    end
-    return positions
-end
-local function count(values)
-    local total = 0
-    for _ in pairs(values) do total = total + 1 end
-    return total
-end
-
--- The tag page ------------------------------------------------------------------------
-
-assert(app:ShowTag("melee"))
-h:Tick(2)
-assert(layout.pageState.view.key == "tag:melee" and names.ctx ~= nil)
--- The ghost, the placeholder, and the doubled stack's extra copy get a hover area;
--- the unnamed item gets none, and stacks Core leases keep theirs
-local targets = targetsAt()
-assert(count(targets) == 3, tostring(count(targets)))
-
--- Each area sits on the cell of a slot Core draws with no native item, as Core lays it out
-local empty, held = {}, 0
-for _, entry in ipairs(layout.nativeLease.renderedEntries) do
-    if entry.placeholder or (entry.component == nil and entry.interactionComponent == nil) then
-        if entry.objectID ~= 777 then empty[(entry.x - 2) .. "," .. (entry.y - 4)] = entry.objectID end
-    else
-        held = held + 1
-        assert(targets[(entry.x - 2) .. "," .. (entry.y - 4)] == nil, "a held stack is covered")
-    end
-end
-assert(held == 3 and count(empty) == 3)
-for position, target in pairs(targets) do
-    assert(empty[position] ~= nil, "no empty slot at " .. position)
-    assert(target.width == 40 and target.height == 40 and target.clickthrough == false)
-end
--- The shark sits under the label, which Core draws shorter than a row
-local shark = nil
-for _, slot in ipairs(layout.pageState.view.slots) do
-    if slot.objectID == 385 then shark = slot end
-end
-assert(shark.y == 4 + 44 + 34, tostring(shark.y))
-
--- Over an empty slot the hover area is in front; over a stack, Core's input target is
--- Find the frontmost clickable component at a screen point in the bank window's tree
-local function hitAt(x, y)
-    local root = names.ctx.parent
-    while root.parent ~= nil do root = root.parent end
-    local all = host.all
-    host.all = root
-    local hit = host:HitTest(x - root.x, y - root.y)
-    host.all = all
-    return hit
-end
-local parentLeft, parentTop = Geometry.absolutePosition(names.ctx.parent)
-local ghost = targets[(8 + 2 * 44 - 2) .. "," .. 0]
-assert(ghost ~= nil)
-assert(hitAt(parentLeft + ghost.x + 20, parentTop + ghost.y + 20) == ghost)
-local stackHit = hitAt(parentLeft + 8 + 20, parentTop + 4 + 16)
-assert(stackHit ~= nil and stackHit.parent ~= names.ctx.parent)
--- The wheel still scrolls the page over a hover area
-assert(ghost.hooks.wheel ~= nil)
-
--- Hovering shows only the item's name, beside its cell in Core's overlay
-local tooltip = names.tooltip
-assert(tooltip.parent == names.ctx.parent and not tooltip.shown)
-ghost.hooks.mouseover()
-assert(tooltip.shown and tooltip.text == "Dragon bones")
-assert(tooltip.target.x == ghost.x and tooltip.target.y == ghost.y)
-local context = names.ctx.parent.tooltipContext
-assert(context.parent == names.ctx.overlay)
-local overlayLeft, overlayTop = Geometry.absolutePosition(names.ctx.overlay)
-local x, y = context.position(tooltip.target)
-assert(x == parentLeft + ghost.x - overlayLeft and y == parentTop + ghost.y - overlayTop)
-targets[(8 + 3 * 44 - 2) .. "," .. 0].hooks.mouseover()
-assert(tooltip.shown and tooltip.text == "Egg")
-targets[(8 + 4 * 44 - 2) .. "," .. 0].hooks.mouseover()
-assert(tooltip.text == "Abyssal whip")
--- Leaving hides it
-targets[(8 + 4 * 44 - 2) .. "," .. 0].hooks.mouseleave()
-assert(not tooltip.shown)
-
--- Scrolling moves the item, so a shown name hides; the scrolled position counts
--- This page is too short to scroll, so the test moves Core's offset between ticks
-local watch = "banktags_page_item_names"
-ghost.hooks.mouseover()
-h:Tick()
-assert(tooltip.shown and host.callbacks[watch] ~= nil)
-layout.listEngine.scrollY = 20
-host.callbacks[watch]()
-assert(not tooltip.shown and host.callbacks[watch] == nil)
-ghost.hooks.mouseover()
-x, y = context.position(tooltip.target)
-assert(y == parentTop + ghost.y - overlayTop - 20)
-layout.listEngine.scrollY = 0
-host.callbacks[watch]()
-assert(not tooltip.shown)
-
--- An inventory change refreshes the areas: a deposited ghost gets a stack and its area goes
-host:Rebuild(function(specs)
-    specs[#specs + 1] = { 536, 5 }
-    host.names[536] = "Dragon bones"
-    return specs
-end)
-layout:HandleInventoryUpdate()
-h:Tick(3)
-targets = targetsAt()
-assert(count(targets) == 2 and targets[(8 + 2 * 44 - 2) .. ",0"] == nil, tostring(count(targets)))
-assert(ghost.destroyed)
-host:Rebuild(function(specs)
-    specs[#specs] = nil
-    return specs
-end)
-layout:HandleInventoryUpdate()
-h:Tick(3)
-assert(count(targetsAt()) == 3)
-
--- An edit to the shown tag keeps the mount and follows the new rows
-local mounted = names.ctx
-app.store.data.tags.melee.rows[1].slots[3] = { kind = "blank" }
-assert(app.store:Save())
-app:Changed()
-h:Tick(2)
-assert(names.ctx == mounted and count(targetsAt()) == 2)
-
--- Another tag mounts fresh areas; the old ones and their tooltip go
-local oldTooltip = tooltip
-oldTooltip.shown = true
-names.shownScroll = 0
-assert(app:ShowTag("food"))
-h:Tick(2)
-assert(oldTooltip.destroyed and names.ctx ~= mounted and names.tooltip ~= oldTooltip)
-assert(count(targetsAt()) == 1)
-names.targets[1].hooks.mouseover()
-assert(names.tooltip.shown and names.tooltip.text == "Dragon bones")
-
--- Leaving the page unmounts everything, the scroll watch included
-tooltip = names.tooltip
-assert(app:ToggleTag("food"))
-h:Tick(2)
-assert(names.ctx == nil and #names.targets == 0 and tooltip.destroyed)
-assert(host.callbacks.banktags_page_item_names == nil)
-
--- Closing the bank unmounts a shown page too
-assert(app:ShowTag("food"))
-h:Tick(2)
-assert(#names.targets == 1)
-local closed = names.targets[1]
-names.targets[1].hooks.mouseover()
-layout:Restore()
-host:UnmountBankWindow()
-h:Tick(2)
-assert(names.ctx == nil and closed.destroyed and host.callbacks.banktags_page_item_names == nil)
-
--- The layout editor ------------------------------------------------------------------
-
-session, layout = h:OpenBank()
-h:Tick(12)
 app.store.data.tags.melee.unsorted = { item(385, 1) }
 assert(app.store:Save())
 app:Changed()
+
 app.windows:OpenLayoutEditor("melee")
 local editor = app.windows.layoutEditor
 local editorSize = h:TagsModule("banktags/windows/layout_editor_parts").size
@@ -235,7 +69,8 @@ assert(anchor.width == 40 and anchor.height == 40)
 pointAt("sorted", 0, 0)
 h:Tick()
 assert(nameTooltip.text == "Abyssal whip" and anchor.x == sorted.x + editorSize.GRID_LEFT)
--- The gap between cells, an empty cell, and an unnamed item show nothing
+-- A ghost of an item the bank lacks is named too
+-- The gap between cells and an unnamed item show nothing
 pointAt("sorted", 0, 0, 42, 20)
 h:Tick()
 assert(not nameTooltip.shown)
@@ -244,7 +79,7 @@ h:Tick()
 assert(nameTooltip.shown and nameTooltip.text == "Abyssal whip")
 pointAt("sorted", 2, 0)
 h:Tick()
-assert(not nameTooltip.shown, "the slot is blank")
+assert(nameTooltip.shown and nameTooltip.text == "Dragon bones")
 pointAt("sorted", 5, 0)
 h:Tick()
 assert(not nameTooltip.shown, "the client has no name for item 777")
@@ -277,6 +112,25 @@ sorted.surface.hooks.release()
 assert(editor.drag == nil)
 h:Tick()
 assert(nameTooltip.shown and nameTooltip.text == "Abyssal whip")
+
+-- A window opened over the editor, an open menu, or a hidden editor names nothing,
+-- even if the surface heard no leave, and the name returns once it is gone
+assert(editor:PromptNewLabel(0) and #editor.overlayWindows == 1)
+h:Tick()
+assert(not nameTooltip.shown)
+app.windows:Close("textPrompt")
+h:Tick()
+assert(nameTooltip.shown and nameTooltip.text == "Abyssal whip")
+h.input.menuOpen = true
+h:Tick()
+assert(not nameTooltip.shown)
+h.input.menuOpen = false
+editor.window.root.hidden = true
+h:Tick()
+assert(not nameTooltip.shown)
+editor.window.root.hidden = false
+h:Tick()
+assert(nameTooltip.shown)
 
 -- A hidden tab names nothing, even if its surface heard no leave
 editor.tabs:GetTab(2).hit.hooks.click()

@@ -4,7 +4,6 @@ local Config = require("banktags/core/config")
 local DebugLog = require("banktags/core/debug_log")
 local ImportAPI = require("banktags/imports/import_api")
 local ItemIdentity = require("banktags/tags/item_identity")
-local PageItemNames = require("banktags/ui/page_item_names")
 local SelectMode = require("banktags/sidebar/select_mode")
 local Settings = require("banktags/core/settings")
 local SettingsSection = require("banktags/windows/settings_section")
@@ -72,11 +71,6 @@ function App.new()
     app.tab = TagTab.new(app)
     -- Explain a tag too large for Bank Core to show
     app.noticeMount = { mount = function(ctx) app:DrawNotice(ctx) end }
-    -- Name the shown tag's items that have no bank stack
-    app.pageNames = PageItemNames.new({
-        bankItems = function() return app:BankItems() end,
-        columns = function() return app.handle ~= nil and app.handle:GetState().columns or nil end,
-    })
     -- Bank Tags' section of Bank Core's settings window
     app.settingsMount = {
         mount = function(ctx) app:MountSettings(ctx.parent) end,
@@ -147,9 +141,6 @@ function App:Disconnect()
     self.handle, self.bank = nil, nil
     self.state, self.shownTag, self.bankItems, self.pageRegistered = nil, nil, nil, false
     if handle ~= nil then pcall(function() handle:Dispose() end) end
-    -- An unloaded Bank Core may never unmount the page
-    self.pageNames:Unmount()
-    self.pageNames.rows = nil
 end
 
 -- Follow Bank Core's state, closing windows with the bank
@@ -176,7 +167,6 @@ function App:OnBankItems()
     if snapshot == nil then return end
     self.bankItems = snapshot
     self.windows:BankItemsChanged()
-    self.pageNames:Refresh()
 end
 
 -- Return the bank's items as last read, or an empty list
@@ -193,7 +183,7 @@ end
 
 -- Give Bank Core the page for a tag, registering the page the first time
 function App:PutPage(tag)
-    local page, notice = TagPage.Build(self.store, tag, { notice = self.noticeMount, names = self.pageNames.callbacks })
+    local page, notice = TagPage.Build(self.store, tag, self.noticeMount)
     if page == nil then return false, notice end
     self.notice = notice
     local ok, reason, detail
@@ -203,12 +193,7 @@ function App:PutPage(tag)
         ok, reason, detail = self.handle:RegisterPage(TagPage.PAGE_ID, page)
         self.pageRegistered = ok == true
     end
-    if not ok then
-        debugLog("Bank Core refused the page for ", tag, ": ", tostring(reason), " ", tostring(detail))
-        return ok, reason
-    end
-    -- The same key keeps the mounted names, so they follow the new rows here
-    self.pageNames:SetRows(notice == nil and page.body[1].layout or nil)
+    if not ok then debugLog("Bank Core refused the page for ", tag, ": ", tostring(reason), " ", tostring(detail)) end
     return ok, reason
 end
 
