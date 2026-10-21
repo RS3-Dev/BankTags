@@ -228,9 +228,9 @@ assert(app.store:HasTag("melee", WHIP) and whipCopies() == before)
 app.windows:Close("textPrompt")
 assert(#editor.overlayWindows == 0)
 
--- Rename opens tag settings, with a field of its own, in front of the editor
+-- Tag settings, with a field of its own, opens in front of the editor
 selectWhip()
-editor.editTagButton.root.hooks.pressed()
+app.windows:OpenTagSettings("melee", false)
 assert(app.windows.tagSettingsEditor ~= nil and editor.overlayWindows[1] == app.windows.tagSettingsEditor.window)
 selectWhip()
 tap(DELETE, NONE)
@@ -312,7 +312,8 @@ assert(editor.errorBanner == nil)
 app.windows:OpenLayoutEditor("food")
 assert(app.windows.layoutEditor ~= editor and listener("KeyDown") ~= nil)
 assert(editor.window == nil)
-app.windows.layoutEditor.window:Close()
+-- Exit edit mode closes it the way the title bar does
+app.windows.layoutEditor.exitButton.root.hooks.pressed()
 assert(app.windows.layoutEditor == nil)
 for _, event in ipairs({ "KeyDown", "KeyUp", "WindowFocusChanged" }) do
     assert(listener(event) == nil, "closing left " .. event)

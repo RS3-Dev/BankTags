@@ -29,7 +29,7 @@ function LayoutEditorDrag:RestoreDragSurface(surface, kind)
         surface:SetPos(rightX, Size.PANEL_TOP + Size.SEARCH_LIST_TOP)
         surface:SetSize(Size.RIGHT_VIEW_WIDTH - Size.SCROLLBAR_RESERVE, Size.SEARCH_LIST_HEIGHT)
     elseif kind == "label" then
-        surface:SetPos(Size.RIGHT_X + Size.LABEL_BUTTON_X, Size.PANEL_TOP + Size.LABEL_BUTTON_Y)
+        surface:SetPos(Size.LABEL_BUTTON_X, Size.LABEL_BUTTON_Y)
         surface:SetSize(Size.LABEL_BUTTON_WIDTH, Size.BUTTON_HEIGHT)
     end
     surface:MoveToFront()
@@ -404,7 +404,7 @@ end
 function LayoutEditorDrag:OnLabelButton(x, y)
     x, y = tonumber(x), tonumber(y)
     if x == nil or y == nil then return false end
-    local left, top = Size.RIGHT_X + Size.LABEL_BUTTON_X, Size.PANEL_TOP + Size.LABEL_BUTTON_Y
+    local left, top = Size.LABEL_BUTTON_X, Size.LABEL_BUTTON_Y
     return x >= left and x < left + Size.LABEL_BUTTON_WIDTH
         and y >= top and y < top + Size.BUTTON_HEIGHT
 end

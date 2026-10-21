@@ -77,14 +77,15 @@ for _, node in ipairs(rail.root.children) do
     if node.associatedObjectID == 4151 and not node.destroyed then railIcon = node end
 end
 assert(railIcon ~= nil and railIcon.clickthrough and railIcon.y > melee.y and railIcon.y < melee.y + melee.height)
--- The open tag's name sits beside Rename, with no picker
-assert(editor.tagTitle.content == "Combat / Melee" and Harness.Find(editor.content, "Rename") == editor.editTagButton.root)
+-- No title or Rename; the rail's outline and tooltips show the open tag
+assert(editor.tagTitle == nil and Harness.Find(editor.content, "Rename") == nil and railOpen("melee"))
+assert(Harness.Find(editor.content, "Exit edit mode") == editor.exitButton.root)
 -- New Tag and Import/Share stay in the Tags tab, and the window's own close button closes it
 assert(Harness.Find(editor.content, "New Tag") == nil)
--- The sorted grid sits beside the rail, below the name and above the shortcuts
+-- The sorted grid sits beside the rail, level with Unsorted, over the item actions
 assert(editor.centerPanel.x == editorSize.CENTER_X and rail.root.x + rail.root.width < editorSize.CENTER_X)
-assert(editor.panes.sorted.y > editor.tagTitle.y + editor.tagTitle.height)
-assert(Harness.Find(editor.centerPanel, "Saved automatically").y == editorSize.FOOTER_Y)
+assert(editor.panes.sorted.y > editor.exitButton.y + editor.exitButton.height)
+assert(Harness.Find(editor.content, "Saved automatically") == nil)
 
 -- Quantities come from Bank Core's snapshot; a placeholder is drawn faded
 local function spriteFor(objectID)
@@ -135,7 +136,7 @@ assert(whipY ~= nil and sharkY == whipY and sharkX == 8 + 11 * 44, tostring(shar
 -- Select the whip, then copy it; the ghost opens copy 1
 drag("sorted", 0, 0, "sorted", 0, 0)
 assert(editor.selectedLayoutKey == key(4151, 1))
-Harness.Find(editor.rightPanel, "Create Copy").hooks.pressed()
+Harness.Find(editor.content, "Create Copy").hooks.pressed()
 assert(editor.selectedLayoutKey == key(4151, 2))
 local ghost = nil
 for _, slot in ipairs(app.store.data.tags.melee.rows[1].slots) do
@@ -143,16 +144,16 @@ for _, slot in ipairs(app.store.data.tags.melee.rows[1].slots) do
 end
 assert(ghost ~= nil and ghost.sourceLayoutKey == key(4151, 1))
 -- Move to Unsorted keeps the selected copy in the tag
-Harness.Find(editor.rightPanel, "Move to Unsorted").hooks.pressed()
+Harness.Find(editor.content, "Move to Unsorted").hooks.pressed()
 local unsorted = app.store.data.tags.melee.unsorted
 assert(unsorted[#unsorted].layoutKey == key(4151, 2) and app.store:HasTag("melee", key(4151, 2)))
 -- Remove takes the selected copy out of the tag
 drag("sorted", 0, 0, "sorted", 0, 0)
-Harness.Find(editor.rightPanel, "Remove").hooks.pressed()
+Harness.Find(editor.content, "Remove").hooks.pressed()
 assert(not app.store:HasTag("melee", key(4151, 1)) and app.store:HasTag("melee", key(4151, 2)))
 -- With nothing selected the buttons explain instead of acting
 editor.selectedLayoutKey = nil
-Harness.Find(editor.rightPanel, "Remove").hooks.pressed()
+Harness.Find(editor.content, "Remove").hooks.pressed()
 assert(editor.errorBanner ~= nil)
 h:Tick(260)
 assert(editor.errorBanner == nil, "the error fades on the editor's own logic subscription")
@@ -160,8 +161,8 @@ assert(editor.errorBanner == nil, "the error fades on the editor's own logic sub
 -- New label asks for text and adds the label after the layout
 local labelSurface = editor.labelDragSurface
 local labelLeft, labelTop = Geometry.absolutePosition(editor.content)
-host.mouse = { x = labelLeft + editorSize.RIGHT_X + editorSize.LABEL_BUTTON_X + 10,
-    y = labelTop + editorSize.PANEL_TOP + editorSize.LABEL_BUTTON_Y + 10 }
+host.mouse = { x = labelLeft + editorSize.LABEL_BUTTON_X + 10,
+    y = labelTop + editorSize.LABEL_BUTTON_Y + 10 }
 labelSurface.hooks.click(nil, 10, 10)
 labelSurface.hooks.release()
 local prompt = app.windows.textPrompt
@@ -180,17 +181,17 @@ assert(#editor.searchResults == 1 and editor.searchResults[1].objectId == 385)
 
 -- Pressing another tag in the rail opens that tag
 railButton("food").root.hooks.pressed()
-assert(railOpen("food") and editor.tagTitle.content == "Food")
+assert(railOpen("food"))
 assert(editor.selectedTag == "food" and #editor.panes.sorted.slots == 0 and #editor.panes.unsorted.slots == 0)
--- Rename opens the open tag's settings in front of the editor
-editor.editTagButton.root.hooks.pressed()
+-- Renaming from the Tags tab opens tag settings in front of the editor
+app.windows:OpenTagSettings("food", false)
 local tagSettings = app.windows.tagSettingsEditor
-assert(tagSettings ~= nil and tagSettings.field.text == "food" and not editor.keysOnGrid)
+assert(tagSettings ~= nil and tagSettings.field.text == "food")
 assert(editor.overlayWindows[1] == tagSettings.window)
 -- Renaming keeps the tag open and renames it in the rail
 tagSettings.field:SetText("snacks")
 tagSettings.saveButton.root.hooks.click()
-assert(editor.selectedTag == "snacks" and railOpen("snacks") and editor.tagTitle.content == "Snacks")
+assert(editor.selectedTag == "snacks" and railOpen("snacks"))
 assert(railTags() == "melee,snacks" and railButton("snacks").tooltipText == "Snacks")
 assert(app.store:RenameFolder(app.store:GetTagFolder("melee"), "Gear") and app:Changed() == nil)
 assert(railButton("melee").tooltipText == "Gear / Melee" and editor.selectedTag == "snacks")
@@ -217,7 +218,7 @@ until not paged
 for index = 1, 30 do assert(seen["extra " .. index], "extra " .. index .. " is reachable") end
 assert(seen.melee and seen.snacks and editor.selectedTag == "snacks" and railButton("snacks") == nil)
 railButton("extra 30").root.hooks.pressed()
-assert(editor.selectedTag == "extra 30" and editor.tagTitle.content == "Extra 30" and railOpen("extra 30"))
+assert(editor.selectedTag == "extra 30" and railOpen("extra 30"))
 editor:SelectTag("melee")
 assert(railButton("melee") ~= nil and rail.upArrow.disabled)
 for index = 1, 30 do assert(app.store:DeleteTag("extra " .. index)) end
@@ -270,9 +271,14 @@ app.windows.tagDeleteConfirm.deleteButton.root.hooks.click()
 h:Tick(2)
 assert(app.store.data.tags.snacks == nil and app.shownTag == nil and layout.selectedTag == nil)
 
--- The window's close button closes the editor, as does Bank Core unloading
+-- Exit edit mode and the window's close button close the editor, as does Bank Core unloading
 assert(app:ShowTag("melee"))
 h:Tick(2)
+app.windows:OpenLayoutEditor("melee")
+editor = app.windows.layoutEditor
+editor.exitButton.root.hooks.pressed()
+assert(app.windows.layoutEditor == nil and editor.window == nil and editor.exitButton == nil)
+assert(editor.panes == nil and editor.onClose == nil)
 app.windows:OpenLayoutEditor("melee")
 editor = app.windows.layoutEditor
 editor.window:Close()

@@ -154,7 +154,6 @@ function Windows:OpenLayoutEditor(tag)
         bounds = state.bounds,
         bankItems = app:BankItems(),
         onChanged = function() app:Changed() end,
-        onEditTag = function(value) self:OpenTagSettings(value, false) end,
         onPromptLabel = function(options) self:OpenPageLabelPrompt(options) end,
         onClose = function(value)
             if self.layoutEditor == value then

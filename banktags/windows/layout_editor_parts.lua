@@ -9,11 +9,6 @@ Parts.size = Size
 
 -- Shown in the empty item search panel
 Parts.SEARCH_HINT = "Search for an item, then drag it into the layout."
--- Shown under the item actions
-Parts.ACTIONS_HELP = "Drag items into the layout. Drag a placed item here to leave it unsorted."
--- Shown under the sorted grid
-Parts.SHORTCUTS = "Delete: Remove     Ctrl+C: Create copy"
-Parts.SAVED = "Saved automatically"
 
 -- Default sizes match the expanded bank window plus Bank Core's sidebar
 -- A tag rail and the sorted grid take the sidebar's place; a larger bank grows the grid
@@ -30,12 +25,6 @@ Size.CENTER_X = Size.RAIL_X + TagRail.WIDTH + Size.RAIL_GAP
 Size.DEFAULT_CENTER_WIDTH = 477
 -- The right column ends where the window's border begins
 Size.RIGHT_MARGIN = 20
--- The open tag's name and Rename sit above the sorted grid
-Size.TITLE_HEIGHT = 30
-Size.EDIT_TAG_WIDTH = 96
-Size.SORTED_TOP = Size.TITLE_HEIGHT + 10
--- The shortcuts and saved note sit under the sorted grid
-Size.FOOTER_HEIGHT = 28
 -- The editor grid starts 4px in, not the bank's 8px
 Size.GRID_LEFT = 4
 Size.GRID_TOP = BankGrid.TOP
@@ -45,14 +34,11 @@ Size.LABEL_LINE_OFFSET = BankGrid.LABEL_LINE_OFFSET
 Size.LABEL_GHOST_WIDTH = 180
 Size.LABEL_GHOST_HEIGHT = 28
 Size.DEFAULT_SURFACE_WIDTH = 473
--- The sorted view fills the sorted surface
-Size.CENTER_VIEW_X = 4
-Size.SORTED_VIEW_Y = Size.SORTED_TOP + 4
 -- A 467px view leaves 449px for items after PrettyUI's scrollbar
 Size.DEFAULT_VIEW_WIDTH = 467
 -- PrettyUI reserves this much for a scroll list's scrollbar and its gap
 Size.SCROLLBAR_RESERVE = 18
--- The right column: Unsorted and Search tabs over shared item actions
+-- The right column: Unsorted and Search tabs
 Size.RIGHT_INSET = 8
 Size.TAB_Y = 4
 -- PrettyUI's tab header; pages start under it
@@ -60,12 +46,19 @@ Size.TAB_HEADER = 42
 Size.TAB_PAGE_Y = Size.TAB_Y + Size.TAB_HEADER
 Size.SEARCH_FIELD_HEIGHT = 26
 Size.SEARCH_LIST_TOP = Size.TAB_PAGE_Y + Size.SEARCH_FIELD_HEIGHT + 8
+-- The sorted grid starts level with the Unsorted grid, under the tab header
+Size.SORTED_TOP = Size.TAB_PAGE_Y
+Size.CENTER_VIEW_X = 4
+Size.SORTED_VIEW_Y = Size.SORTED_TOP + 4
+-- Exit edit mode sits right of the tab header's band, level with the tabs
+Size.EXIT_WIDTH = 128
+Size.EXIT_Y = Size.TAB_Y + 8
+Size.EXIT_HEIGHT = 30
+-- One row of item actions runs under both columns
 Size.BUTTON_HEIGHT = 28
 Size.BUTTON_GAP = 4
-Size.BUTTON_STEP = Size.BUTTON_HEIGHT + Size.BUTTON_GAP
-Size.HELP_HEIGHT = 30
--- Two rows of two buttons, then the help text
-Size.ACTIONS_HEIGHT = 2 * Size.BUTTON_STEP + Size.HELP_HEIGHT
+Size.ACTIONS_GAP = 8
+Size.ACTION_COUNT = 4
 
 -- Size the editor to cover the bank at Bank Core's columns
 -- Only one editor is open, so sizes live in Size
@@ -79,26 +72,36 @@ function Parts.SizeToBank(columns, bankWidth, bankHeight)
     Size.PANEL_HEIGHT = Size.DEFAULT_PANEL_HEIGHT + extraHeight
     Size.CENTER_WIDTH = Size.DEFAULT_CENTER_WIDTH + extraWidth
     Size.CENTER_SURFACE_WIDTH = Size.DEFAULT_SURFACE_WIDTH + extraWidth
-    Size.CENTER_SURFACE_HEIGHT = Size.PANEL_HEIGHT - Size.SORTED_TOP - Size.FOOTER_HEIGHT
     Size.CENTER_VIEW_WIDTH = Size.DEFAULT_VIEW_WIDTH + extraWidth
-    Size.SORTED_VIEW_HEIGHT = Size.CENTER_SURFACE_HEIGHT - 8
-    Size.FOOTER_Y = Size.SORTED_TOP + Size.CENTER_SURFACE_HEIGHT
     -- The right column takes the rest of the width
     Size.RIGHT_X = Size.CENTER_X + Size.CENTER_WIDTH
     Size.RIGHT_WIDTH = Size.WIDTH - Size.RIGHT_MARGIN - Size.RIGHT_X
     Size.RIGHT_VIEW_WIDTH = Size.RIGHT_WIDTH - 2 * Size.RIGHT_INSET
-    Size.HALF_BUTTON_WIDTH = (Size.RIGHT_VIEW_WIDTH - Size.BUTTON_GAP) // 2
     -- Unsorted fits as many columns as the right view holds
     Size.UNSORTED_COLUMNS = (Size.RIGHT_VIEW_WIDTH - Size.SCROLLBAR_RESERVE - Size.GRID_LEFT
         + Size.GRID_STEP - Size.GRID_SLOT_SIZE) // Size.GRID_STEP
-    -- A taller bank grows both right tabs; the actions stay at the bottom
-    Size.ACTIONS_Y = Size.PANEL_HEIGHT - Size.RIGHT_INSET - Size.ACTIONS_HEIGHT
-    -- New label shares the second row with Move to Unsorted
-    Size.LABEL_BUTTON_X = Size.RIGHT_INSET + Size.HALF_BUTTON_WIDTH + Size.BUTTON_GAP
-    Size.LABEL_BUTTON_Y = Size.ACTIONS_Y + Size.BUTTON_STEP
-    Size.LABEL_BUTTON_WIDTH = Size.RIGHT_VIEW_WIDTH - Size.HALF_BUTTON_WIDTH - Size.BUTTON_GAP
-    Size.UNSORTED_VIEW_HEIGHT = Size.ACTIONS_Y - Size.RIGHT_INSET - Size.TAB_PAGE_Y
-    Size.SEARCH_LIST_HEIGHT = Size.ACTIONS_Y - Size.RIGHT_INSET - Size.SEARCH_LIST_TOP
+    -- The actions end the panel; a taller bank grows both columns above them
+    Size.ACTIONS_Y = Size.PANEL_HEIGHT - Size.BUTTON_HEIGHT
+    Size.COLUMN_HEIGHT = Size.ACTIONS_Y - Size.ACTIONS_GAP
+    -- Sorted and Unsorted share their top and height
+    Size.UNSORTED_VIEW_HEIGHT = Size.COLUMN_HEIGHT - Size.RIGHT_INSET - Size.TAB_PAGE_Y
+    Size.CENTER_SURFACE_HEIGHT = Size.UNSORTED_VIEW_HEIGHT
+    Size.SORTED_VIEW_HEIGHT = Size.CENTER_SURFACE_HEIGHT - 8
+    Size.SEARCH_LIST_HEIGHT = Size.COLUMN_HEIGHT - Size.RIGHT_INSET - Size.SEARCH_LIST_TOP
+    -- Four equal buttons span both columns; the last takes any leftover pixels
+    local actionsWidth = Size.WIDTH - Size.RIGHT_MARGIN - Size.CENTER_X
+    local gaps = (Size.ACTION_COUNT - 1) * Size.BUTTON_GAP
+    local width = (actionsWidth - gaps) // Size.ACTION_COUNT
+    Size.ACTION_X, Size.ACTION_WIDTH = {}, {}
+    for index = 1, Size.ACTION_COUNT do
+        Size.ACTION_X[index] = Size.CENTER_X + (index - 1) * (width + Size.BUTTON_GAP)
+        Size.ACTION_WIDTH[index] = width
+    end
+    Size.ACTION_WIDTH[Size.ACTION_COUNT] = Size.WIDTH - Size.RIGHT_MARGIN - Size.ACTION_X[Size.ACTION_COUNT]
+    -- New label is last; its drag surface covers it
+    Size.LABEL_BUTTON_X = Size.ACTION_X[Size.ACTION_COUNT]
+    Size.LABEL_BUTTON_Y = Size.PANEL_TOP + Size.ACTIONS_Y
+    Size.LABEL_BUTTON_WIDTH = Size.ACTION_WIDTH[Size.ACTION_COUNT]
 end
 Parts.SizeToBank(BankGrid.DEFAULT_COLUMNS)
 

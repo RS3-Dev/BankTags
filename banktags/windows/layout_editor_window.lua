@@ -64,7 +64,6 @@ function LayoutEditorWindow.new(parent, options)
         bounds = options.bounds,
         onChanged = options.onChanged,
         onClose = options.onClose,
-        onEditTag = options.onEditTag,
         onPromptLabel = options.onPromptLabel,
         overlayWindows = {},
         searchResults = {},
@@ -102,7 +101,6 @@ function LayoutEditorWindow.new(parent, options)
             self.onClose = nil
             self.onChanged = nil
             self.onPromptLabel = nil
-            self.onEditTag = nil
             self.overlayWindows = {}
             -- PrettyUI destroys the window after this returns
             self.window = nil
@@ -171,7 +169,7 @@ end
 function LayoutEditorWindow:Panel(x, width)
     local panel = ui.Layer.new(self.content)
     panel:SetPos(x, Size.PANEL_TOP)
-    panel:SetSize(width, Size.PANEL_HEIGHT)
+    panel:SetSize(width, Size.COLUMN_HEIGHT)
     panel.clickthrough = true
     return panel
 end
@@ -244,23 +242,18 @@ function LayoutEditorWindow:CreateTagRail()
     })
 end
 
--- Build the open tag's name and Rename above the sorted grid
-function LayoutEditorWindow:CreateTitle()
-    local x, y = Size.CENTER_X, Size.PANEL_TOP
-    self.tagTitle = prettyui.Text.new(self.content, {
-        text = "",
-        x = x + 4,
-        y = y,
-        width = Size.CENTER_SURFACE_WIDTH - Size.EDIT_TAG_WIDTH - Size.BUTTON_GAP * 2 - 4,
-        height = Size.TITLE_HEIGHT,
-        colour = LABEL_TEXT_COLOUR,
-        maxLines = 1,
+-- Build Exit edit mode at the top right of the sorted column
+function LayoutEditorWindow:CreateExitButton()
+    self.exitButton = BankControls.button(self.centerPanel, "Exit edit mode", function() self:Close() end, {
+        x = Size.CENTER_SURFACE_WIDTH - Size.EXIT_WIDTH, y = Size.EXIT_Y,
+        width = Size.EXIT_WIDTH, height = Size.EXIT_HEIGHT,
+        tooltip = "Close the layout editor. Changes save automatically",
     })
-    self.editTagButton = BankControls.button(self.content, "Rename", function() self:EditTag() end, {
-        x = x + Size.CENTER_SURFACE_WIDTH - Size.EDIT_TAG_WIDTH, y = y,
-        width = Size.EDIT_TAG_WIDTH, height = Size.TITLE_HEIGHT,
-        tooltip = "Rename this tag or change its icon",
-    })
+end
+
+-- Close the editor as the title bar's close button does
+function LayoutEditorWindow:Close()
+    if self.window ~= nil then self.window:Close() end
 end
 
 -- Create one scrolling grid at a content point, with its own columns
@@ -294,7 +287,7 @@ function LayoutEditorWindow:CreateRightTabs()
         x = Size.RIGHT_INSET,
         y = Size.TAB_Y,
         width = Size.RIGHT_VIEW_WIDTH,
-        height = Size.ACTIONS_Y - Size.RIGHT_INSET - Size.TAB_Y,
+        height = Size.COLUMN_HEIGHT - Size.RIGHT_INSET - Size.TAB_Y,
         scrollable = false,
         onChange = function(_, _, value) self:ShowRightTab(value) end,
     })
@@ -336,54 +329,24 @@ function LayoutEditorWindow:CreateRightTabs()
     })
 end
 
--- Build the item actions and help under the right tabs, two buttons a row
+-- Build one row of item actions under both columns
 -- These replace the right-click menu, which only Bank Core may change
 function LayoutEditorWindow:CreateActions()
-    local x, y = Size.RIGHT_INSET, Size.ACTIONS_Y
-    local half, height = Size.HALF_BUTTON_WIDTH, Size.BUTTON_HEIGHT
-    self.duplicateButton = BankControls.button(
-        self.rightPanel, "Create Copy", function() self:DuplicateSelected() end,
-        { x = x, y = y, width = half, height = height, tooltip = "Copy the selected item (Ctrl+C)" }
-    )
-    self.removeButton = BankControls.button(
-        self.rightPanel, "Remove", function() self:RemoveSelected() end,
-        { x = Size.LABEL_BUTTON_X, y = y, width = Size.LABEL_BUTTON_WIDTH, height = height,
-            tooltip = "Remove the selected item (Delete)" }
-    )
-    self.unsortButton = BankControls.button(
-        self.rightPanel, "Move to Unsorted", function() self:UnarrangeSelected() end,
-        { x = x, y = Size.LABEL_BUTTON_Y, width = half, height = height }
-    )
-    -- Its drag surface handles clicks too, so the button has no action
-    self.newLabelButton = BankControls.button(self.rightPanel, "New label", nil, {
-        x = Size.LABEL_BUTTON_X, y = Size.LABEL_BUTTON_Y,
-        width = Size.LABEL_BUTTON_WIDTH, height = height,
-    })
-    self.actionsHelp = prettyui.Text.new(self.rightPanel, {
-        text = Parts.ACTIONS_HELP,
-        x = x, y = Size.LABEL_BUTTON_Y + Size.BUTTON_STEP,
-        width = Size.RIGHT_VIEW_WIDTH, height = Size.HELP_HEIGHT,
-        colour = MUTED,
-        font = id.Font.MUSEO_SANS_11PT_REGULAR,
-        maxLines = 2,
-    })
-end
-
--- Build the shortcut and saved notes under the sorted grid
-function LayoutEditorWindow:CreateFooter()
-    local width = Size.CENTER_SURFACE_WIDTH - 8
-    self.footerNotes = {}
-    for _, note in ipairs({
-        { text = Parts.SHORTCUTS, align = ui.AlignMode.TOPLEFT },
-        { text = Parts.SAVED, align = ui.AlignMode.BOTTOMRIGHT },
+    local y = Size.PANEL_TOP + Size.ACTIONS_Y
+    for index, action in ipairs({
+        { "duplicateButton", "Create Copy", function() self:DuplicateSelected() end,
+            "Copy the selected item (Ctrl+C)" },
+        { "removeButton", "Remove", function() self:RemoveSelected() end,
+            "Remove the selected item (Delete)" },
+        { "unsortButton", "Move to Unsorted", function() self:UnarrangeSelected() end,
+            "Leave the selected item unsorted, or drag it to Unsorted" },
+        -- Its drag surface handles clicks too, so the button has no action
+        { "newLabelButton", "New label", nil, "Click to add a label above the selection, or drag it onto a row" },
     }) do
-        self.footerNotes[#self.footerNotes + 1] = prettyui.Text.new(self.centerPanel, {
-            text = note.text,
-            x = 4, y = Size.FOOTER_Y, width = width, height = Size.FOOTER_HEIGHT,
-            colour = MUTED,
-            font = id.Font.MUSEO_SANS_11PT_REGULAR,
-            alignHorizontal = note.align,
-            maxLines = 1,
+        self[action[1]] = BankControls.button(self.content, action[2], action[3], {
+            x = Size.ACTION_X[index], y = y,
+            width = Size.ACTION_WIDTH[index], height = Size.BUTTON_HEIGHT,
+            tooltip = action[4],
         })
     end
 end
@@ -394,7 +357,7 @@ function LayoutEditorWindow:CreatePanels()
     self.rightPanel = self:Panel(Size.RIGHT_X, Size.RIGHT_WIDTH)
 
     self.centerBackground = tiledSprite(
-        self.centerPanel, 0, 0, Size.CENTER_WIDTH, Size.PANEL_HEIGHT,
+        self.centerPanel, 0, 0, Size.CENTER_WIDTH, Size.COLUMN_HEIGHT,
         NativeUi.SPRITES.PANEL_BACKGROUND
     )
     self.centerSurface = rectangle(
@@ -410,15 +373,14 @@ function LayoutEditorWindow:CreatePanels()
         sorted = self:CreatePane("sorted", self.centerPanel, Size.CENTER_VIEW_X, Size.SORTED_VIEW_Y,
             Size.CENTER_VIEW_WIDTH, Size.SORTED_VIEW_HEIGHT, Size.CENTER_COLUMNS),
     }
-    self:CreateFooter()
     self:CreateTagRail()
-    self:CreateTitle()
+    self:CreateExitButton()
     self.rightBackground = tiledSprite(
-        self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.PANEL_HEIGHT,
+        self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.COLUMN_HEIGHT,
         NativeUi.SPRITES.PANEL_BACKGROUND
     )
     self.rightFrame = frame(
-        self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.PANEL_HEIGHT, FRAME
+        self.rightPanel, 0, 0, Size.RIGHT_WIDTH, Size.COLUMN_HEIGHT, FRAME
     )
     self:CreateRightTabs()
     self:CreateActions()
@@ -464,7 +426,8 @@ function LayoutEditorWindow:ShowError(message)
     if self.centerPanel == nil then return end
     local width = Size.CENTER_SURFACE_WIDTH - ERROR_INSET * 2
     local banner = ui.Layer.new(self.centerPanel)
-    banner:SetPos(ERROR_INSET, Size.FOOTER_Y - ERROR_HEIGHT - ERROR_INSET)
+    local bottom = Size.SORTED_TOP + Size.CENTER_SURFACE_HEIGHT
+    banner:SetPos(ERROR_INSET, bottom - ERROR_HEIGHT - ERROR_INSET)
     banner:SetSize(width, ERROR_HEIGHT)
     banner.clickthrough = true
     local text = prettyui.Text.new(banner, {
@@ -506,26 +469,10 @@ function LayoutEditorWindow:HideError()
     if banner ~= nil then pcall(function() banner.root:Destroy() end) end
 end
 
--- Show every tag in the rail and the open one's name above the grid
+-- Show every tag in the rail, the open one outlined
 function LayoutEditorWindow:RefreshTags()
     if self.tagRail == nil then return end
-    local entries = TagRail.Entries(self.store)
-    self.tagRail:SetTags(entries, self.selectedTag)
-    local title = "No tags"
-    for _, entry in ipairs(entries) do
-        if entry.id == self.selectedTag then title = entry.label end
-    end
-    self.tagTitle.content = title
-    self.editTagButton:SetDisabled(self.selectedTag == nil)
-end
-
--- Open the open tag's settings to rename it or change its icon
-function LayoutEditorWindow:EditTag()
-    if self.selectedTag == nil or self.onEditTag == nil then return false end
-    -- Tag settings has a name field of its own
-    self.keysOnGrid = false
-    self.onEditTag(self.selectedTag)
-    return true
+    self.tagRail:SetTags(TagRail.Entries(self.store), self.selectedTag)
 end
 
 -- Keep the open tag open under its new name
@@ -853,21 +800,16 @@ function LayoutEditorWindow:DestroyControls()
         self.unsortButton,
         self.removeButton,
         self.duplicateButton,
-        self.actionsHelp,
         self.tagRail,
-        self.tagTitle,
-        self.editTagButton,
+        self.exitButton,
     }) do
         if control ~= nil then pcall(function() control:Destroy() end) end
     end
     -- The tabs own their pages and destroy them
     if self.tabs ~= nil then pcall(function() self.tabs:Destroy() end) end
     self.tabs = nil
-    destroyAll(self.footerNotes)
-    self.footerNotes = nil
     self.tagRail = nil
-    self.tagTitle = nil
-    self.editTagButton = nil
+    self.exitButton = nil
     self.searchHint = nil
     self.searchList = nil
     self.itemSearch = nil
@@ -876,7 +818,6 @@ function LayoutEditorWindow:DestroyControls()
     self.unsortButton = nil
     self.removeButton = nil
     self.duplicateButton = nil
-    self.actionsHelp = nil
 end
 
 -- Stop events and drags, then destroy the editor
@@ -892,7 +833,6 @@ function LayoutEditorWindow:Destroy()
     self.content = nil
     self.onChanged = nil
     self.onClose = nil
-    self.onEditTag = nil
     self.onPromptLabel = nil
     self.overlayWindows = {}
 end
