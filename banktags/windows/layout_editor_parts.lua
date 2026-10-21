@@ -16,9 +16,9 @@ Parts.SEARCH_HINT = "Search for an item, then drag it into the layout."
 Size.SIDEBAR_WIDTH = 32 + 8 + 244
 Size.DEFAULT_WIDTH = 714 + Size.SIDEBAR_WIDTH
 Size.DEFAULT_HEIGHT = 650
--- The rail and both columns start right under the title bar
-Size.PANEL_TOP = 0
-Size.DEFAULT_PANEL_HEIGHT = 606
+-- Match the bank's inset below its title bar
+Size.PANEL_TOP = 12
+Size.DEFAULT_PANEL_HEIGHT = 594
 -- The tag rail runs down the left edge, like Bank Core's tab rail
 Size.RAIL_X = 8
 Size.RAIL_GAP = 8
