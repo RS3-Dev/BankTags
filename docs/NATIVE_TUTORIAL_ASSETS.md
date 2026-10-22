@@ -14,4 +14,4 @@ Read from the live client with Network Debugger on 2026-10-22. Addresses below i
 
 The active frame sat in `1477:844`, `TOPLEVEL_V2__IF_HIGHLIGHT_1_DISPLAY`, at 33x33 around the 30x30 PIN button. The nine pieces are row-major: top-left, top, top-right, left, middle, right, bottom-left, bottom, bottom-right. Corners are 10x10; middle strips fill the remaining width and height.
 
-The native help box measured 521x144 and its navigation buttons measured 26x26. Bank Tags matches those sizes, the native art, and the small pointer bob. Its pulse timing and pointer placement are implemented by Bank Tags; the native animation script was not inspected. The six tutorial steps, progression rules, and sound remain Bank Tags' own.
+The native help box measured 521x144 and its navigation buttons measured 26x26. Bank Tags matches those sizes, the native art, and the small pointer bob. Its pulse timing and pointer placement are implemented by Bank Tags; the native animation script was not inspected. The nine tutorial steps, progression rules, and sound remain Bank Tags' own.

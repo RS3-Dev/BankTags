@@ -97,6 +97,7 @@ function Windows:OpenCreateFolderPrompt(tag)
             return true, nil
         end,
     })
+    if self.textPrompt ~= nil then self.textPrompt.folderTag = tag end
 end
 
 -- Edit a folder's name and item icon

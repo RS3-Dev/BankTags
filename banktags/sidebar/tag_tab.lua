@@ -58,7 +58,6 @@ end
 
 -- Forget the column when Bank Core unmounts it
 function TagTab:Unmount()
-    self.app.tutorial:Stop(false)
     self:DestroyControls()
     self.ctx = nil
 end
@@ -131,10 +130,11 @@ end
 function TagTab:BuildFooter(controls, height, width)
     local app, parent, owned = self.app, controls.parent, controls.owned
     local top = height - 36
-    owned[#owned + 1] = BankControls.button(parent, nil, function() app.windows:OpenImportShare() end, {
+    controls.importShareButton = BankControls.button(parent, nil, function() app.windows:OpenImportShare() end, {
         x = FOOTER_X, y = top, size = ICON_BUTTON_SIZE, iconSize = 18,
         spriteName = "EXPORT", tooltip = "Import and share bank tags",
     })
+    owned[#owned + 1] = controls.importShareButton
     local editing = app.shownTag ~= nil
     local newTagX = FOOTER_X + ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP
     local newTagWidth = width - ICON_BUTTON_SIZE - FOOTER_BUTTON_GAP

@@ -491,6 +491,7 @@ function ImportShare:RebuildShareRows(exports)
             text = value,
         })
         self.shareRows[#self.shareRows + 1] = {
+            tag = export.tag,
             root = root,
             label = label,
             field = field,

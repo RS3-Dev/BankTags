@@ -153,6 +153,7 @@ end
 -- Follow Bank Core's state; bank windows close on onBankClose
 function App:OnState(state)
     self.state = state
+    self.tutorial:Offer(state)
     self.select:Follow(state)
     self.windows:BankStateChanged(state)
 end

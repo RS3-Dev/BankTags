@@ -4,19 +4,24 @@ local Geometry = require("banktags/ui/geometry")
 local Json = require("banktags/core/json")
 local NativeUi = require("banktags/ui/native_ui")
 local Theme = require("banktags/ui/theme")
+local Settings = require("banktags/core/settings")
 
 local Tutorial = {}
 Tutorial.__index = Tutorial
 local EVENT = "banktags_tutorial"
 local WIDTH, HEIGHT = 521, 144
 local STEPS = {
+    { title = "Open Bank Tags", text = "Click the Bank Tags icon on the left-hand sidebar rail to open your tag list." },
     { title = "Create a tag", text = "Click New Tag, give it a name, then Save. Tags group bank items without moving them out of your bank." },
-    { title = "Add bank items", text = "In the bank's All Items view, drag an item onto your new tag in the sidebar. The item stays in your bank." },
+    { title = "Add bank items", text = "In All Items, drag an item you have in your bank onto the new tag in the sidebar. The item stays in your bank." },
     { title = "Open your tag", text = "Click your tag to see its items. Select the bank's All Items tab first if you are viewing a numbered bank tab." },
-    { title = "Edit the layout", text = "Click the pencil beside New Tag to open the layout editor. You can also right-click your tag and choose Edit." },
-    { title = "Arrange your items", text = "Drag an item into a different slot, or move an item from Unsorted into Layout. Changes save automatically. Ctrl+Z undoes an edit." },
-    { title = "Return to your bank", text = "Click Close to leave the editor. Your layout is saved. You can replay this tutorial using the Help icon in the Tags sidebar." },
+    { title = "Edit the layout", text = "Right-click your tag and choose Edit. Drag your item from Unsorted into Layout. Changes save automatically." },
+    { title = "Return to your bank", text = "Click Close to leave the editor and return to your tag. Your layout is saved." },
+    { title = "Withdraw an item", text = "Click an item in your tag to withdraw it. Tags use the normal bank withdrawal options." },
+    { title = "Create a folder", text = "Right-click your tag. Choose Add to folder (or Move to folder), then Create new folder. Name it and click Create." },
+    { title = "Share your tag", text = "Click Import/Share, then choose Share. Click your tag's code field and press Ctrl+A, then Ctrl+C to copy it." },
 }
+local STEP_START = WIDTH - 66 - #STEPS * 31
 
 -- Read native coordinates without converting mouse pixels
 local function bounds(component)
@@ -67,9 +72,15 @@ function Tutorial.new(app)
 end
 
 -- Offer the first tour only to an empty store
-function Tutorial:Mounted()
+function Tutorial:Offer(state)
     if not self.active and not self.offered and not self.app.settings.tutorialSeen
+        and state ~= nil and state.bounds ~= nil and self.app.store.loadError == nil
         and #self.app.store:AllTags() == 0 then self:Start() end
+end
+
+-- Reuse the offer after a sidebar mount
+function Tutorial:Mounted()
+    self:Offer(self.app.state)
 end
 
 -- Open the guide without creating tutorial data
@@ -77,7 +88,7 @@ function Tutorial:Start()
     if self.active then return end
     local parent = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__GAME_AREA)
         or ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__BANK_LAYER)
-    if parent == nil or self.app.tab.controls == nil then return end
+    if parent == nil or self.app.state == nil or self.app.state.bounds == nil then return end
     self.active, self.offered, self.parent, self.ticks = true, true, parent, 0
     self.tag = self.app.shownTag or self.app.store:AllTags()[1]
     self.window = prettyui.Window.new(parent, {
@@ -112,7 +123,7 @@ function Tutorial:Start()
         self.buttons[#self.buttons + 1] = value
         return value
     end
-    self.back = button("", 235, function() self:Go(self.step - 1) end)
+    self.back = button("", STEP_START - 34, function() self:Go(self.step - 1) end)
     self.backArrow = ui.Sprite.new(self.back.root)
     self.backArrow:SetPos(1, 2)
     self.backArrow:SetSize(24, 24)
@@ -122,7 +133,7 @@ function Tutorial:Start()
     self.stepButtons = {}
     for index = 1, #STEPS do
         local step = index
-        self.stepButtons[index] = button(tostring(index), 269 + (index - 1) * 31,
+        self.stepButtons[index] = button(tostring(index), STEP_START + (index - 1) * 31,
             function() self:Go(step) end)
         local outline = ui.Rectangle.new(self.stepButtons[index].root)
         outline:SetPos(0, 0)
@@ -139,7 +150,7 @@ function Tutorial:Start()
     self.nextArrow.spriteID = NativeUi.SPRITES.TUTORIAL_NAV_ARROW
     self.nextArrow.clickthrough = true
     self.counter = prettyui.Text.new(self.window.content, {
-        text = "", x = 16, y = 74, width = 176, height = 24,
+        text = "", x = 16, y = 74, width = STEP_START - 64, height = 24,
         colour = Theme.MUTED_TEXT, font = id.Font.MUSEO_SANS_11PT_REGULAR,
     })
     self.highlight = ui.Layer.new(parent)
@@ -152,8 +163,41 @@ function Tutorial:Start()
     self.arrow:SetSize(41, 54)
     self.arrow.clickthrough = true
     self:Go(1)
+    self.firstRailVisit = true
     self.window:Show()
     Event.Logic.Subscribe(EVENT, function() self:Tick() end)
+    Event.MiniMenuEntrySelected.Subscribe(EVENT, function(event) self:ObserveWithdrawal(event.entry) end)
+end
+
+-- Observe a native withdrawal from this tag
+function Tutorial:ObserveWithdrawal(entry)
+    if not self.active or self.step ~= 7 or self.app.handle == nil or entry == nil then return end
+    local verb = tostring(entry.verbText or ""):gsub("<[^>]*>", ""):lower()
+    if not verb:match("^withdraw") then return end
+    local item = self.app.handle:GetMenuItem(entry)
+    if item == nil or item.view ~= "page" or item.pageID ~= "tag" or self.app.shownTag ~= self.tag then return end
+    for _, tagged in ipairs(self.app.store:GetTaggedItems(self.tag)) do
+        if tagged.objectID == item.objectID then self.withdrawObject = item.objectID; return end
+    end
+end
+
+-- Remove only the guide's share-field observer
+function Tutorial:UnwatchShare()
+    if self.shareField ~= nil then
+        pcall(function() self.shareField.root:Unsubscribe(ui.Hook.ONCLICK, EVENT) end)
+    end
+    self.shareField, self.shareWindow, self.shareClicked = nil, nil, false
+end
+
+-- Leave the share field's own input handling intact
+function Tutorial:WatchShare(window, field)
+    if self.shareField == field then return end
+    self:UnwatchShare()
+    self.shareField, self.shareWindow = field, window
+    field.root:Subscribe(ui.Hook.ONCLICK, EVENT, function()
+        if self.active and self.step == 9 and self.app.windows.importShare == window then self.shareClicked = true end
+        return false
+    end)
 end
 
 -- Play one quiet cue for a newly displayed step
@@ -169,16 +213,22 @@ end
 -- Navigate without changing bank items or layouts
 function Tutorial:Go(step)
     if not self.active or step < 1 or step > #STEPS then return end
+    self:UnwatchShare()
     self.step, self.ticks = step, 0
-    if step == 1 then
+    self.firstRailVisit = false
+    if step == 2 then
         self.initialTags = {}
         for _, tag in ipairs(self.app.store:AllTags()) do self.initialTags[tag] = true end
     end
     self.itemsBefore = self.tag ~= nil and #self.app.store:GetTaggedItems(self.tag) or 0
     self.shownBefore = self.app.shownTag
-    self.editorBefore = self.app.windows.layoutEditor
     self.layoutBefore = self.tag ~= nil and Json.encode(self.app.store:LayoutState(self.tag)) or nil
     self.hadEditor = self.app.windows.layoutEditor ~= nil
+    self.activeBefore = self.app.handle ~= nil and self.app.handle:GetState().activeTab or nil
+    self.withdrawObject = nil
+    self.foldersBefore = {}
+    for _, folder in ipairs(self.app.store:GetFolders()) do self.foldersBefore[folder.key] = true end
+    self.folderBefore = self.tag ~= nil and self.app.store:GetTagFolder(self.tag) or nil
     self.text.content = STEPS[step].text
     self.counter.content = "Step " .. step .. " of " .. #STEPS
     self.back:SetDisabled(step == 1)
@@ -195,22 +245,41 @@ end
 function Tutorial:Target()
     local app, step = self.app, self.step
     local controls, editor = app.tab.controls, app.windows.layoutEditor
-    if controls == nil then return nil end
+    local state = app.handle ~= nil and app.handle:GetState() or {}
     if step == 1 then
+        return state.tabBounds ~= nil and state.tabBounds.tags or nil
+    end
+    if controls == nil then return state.tabBounds ~= nil and state.tabBounds.tags or nil end
+    if step == 2 then
         local settings = app.windows.tagSettingsEditor
         if settings ~= nil and settings.window.root.hidden ~= true then
             return settings.saveButton.root
         end
         return controls.newTagButton.root
-    elseif step == 2 or step == 3 then
+    elseif step == 3 or step == 4 or step == 8 then
+        local prompt = app.windows.textPrompt
+        if step == 8 and prompt ~= nil and prompt.folderTag == self.tag then
+            return prompt.buttons[#prompt.buttons].root
+        end
         local row = self.tag ~= nil and app.tab:RowFor(self.tag) or nil
         return row ~= nil and row.root or controls.newTagButton.root
-    elseif step == 4 or editor == nil then
-        return controls.editTagButton ~= nil and controls.editTagButton.root or nil
     elseif step == 5 then
+        if editor == nil then
+            local row = self.tag ~= nil and app.tab:RowFor(self.tag) or nil
+            return row ~= nil and row.root or nil
+        end
         return editor.panes.sorted.view.root
-    else
-        return editor.closeButton.root
+    elseif step == 6 then
+        return editor ~= nil and editor.closeButton.root or nil
+    elseif step == 7 then
+        return state.pageBounds
+    elseif step == 9 then
+        local window = app.windows.importShare
+        if window == nil then return controls.importShareButton.root end
+        if window.tabs:GetActiveIndex() ~= 2 then return window.tabs:GetTab(2).hit end
+        for _, row in ipairs(window.shareRows) do
+            if row.tag == self.tag then self:WatchShare(window, row.field); return row.field.root end
+        end
     end
 end
 
@@ -222,22 +291,36 @@ function Tutorial:Check()
     end
     local complete = false
     if step == 1 then
+        local active = app.handle ~= nil and app.handle:GetState().activeTab or nil
+        if active ~= "tags" then self.activeBefore = active end
+        complete = active == "tags" and (self.firstRailVisit or self.activeBefore ~= "tags")
+    elseif step == 2 then
         for _, tag in ipairs(app.store:AllTags()) do
             if not self.initialTags[tag] then self.tag, complete = tag, true; break end
         end
-    elseif step == 2 then
-        complete = self.tag ~= nil and #app.store:GetTaggedItems(self.tag) > self.itemsBefore
     elseif step == 3 then
-        complete = self.tag ~= nil and app.shownTag == self.tag and app.shownTag ~= self.shownBefore
+        complete = self.tag ~= nil and #app.store:GetTaggedItems(self.tag) > self.itemsBefore
     elseif step == 4 then
-        complete = app.windows.layoutEditor ~= nil and app.windows.layoutEditor ~= self.editorBefore
-            and app.windows.layoutEditor.selectedTag == self.tag
+        if app.shownTag ~= self.tag then self.shownBefore = app.shownTag end
+        complete = self.tag ~= nil and app.shownTag == self.tag and app.shownTag ~= self.shownBefore
     elseif step == 5 then
+        local arranged = false
+        local record = self.tag ~= nil and app.store.data.tags[self.tag] or nil
+        for _, row in ipairs(record ~= nil and record.rows or {}) do
+            for _, slot in ipairs(row.slots or {}) do if slot.kind == "item" then arranged = true end end
+        end
         complete = app.windows.layoutEditor ~= nil and self.tag ~= nil and self.layoutBefore ~= nil
-            and Json.encode(app.store:LayoutState(self.tag)) ~= self.layoutBefore
+            and arranged and Json.encode(app.store:LayoutState(self.tag)) ~= self.layoutBefore
     elseif step == 6 then
         if app.windows.layoutEditor ~= nil then self.hadEditor = true end
         complete = self.hadEditor and app.windows.layoutEditor == nil
+    elseif step == 7 then
+        complete = self.withdrawObject ~= nil
+    elseif step == 8 then
+        local folder = self.tag ~= nil and app.store:GetTagFolder(self.tag) or nil
+        complete = folder ~= nil and folder ~= self.folderBefore and not self.foldersBefore[folder]
+    elseif step == 9 then
+        complete = self.shareClicked and self.app.windows.importShare == self.shareWindow
     end
     if complete then
         if step == #STEPS then self:Stop(true) else self:Go(step + 1) end
@@ -267,7 +350,8 @@ function Tutorial:Position()
     x, y = x - parentX, y - parentY
     -- Rows outside their scrolling viewport must not light up
     local controls = self.app.tab.controls
-    if (self.step == 2 or self.step == 3) and controls ~= nil then
+    if (self.step == 3 or self.step == 4 or self.step == 8) and controls ~= nil
+        and target == (self.tag ~= nil and self.app.tab:RowFor(self.tag) or {}).root then
         local _, viewportY, _, viewportHeight = bounds(controls.list.list.root)
         if viewportY ~= nil and (y + parentY < viewportY or y + parentY + height > viewportY + viewportHeight) then
             self.highlight.hidden = true
@@ -308,6 +392,8 @@ function Tutorial:Stop(remember)
     if not self.active then return end
     self.active = false
     Event.Logic.Unsubscribe(EVENT)
+    Event.MiniMenuEntrySelected.Unsubscribe(EVENT)
+    self:UnwatchShare()
     if self.sound ~= nil then self.sound:Stop(); self.sound = nil end
     for _, button in ipairs(self.buttons) do button:Destroy() end
     self.text:Destroy()
@@ -316,9 +402,15 @@ function Tutorial:Stop(remember)
     self.arrow:Destroy()
     self.window:Destroy()
     self.window, self.highlight, self.parent = nil, nil, nil
-    if remember then
-        local saved, reason = self.app:SetSetting("tutorialSeen", true)
-        if not saved then self.app:ShowStatus(reason) end
+    if remember and not self.app.settings.tutorialSeen then
+        -- Saving this flag must not rebuild the selected share-code field
+        local settings = Settings.copy(self.app.settings)
+        settings.tutorialSeen = true
+        if Settings.save(settings) then
+            self.app.settings = settings
+        else
+            self.app:ShowStatus("Could not save tutorial completion.")
+        end
     end
 end
 
