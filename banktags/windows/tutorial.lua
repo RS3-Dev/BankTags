@@ -8,14 +8,14 @@ local Theme = require("banktags/ui/theme")
 local Tutorial = {}
 Tutorial.__index = Tutorial
 local EVENT = "banktags_tutorial"
-local WIDTH, HEIGHT = 480, 156
+local WIDTH, HEIGHT = 521, 144
 local STEPS = {
     { title = "Create a tag", text = "Click New Tag, give it a name, then Save. Tags group bank items without moving them out of your bank." },
     { title = "Add bank items", text = "In the bank's All Items view, drag an item onto your new tag in the sidebar. The item stays in your bank." },
     { title = "Open your tag", text = "Click your tag to see its items. Select the bank's All Items tab first if you are viewing a numbered bank tab." },
     { title = "Edit the layout", text = "Click the pencil beside New Tag to open the layout editor. You can also right-click your tag and choose Edit." },
     { title = "Arrange your items", text = "Drag an item into a different slot, or move an item from Unsorted into Layout. Changes save automatically. Ctrl+Z undoes an edit." },
-    { title = "Return to your bank", text = "Click Close to leave the editor. Your layout is saved. You can replay this tutorial using the ? button in the Tags sidebar." },
+    { title = "Return to your bank", text = "Click Close to leave the editor. Your layout is saved. You can replay this tutorial using the Help icon in the Tags sidebar." },
 }
 
 -- Read native coordinates without converting mouse pixels
@@ -32,6 +32,33 @@ local function rectangle(parent, colour)
     local part = ui.Rectangle.new(parent)
     part.fill, part.rgba, part.clickthrough = true, colour, true
     return part
+end
+
+-- Build the native highlight's nine sprite pieces
+local function flashFrame(parent, firstSprite)
+    local root = ui.Layer.new(parent)
+    root.clickthrough = true
+    local parts = {}
+    for index = 1, 9 do
+        local part = ui.Sprite.new(root)
+        part.spriteID = firstSprite + index - 1
+        part.clickthrough = true
+        part.isTiling = true
+        parts[index] = part
+    end
+    return { root = root, parts = parts }
+end
+
+-- Size native corners and stretch the middle strips
+local function sizeFrame(frame, width, height)
+    frame.root:SetSize(width, height)
+    local xs, ys = { 0, 10, width - 10 }, { 0, 10, height - 10 }
+    local widths, heights = { 10, width - 20, 10 }, { 10, height - 20, 10 }
+    for index, part in ipairs(frame.parts) do
+        local column, row = (index - 1) % 3 + 1, math.floor((index - 1) / 3) + 1
+        part:SetPos(xs[column], ys[row])
+        part:SetSize(widths[column], heights[row])
+    end
 end
 
 -- Keep the walkthrough separate from saved tags
@@ -61,22 +88,41 @@ function Tutorial:Start()
     })
     -- The guide follows its target instead of being dragged
     if self.window.titleDrag ~= nil then self.window.titleDrag:Destroy(); self.window.titleDrag = nil end
+    self.info = ui.Sprite.new(self.window.root)
+    self.info:SetPos(8, 8)
+    self.info:SetSize(26, 26)
+    self.info.spriteID = NativeUi.SPRITES.TUTORIAL_INFO
+    self.info.clickthrough = true
+    self.info:MoveToFront()
+    self.textBackground = rectangle(self.window.content, 0x000000FF)
+    self.textBackground:SetPos(8, 16)
+    self.textBackground:SetSize(WIDTH - 32, 40)
+    self.textOutline = rectangle(self.window.content, 0x756C60FF)
+    self.textOutline.fill = false
+    self.textOutline:SetPos(8, 16)
+    self.textOutline:SetSize(WIDTH - 32, 40)
     self.text = prettyui.Text.new(self.window.content, {
-        text = "", x = 14, y = 8, width = WIDTH - 44, height = 58,
-        colour = Theme.TEXT, font = id.Font.MUSEO_SANS_11PT_REGULAR, maxLines = 3,
+        text = "", x = 16, y = 19, width = WIDTH - 48, height = 34,
+        colour = Theme.TEXT, font = id.Font.MUSEO_SANS_11PT_REGULAR, maxLines = 2,
     })
     self.buttons = {}
     local function button(label, x, action)
         local value = prettyui.SimpleButton.new(self.window.content, label, action,
-            { x = x, y = 76, width = 28, height = 26 })
+            { x = x, y = 72, width = 26, height = 26 })
         self.buttons[#self.buttons + 1] = value
         return value
     end
-    self.back = button("<", 166, function() self:Go(self.step - 1) end)
+    self.back = button("", 235, function() self:Go(self.step - 1) end)
+    self.backArrow = ui.Sprite.new(self.back.root)
+    self.backArrow:SetPos(1, 2)
+    self.backArrow:SetSize(24, 24)
+    self.backArrow.spriteID = NativeUi.SPRITES.TUTORIAL_NAV_ARROW
+    self.backArrow.isFlippedHorizontally = true
+    self.backArrow.clickthrough = true
     self.stepButtons = {}
     for index = 1, #STEPS do
         local step = index
-        self.stepButtons[index] = button(tostring(index), 200 + (index - 1) * 32,
+        self.stepButtons[index] = button(tostring(index), 269 + (index - 1) * 31,
             function() self:Go(step) end)
         local outline = ui.Rectangle.new(self.stepButtons[index].root)
         outline:SetPos(0, 0)
@@ -84,20 +130,26 @@ function Tutorial:Start()
         outline.fill, outline.rgba, outline.clickthrough = false, Theme.SELECTED_BORDER, true
         self.stepButtons[index].outline = outline
     end
-    self.next = button(">", 398, function()
+    self.next = button("", 463, function()
         if self.step == #STEPS then self:Stop(true) else self:Go(self.step + 1) end
     end)
+    self.nextArrow = ui.Sprite.new(self.next.root)
+    self.nextArrow:SetPos(1, 2)
+    self.nextArrow:SetSize(24, 24)
+    self.nextArrow.spriteID = NativeUi.SPRITES.TUTORIAL_NAV_ARROW
+    self.nextArrow.clickthrough = true
     self.counter = prettyui.Text.new(self.window.content, {
-        text = "", x = 14, y = 78, width = 144, height = 24,
+        text = "", x = 16, y = 74, width = 176, height = 24,
         colour = Theme.MUTED_TEXT, font = id.Font.MUSEO_SANS_11PT_REGULAR,
     })
     self.highlight = ui.Layer.new(parent)
     self.highlight.clickthrough = true
-    self.edges = {}
-    for index = 1, 4 do self.edges[index] = rectangle(self.highlight, Theme.SELECTED_BORDER) end
+    -- TOPLEVEL_V2's FLASH_YELLOW and FLASH_WHITE nine-piece frames
+    self.flashYellow = flashFrame(self.highlight, 11602)
+    self.flashWhite = flashFrame(self.highlight, 11611)
     self.arrow = ui.Sprite.new(parent)
-    self.arrow.spriteID = id.Sprite.BANK_ARROW_UP_0
-    self.arrow:SetSize(40, 48)
+    self.arrow.spriteID = NativeUi.SPRITES.TUTORIAL_POINTER
+    self.arrow:SetSize(41, 54)
     self.arrow.clickthrough = true
     self:Go(1)
     self.window:Show()
@@ -130,6 +182,7 @@ function Tutorial:Go(step)
     self.text.content = STEPS[step].text
     self.counter.content = "Step " .. step .. " of " .. #STEPS
     self.back:SetDisabled(step == 1)
+    self.backArrow.alpha = step == 1 and 0.35 or 1
     for index, control in ipairs(self.stepButtons) do
         control.outline.hidden = index ~= step
     end
@@ -222,22 +275,21 @@ function Tutorial:Position()
             return
         end
     end
-    self.highlight:SetPos(x - 3, y - 3)
-    self.highlight:SetSize(width + 6, height + 6)
-    local w, h = width + 6, height + 6
-    local positions = { { 0, 0, w, 2 }, { 0, h - 2, w, 2 }, { 0, 2, 2, h - 4 }, { w - 2, 2, 2, h - 4 } }
-    for index, part in ipairs(self.edges) do
-        local pos = positions[index]
-        part:SetPos(pos[1], pos[2]); part:SetSize(pos[3], pos[4])
-        part.alpha = 0.45 + 0.55 * (0.5 + 0.5 * math.sin(self.ticks / 7))
-    end
+    self.highlight:SetPos(x - 1, y - 1)
+    local w, h = math.max(20, width + 3), math.max(20, height + 3)
+    self.highlight:SetSize(w, h)
+    sizeFrame(self.flashYellow, w, h)
+    sizeFrame(self.flashWhite, w, h)
+    local pulse = 0.5 + 0.5 * math.sin(self.ticks / 7)
+    self.flashYellow.root.alpha, self.flashWhite.root.alpha = pulse, 1 - pulse
     -- Put the large native arrow above the control when space permits
-    if y >= 56 then
-        NativeUi.setSpriteRotation(self.arrow, math.pi, 180)
-        self.arrow:SetPos(x + width / 2 - 20, y - 52)
+    local bob = 3 + 3 * math.sin(self.ticks / 7)
+    if y >= 62 then
+        self.arrow.rotationDegrees = 0
+        self.arrow:SetPos(x + width / 2 - 20, y - 58 - bob)
     else
-        NativeUi.setSpriteRotation(self.arrow, 0, 0)
-        self.arrow:SetPos(x + width / 2 - 20, y + height + 4)
+        self.arrow.rotationDegrees = 180
+        self.arrow:SetPos(x + width / 2 - 20, y + height + 4 + bob)
     end
     self.highlight:MoveToFront()
     self.arrow:MoveToFront()

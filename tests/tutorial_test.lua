@@ -23,13 +23,39 @@ local tour = app.tutorial
 assert(tour.active and tour.step == 1 and cues == 1)
 assert(#app.store:AllTags() == 0, "the tour creates no sample data")
 assert(tour.highlight.clickthrough and tour.arrow.clickthrough)
-for _, edge in ipairs(tour.edges) do assert(edge.clickthrough) end
+assert(tour.info.spriteID == 9966 and tour.info.clickthrough)
+assert(tour.arrow.spriteID == 21393 and tour.arrow.width == 41 and tour.arrow.height == 54)
+assert(tour.backArrow.spriteID == 9403 and tour.backArrow.isFlippedHorizontally)
+assert(tour.nextArrow.spriteID == 9403 and tour.nextArrow.clickthrough)
+assert(tour.backArrow.alpha == 0.35)
+assert(app.tab.controls.tutorialIcon.spriteID == 36389)
+app.tab.controls.tutorialButton.root.hooks.mouseover()
+assert(app.tab.controls.tutorialIcon.spriteID == 36390)
+app.tab.controls.tutorialButton.root.hooks.click()
+assert(app.tab.controls.tutorialIcon.spriteID == 36391)
+app.tab.controls.tutorialButton.root.hooks.mouseleave()
+assert(app.tab.controls.tutorialIcon.spriteID == 36389)
+for _, frame in ipairs({ tour.flashYellow, tour.flashWhite }) do
+    assert(frame.root.clickthrough and #frame.parts == 9)
+    for _, part in ipairs(frame.parts) do assert(part.clickthrough and part.isTiling) end
+    assert(frame.parts[1].width == 10 and frame.parts[1].height == 10)
+    assert(frame.parts[9].x + frame.parts[9].width == tour.highlight.width)
+    assert(frame.parts[9].y + frame.parts[9].height == tour.highlight.height)
+end
+assert(tour.flashYellow.parts[1].spriteID == 11602 and tour.flashYellow.parts[9].spriteID == 11610)
+assert(tour.flashWhite.parts[1].spriteID == 11611 and tour.flashWhite.parts[9].spriteID == 11619)
+assert(math.abs(tour.flashYellow.root.alpha + tour.flashWhite.root.alpha - 1) < 0.0001)
 assert(tour:Target() == app.tab.controls.newTagButton.root)
 local x = tour.highlight.x
 app.tab.controls.newTagButton.root.xyGlobal = { x = 321, y = 432 }
 tour:Position()
 local parentX = require("banktags/ui/geometry").absolutePosition(tour.parent)
-assert(tour.highlight.x ~= x and tour.highlight.x == 318 - parentX)
+assert(tour.highlight.x ~= x and tour.highlight.x == 320 - parentX)
+assert(tour.highlight.width == app.tab.controls.newTagButton.root.width + 3)
+assert(tour.arrow.rotationDegrees == 0)
+app.tab.controls.newTagButton.root.xyGlobal = { x = 321, y = 2 }
+tour:Position()
+assert(tour.arrow.rotationDegrees == 180)
 app.tab.controls.newTagButton.root.xyGlobal = nil
 app.windows:OpenTagSettings("Tutorial tag", true)
 assert(tour:Target() == app.windows.tagSettingsEditor.saveButton.root)
@@ -48,6 +74,8 @@ h:Tick(5)
 assert(tour.step == 5)
 local editor = app.windows.layoutEditor
 assert(tour:Target() == editor.panes.sorted.view.root)
+assert(tour.flashWhite.parts[5].width == tour.highlight.width - 20)
+assert(tour.flashWhite.parts[5].height == tour.highlight.height - 20)
 assert(editor:RecordEdit("tutorial tag", function()
     return app.store:MoveLayoutItem("tutorial tag", "object:385:1", 11, editor.columns)
 end))

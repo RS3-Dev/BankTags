@@ -6,6 +6,7 @@ local SidebarRows = require("banktags/ui/sidebar_rows")
 local TagList = require("banktags/sidebar/tag_list")
 local Text = require("banktags/core/text")
 local Theme = require("banktags/ui/theme")
+local NativeUi = require("banktags/ui/native_ui")
 
 local TagTab = {}
 TagTab.__index = TagTab
@@ -156,11 +157,37 @@ function TagTab:BuildFooter(controls, height, width)
         })
         owned[#owned + 1] = controls.editTagButton
     end
-    controls.tutorialButton = BankControls.button(parent, "?", function() app.tutorial:Start() end, {
+    controls.tutorialButton = BankControls.button(parent, "", function() app.tutorial:Start() end, {
         x = FOOTER_X + width - ICON_BUTTON_SIZE, y = top,
-        width = ICON_BUTTON_SIZE, height = FOOTER_BUTTON_HEIGHT, tooltip = "Bank Tags tutorial",
+        width = ICON_BUTTON_SIZE, height = FOOTER_BUTTON_HEIGHT, tooltip = "Help",
     })
     owned[#owned + 1] = controls.tutorialButton
+    -- The native Help sprite supplies its own button frame
+    local help = controls.tutorialButton.root
+    help.alpha = 0
+    controls.tutorialIcon = ui.Sprite.new(parent)
+    local icon = controls.tutorialIcon
+    icon:SetPos(FOOTER_X + width - ICON_BUTTON_SIZE + 4, top + 4)
+    icon:SetSize(19, 19)
+    icon.spriteID = NativeUi.SPRITES.HELP_BUTTON
+    icon.clickthrough = true
+    owned[#owned + 1] = icon
+    help:Subscribe(ui.Hook.ONMOUSEOVER, function()
+        icon.spriteID = NativeUi.SPRITES.HELP_BUTTON + 1
+        return false
+    end)
+    help:Subscribe(ui.Hook.ONMOUSELEAVE, function()
+        icon.spriteID = NativeUi.SPRITES.HELP_BUTTON
+        return false
+    end)
+    help:Subscribe(ui.Hook.ONCLICK, function()
+        icon.spriteID = NativeUi.SPRITES.HELP_BUTTON + 2
+        return false
+    end)
+    help:Subscribe(ui.Hook.ONRELEASE, function()
+        icon.spriteID = NativeUi.SPRITES.HELP_BUTTON + (help.isMouseOver and 1 or 0)
+        return false
+    end)
 end
 
 -- Build the column inside Bank Core's parent
