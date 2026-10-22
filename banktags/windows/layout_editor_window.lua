@@ -737,12 +737,15 @@ function LayoutEditorWindow:RowMenuTarget()
     if pane == nil or pane.name ~= "sorted" or paneX >= pane.width - Size.SCROLLBAR_RESERVE then return nil end
     local row = self:RowAt(pane, paneX, paneY)
     if row == nil then return nil end
+    local index = self:SlotIndexAt(pane, paneX, paneY)
+    local slot = index ~= nil and pane.slots[index] or nil
     return {
         tag = self.selectedTag,
         row = row,
         usedRows = self.usedRows,
         columns = Size.CENTER_COLUMNS,
         data = self.store.data,
+        layoutKey = type(slot) == "table" and slot.kind == "item" and slot.layoutKey or nil,
     }
 end
 

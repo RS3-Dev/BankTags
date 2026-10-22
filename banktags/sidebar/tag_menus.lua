@@ -217,8 +217,8 @@ function TagMenus:AddRowEntries(menu)
     if entry.kind == "tag" then self:AddFolderSubmenu(menu, entry.tag, 5, chosen, current) end
 end
 
--- Add the Edit row submenu for the layout editor's sorted grid row under the pointer
--- Cancel stays the left click; a child acts once, only when picked from the opened menu
+-- Add item actions and row editing for the sorted grid
+-- Actions run once, only when picked from the opened menu
 -- Another save, tag, size, drag, or a closed editor makes the menu out of date
 function TagMenus:AddEditorEntries(menu)
     local windows = self.app.windows
@@ -231,13 +231,16 @@ function TagMenus:AddEditorEntries(menu)
     local current = function() return windows.layoutEditor == editor and editor:RowTargetCurrent(target) end
     local rowMenu = { id = "editor row " .. target.row, opened = false, used = false }
     local children = {}
-    local function offer(label, action)
+    local function chosen(action)
         local deferred = self:Defer(current, action, true)
-        children[#children + 1] = { label = label, action = function()
+        return function()
             if not rowMenu.opened or rowMenu.used then return end
             rowMenu.used = true
             deferred()
-        end }
+        end
+    end
+    local function offer(label, action)
+        children[#children + 1] = { label = label, action = chosen(action) }
     end
     -- Rows past the layout are already empty, so they offer nothing
     local row = target.row
@@ -246,8 +249,24 @@ function TagMenus:AddEditorEntries(menu)
     if row < target.usedRows then offer("Remove row", function() editor:RemoveRow(row) end) end
     if #children == 0 then return end
     children[#children + 1] = { label = "Cancel", action = function() end }
-    MiniMenu.AddSubmenu(menu, "Edit row", children, { title = "Edit row" })
-    MenuEntries.PromoteCancel(menu)
+    if target.layoutKey ~= nil then
+        -- Use the clicked item, independent of the current selection
+        local function itemAction(action)
+            return chosen(function()
+                editor:SelectOnly(target.layoutKey)
+                action(editor)
+            end)
+        end
+        MenuEntries.AddTop(menu, {
+            { label = "Move to Unsorted", action = itemAction(editor.UnarrangeSelected) },
+            { label = "Remove from Tag", action = itemAction(editor.RemoveSelected) },
+        })
+    end
+    local position = target.layoutKey ~= nil and 2 or 1
+    MiniMenu.AddSubmenu(menu, "Edit row", children, {
+        title = "Edit row", position = target.layoutKey ~= nil and 2 or "top",
+    })
+    MenuEntries.PlaceSubmenu(menu, "Edit row <col=ffffff><gt></col>", position)
     self.rowMenu = rowMenu
 end
 

@@ -36,7 +36,7 @@ Any load order works: Bank Tags connects when Bank Core loads, reconnects when B
 - Drops onto a tag row or New Tag work from any native bank tab. From All Items a drop tags the exact copy dragged; a numbered tab's order is its own, so Bank Core names no copy and the drop tags the object's first copy (with duplicate stacks, that may not be the stack dragged).
 - Select mode works in the bank's All Items view only, where copy numbers are known, and ends on another native tab.
 - Select mode outlines members in gold, Bank Core's highlight, not white. Its status and Done button are in the Tags tab, not a panel over the bank's right column. The left-click entry reads "Add to <tag>" followed by the item's name.
-- The layout editor's item actions are buttons (Copy, Paste, Remove, Move to Unsorted), not a right-click menu; its right-click menu only has the Edit row submenu, which adds and removes rows. It chooses tags from an icon rail rather than a tag column, and its item icons use the client's default look because Bank Core does not report a stack's outline or shadow.
+- Right-clicking a sorted layout item offers Move to Unsorted, Edit row, Remove from Tag, and Cancel, in that order. Item actions affect the clicked copy and can be undone. Blank cells and labels offer Edit row and Cancel. The footer also has Copy, Paste, Remove, and Move to Unsorted. The editor chooses tags from an icon rail, and its item icons use the client's default look because Bank Core does not report a stack's outline or shadow.
 - Tag names may be up to 80 characters in the tag settings field, matching what saving always allowed.
 - Cleanup, RuneQL queries, and Advanced Bank Search are not part of Bank Tags.
 

@@ -91,7 +91,8 @@ local function saved() return Json.encode(store.data) end
 local function shown(menu) return table.concat(Harness.DisplayedLabels(menu), "|") end
 local EDIT = "Edit row <col=ffffff><gt></col>"
 local ABOVE, BELOW, REMOVE = "Add row above", "Add row below", "Remove row"
-local OFFERED = "Cancel|" .. EDIT
+local OFFERED = EDIT .. "|Cancel"
+local ITEM_OFFERED = "Move to Unsorted|" .. EDIT .. "|Remove from Tag|Cancel"
 -- List the Edit row children of a menu, or nil without the submenu
 local function children(menu)
     local submenu = Harness.Submenu(menu, EDIT)
@@ -102,7 +103,7 @@ local LAST = ABOVE .. "|" .. REMOVE .. "|Cancel"
 -- Choose an Edit row child from a menu
 local function choose(menu, label) Harness.ChooseChild(menu, EDIT, label) end
 
--- Items, blank cells, and labels in the layout offer both under Cancel, in every placement
+-- Items offer actions around Edit row; blanks and labels offer only row editing
 for _, order in ipairs({ "core_first", "tags_first" }) do
     for _, placement in ipairs({ "documented", "above_cancel", "below_default" }) do
         local where = " (" .. order .. ", " .. placement .. ")"
@@ -110,9 +111,10 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         for _, cell in ipairs({ { 0, 1 }, { 2, 1 }, { 9, 1 }, { 0, 0 }, { 5, 0 } }) do
             pointAt("sorted", cell[1], cell[2])
             local menu = h:ContentMenu()
-            assert(shown(menu) == OFFERED, shown(menu) .. where)
+            local onItem = cell[1] == 0 and cell[2] == 1
+            assert(shown(menu) == (onItem and ITEM_OFFERED or OFFERED), shown(menu) .. where)
             assert(children(menu) == BOTH and Harness.Submenu(menu, EDIT).options.title == "Edit row", where)
-            assert(Harness.LeftClick(menu) == "Cancel", where)
+            assert(Harness.LeftClick(menu) == (onItem and "Move to Unsorted" or EDIT), where)
         end
         -- The last line has nothing below it to move
         pointAt("sorted", 0, 2)
@@ -154,7 +156,7 @@ app.windows:Close("textPrompt")
 local before = saved()
 pointAt("sorted", 0, 1)
 local menu = h:ContentMenu()
-assert(Harness.LeftClick(menu) == "Cancel")
+assert(Harness.LeftClick(menu) == "Move to Unsorted")
 Harness.Submenu(menu, EDIT).children[1].action()
 h:Tick(2)
 assert(saved() == before and changes == 0)
@@ -391,5 +393,47 @@ assert(saved() == before and editor.errorBanner ~= nil and changes == 0)
 editor.window:Close()
 assert(app.windows.layoutEditor == nil)
 assert(children(h:ContentMenu()) == nil)
+
+-- Item actions use the clicked copy, not a different selection or group
+resetGear()
+openEditor()
+editor:SelectItems({ key(3001, 1), key(3002, 1) })
+pointAt("sorted", 1, 1)
+menu = h:ContentMenu()
+assert(shown(menu) == ITEM_OFFERED)
+before = saved()
+Harness.LeftClick(menu)
+h:Tick(2)
+assert(saved() == before, "a plain left click never runs the menu action")
+Harness.Choose(menu, "Move to Unsorted")
+h:Tick(2)
+assert(changes == 1 and store:HasTag("gear", key(3001, 2)))
+local unsortedCopy = store.data.tags.gear.unsorted[2]
+assert(unsortedCopy.layoutKey == key(3001, 2) and unsortedCopy.sourceLayoutKey == key(3001, 1))
+assert(store:HasTag("gear", key(3001, 1)) and store:HasTag("gear", key(3002, 1)))
+Harness.Choose(menu, "Remove from Tag")
+h:Tick(2)
+assert(changes == 1, "the same menu only acts once")
+assert(editor:Undo())
+assert(saved() == before, "moving to Unsorted is undoable")
+
+editor:SelectOnly(key(3001, 1))
+pointAt("sorted", 3, 1)
+menu = h:ContentMenu()
+Harness.Choose(menu, "Remove from Tag")
+h:Tick(2)
+assert(not store:HasTag("gear", key(3002, 1)) and store:HasTag("gear", key(3001, 1)))
+assert(#host.items == 4, "removing a tag never removes bank items")
+assert(editor:Undo() and store:HasTag("gear", key(3002, 1)))
+
+-- Another edit after building an item menu invalidates its actions
+pointAt("sorted", 0, 1)
+menu = h:ContentMenu()
+assert(store:AddTag("gear", 3005))
+before = saved()
+Harness.Choose(menu, "Remove from Tag")
+h:Tick(2)
+assert(saved() == before)
+editor.window:Close()
 
 print("layout_editor_rows_test: ok")
