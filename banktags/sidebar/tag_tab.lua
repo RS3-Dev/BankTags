@@ -217,6 +217,11 @@ end
 -- Tag a dropped item, or start a new tag from New Tag
 -- Numbered tabs name no copy, so those drops tag the first copy
 function TagTab:Drop(item, x, y)
+    local hovered = self.controls ~= nil and self.controls.list:HoveredEntry() or nil
+    log("Bank Tags drop trace: mounted=", tostring(self.controls ~= nil), " view=", tostring(item.view),
+        " tag=", tostring(hovered ~= nil and hovered.tag), " newTagHover=",
+        tostring(self.controls ~= nil and self.controls.newTagButton.root.isMouseOver),
+        " x=", tostring(x), " y=", tostring(y))
     if self.controls == nil or item.view ~= "native" then return end
     local objectID = type(item.objectID) == "number" and math.tointeger(item.objectID) or nil
     if objectID == nil or objectID <= 0 then return end
