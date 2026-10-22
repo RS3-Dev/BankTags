@@ -108,7 +108,7 @@ nativeAll.alpha, nativeAll.clickthrough, nativeAll.interfaceID = 1, false, 517
 nativeAll.opConfig = { numOpNames = 1, GetOpName = function(_, index)
     return index == 0 and "View all" or ""
 end }
-h.bankHost.window.parts[166] = nativeAll
+h.bankHost.window.parts[165] = nativeAll
 local beforeExperimentDetect = layout.DetectNativeViewAll
 layout.nativeViewAll = false
 layout.DetectNativeViewAll = function() return false end
@@ -134,7 +134,7 @@ assert(app.shownTag == "melee" and layout.pageState.view.key == "tag:melee")
 assert(nativeAll.x == 350 and nativeAll.y == 12 and nativeAll.width == 44 and nativeAll.alpha == 1)
 assert(app.handle:LeavePage())
 h:Tick(2)
-h.bankHost.window.parts[166] = nil
+h.bankHost.window.parts[165] = nil
 layout.DetectNativeViewAll = beforeExperimentDetect
 nativeAll:Destroy()
 
