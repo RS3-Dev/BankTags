@@ -156,7 +156,6 @@ end
 function TagMenus:AddRowEntries(menu)
     local entry, ctx = self:RowAtPointer()
     if entry == nil then return end
-    if ctx.IsAllItemsClickActive ~= nil and ctx:IsAllItemsClickActive() then return end
     local app = self.app
     local tab = app.tab
     local list = tab.controls.list

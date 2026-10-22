@@ -60,7 +60,6 @@ function TagList.new(parent, options)
         isSelected = options.isSelected,
         onSelect = options.onSelect,
         onChanged = options.onChanged,
-        onTagHover = options.onTagHover,
         sortMode = false,
         sortButtons = {},
         entries = {},
@@ -239,12 +238,6 @@ function TagList:DecorateRows()
             chevron:MoveToFront()
             addFolderAccent(row.root, accentHeight(index))
         else
-            if self.onTagHover ~= nil then
-                row.root:Subscribe(ui.Hook.ONMOUSEOVER, "banktags_all_items_click", function()
-                    if not self.sortMode then self.onTagHover(entry.id, row.root) end
-                    return false
-                end)
-            end
             local indent = entry.inFolder and FOLDER_INDENT or 0
             if entry.inFolder then addFolderAccent(row.root, accentHeight(index)) end
             local objectID = self.settings().showTagSprites and self.store:GetTagSprite(entry.id) or nil
