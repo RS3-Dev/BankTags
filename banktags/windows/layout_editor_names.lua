@@ -1,6 +1,7 @@
 -- Name the item under the pointer in the layout editor's grids
 
 local BankGrid = require("banktags/ui/bank_grid")
+local Geometry = require("banktags/ui/geometry")
 local ObjectConfig = require("banktags/core/object_config")
 local Text = require("banktags/core/text")
 local Parts = require("banktags/windows/layout_editor_parts")
@@ -17,6 +18,7 @@ function LayoutEditorNames:CreateItemNames()
     self.nameShown = nil
     self.nameSurface = nil
     for _, surface in ipairs({ self.panes.sorted.surface, self.panes.unsorted.surface }) do
+        Geometry.trackPointer(surface)
         surface:Subscribe(ui.Hook.ONMOUSEOVER, function()
             self.nameSurface = surface
             return true
@@ -27,6 +29,7 @@ function LayoutEditorNames:CreateItemNames()
             return true
         end)
     end
+    Geometry.trackPointer(self.searchDragSurface)
     self.searchDragSurface:Subscribe(ui.Hook.ONMOUSEOVER, function()
         self.nameSurface = nil
         self:HideItemName()

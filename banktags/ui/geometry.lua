@@ -3,6 +3,37 @@
 local Geometry = {}
 
 local MAX_PARENT_DEPTH = 32
+local pointerScale, pointerInterfaceScale
+
+-- Read the game's current interface scale
+local function interfaceScale()
+    local option = game and game.options and game.options.InterfaceScale
+    local percent = option and tonumber(option.setting) or 100
+    return percent > 0 and percent / 100 or 1
+end
+
+-- Measure display scaling from native hover coordinates
+function Geometry.calibratePointer(component, x, y)
+    if type(x) ~= "number" or type(y) ~= "number" then return false end
+    local raw, origin = Mouse.GetPosition(), component.xyGlobal
+    if raw == nil or origin == nil then return false end
+    local expectedX, expectedY = origin.x + x, origin.y + y
+    if math.abs(expectedX) < 32 or math.abs(expectedY) < 32 then return false end
+    local scaleX, scaleY = raw.x / expectedX, raw.y / expectedY
+    if scaleX < 0.5 or scaleX > 4 or scaleY < 0.5 or scaleY > 4
+        or math.abs(scaleX - scaleY) > math.max(scaleX, scaleY) * 0.1 then return false end
+    pointerScale = math.abs(expectedX) >= math.abs(expectedY) and scaleX or scaleY
+    pointerInterfaceScale = interfaceScale()
+    return true
+end
+
+-- Keep pointer conversion aligned with native hover events
+function Geometry.trackPointer(component)
+    component:Subscribe(ui.Hook.ONMOUSEREPEAT, "banktags_pointer_scale", function(value, x, y)
+        Geometry.calibratePointer(value, x, y)
+        return false
+    end)
+end
 
 -- Locate a component relative to an ancestor
 function Geometry.relativePosition(value, ancestor)
@@ -34,11 +65,8 @@ function Geometry.interfaceMousePosition()
     if Mouse == nil or Mouse.GetPosition == nil then return nil, nil end
     local position = Mouse.GetPosition()
     if position == nil then return nil, nil end
-    local options = game and game.options
-    local interfaceScale = options and options.InterfaceScale
-    local percent = interfaceScale and tonumber(interfaceScale.setting) or 100
-    if percent <= 0 then percent = 100 end
-    local scale = percent / 100
+    local scale = interfaceScale()
+    if pointerInterfaceScale == scale then scale = pointerScale end
     return position.x / scale, position.y / scale
 end
 

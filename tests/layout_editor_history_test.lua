@@ -72,7 +72,7 @@ local function listener(event)
 end
 -- GameKey values from the client docs
 local LEFT, RIGHT, UP, DOWN, Z, Y, C, V, DELETE = 96, 97, 98, 99, 64, 37, 66, 67, 101
-local NONE, SHIFT_HELD, CONTROL_HELD, CONTROL_SHIFT = 0, 1, 2, 3
+local NONE, SHIFT_HELD, CONTROL_HELD, CONTROL_SHIFT = 0, 1, 4, 5
 -- Send a key press as the client's KeyDown payload, optionally as the OS's held-key repeat
 local function press(gameKey, modifiers, isRepeat)
     listener("KeyDown")({ gameKey = gameKey, systemKey = 0, modifiers = modifiers or NONE,

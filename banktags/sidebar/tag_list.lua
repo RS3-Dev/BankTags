@@ -1,6 +1,7 @@
 -- Build the tag list shown in the Tags tab and layout editor
 
 local BankControls = require("banktags/ui/bank_controls")
+local Geometry = require("banktags/ui/geometry")
 local NativeUi = require("banktags/ui/native_ui")
 local SidebarRows = require("banktags/ui/sidebar_rows")
 local Text = require("banktags/core/text")
@@ -208,6 +209,7 @@ function TagList:DecorateRows()
         return nextEntry.inFolder and SidebarRows.ENTRY_HEIGHT or ROW_HEIGHT
     end
     for index, row in ipairs(rows) do
+        Geometry.trackPointer(row.root)
         -- PrettyUI may keep only the entry fields it knows, so read our own entry
         local entry = self.entriesByID[row.entry.id] or row.entry
         row.background:SetSize(0, ROW_HEIGHT, 1.0, 0)
