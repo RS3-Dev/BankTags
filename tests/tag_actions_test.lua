@@ -110,14 +110,16 @@ assert(tagEntries(menu) == 0)
 -- A native item dropped on a tag row joins that tag as the copy it is
 assert(host.items[2].hooks.dragcomplete ~= nil)
 pointAtRow("ranged")
-host.items[2].hooks.dragcomplete()
+local dropRow = app.tab:RowFor("ranged").root
+host.mouse = { x = -1000, y = -1000 }
+host.items[2].hooks.dragcomplete(host.items[2], dropRow)
 h:Tick(2)
 assert(app.store:HasTag("ranged", key(4151, 2)) and not app.store:HasTag("ranged", key(4151, 1)))
 
 -- A drop on New Tag creates a tag holding the item and opens it for naming
 local newTag = Harness.Find(h:TabParent(), "New Tag")
 local left, top = Geometry.absolutePosition(newTag)
-host.mouse = { x = left + 10, y = top + 10 }
+h:PointAt(newTag, 10, 10)
 host.items[3].hooks.dragcomplete()
 h:Tick(2)
 assert(app.store:HasTag("placeholder 1", key(385, 1)))
@@ -145,7 +147,7 @@ assert(app.status == nil)
 -- New Tag takes a numbered tab's drop the same way
 newTag = Harness.Find(h:TabParent(), "New Tag")
 left, top = Geometry.absolutePosition(newTag)
-host.mouse = { x = left + 10, y = top + 10 }
+h:PointAt(newTag, 10, 10)
 host.items[3].hooks.dragcomplete()
 h:Tick(2)
 assert(app.store:HasTag("placeholder 2", key(385, 1)))

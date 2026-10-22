@@ -3,7 +3,6 @@
 -- A Tags row handles its own left click, so its entries only act when picked from the open menu
 
 local Config = require("banktags/core/config")
-local Geometry = require("banktags/ui/geometry")
 local ItemIdentity = require("banktags/tags/item_identity")
 local MenuEntries = require("banktags/ui/menu_entries")
 local TagPage = require("banktags/tags/tag_page")
@@ -147,13 +146,7 @@ function TagMenus:RowAtPointer()
     local tab = self.app.tab
     local ctx, controls = tab.ctx, tab.controls
     if ctx == nil or controls == nil then return nil end
-    local bounds = ctx:GetBounds()
-    local pointerX, pointerY = Geometry.interfaceMousePosition()
-    if type(bounds) ~= "table" or pointerX == nil then return nil end
-    local left, top = Geometry.absolutePosition(ctx.parent)
-    local x, y = math.floor(pointerX - left), math.floor(pointerY - top)
-    if x < 0 or y < 0 or x >= bounds.width or y >= bounds.height then return nil end
-    return controls.list:EntryAt(x, y), ctx
+    return controls.list:HoveredEntry(), ctx
 end
 
 -- Add actions for the tag or folder row under the pointer, the first shown as the left click

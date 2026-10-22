@@ -214,13 +214,6 @@ function TagTab:RowFor(tag)
     return self.controls ~= nil and self.controls.list:RowFor(tag) or nil
 end
 
--- Check whether a column point lies on the New Tag button
-function TagTab:OnNewTag(x, y)
-    local button = self.controls.newTagButton
-    local left, top = Geometry.relativePosition(button.root, self.controls.parent)
-    return left ~= nil and x >= left and x < left + button.width and y >= top and y < top + button.height
-end
-
 -- Tag a dropped item, or start a new tag from New Tag
 -- Numbered tabs name no copy, so those drops tag the first copy
 function TagTab:Drop(item, x, y)
@@ -228,11 +221,11 @@ function TagTab:Drop(item, x, y)
     local objectID = type(item.objectID) == "number" and math.tointeger(item.objectID) or nil
     if objectID == nil or objectID <= 0 then return end
     local copy = item.copy or 1
-    if self:OnNewTag(x, y) then
+    if self.controls.newTagButton.root.isMouseOver == true then
         self.app:CreateTagWithItem(objectID, copy)
         return
     end
-    local entry = self.controls.list:EntryAt(x, y)
+    local entry = self.controls.list:HoveredEntry()
     if entry ~= nil and entry.kind == "tag" then
         self.app:AddItemToTag(entry.tag, objectID, copy)
     end

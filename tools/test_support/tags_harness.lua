@@ -532,6 +532,9 @@ function Harness:PointAt(component, x, y)
     local Geometry = require("banktags/ui/geometry")
     local left, top = Geometry.absolutePosition(component)
     self.bankHost.mouse = { x = left + x, y = top + y }
+    if self.hoveredComponent ~= nil then self.hoveredComponent.isMouseOver = false end
+    self.hoveredComponent = component
+    component.isMouseOver = true
 end
 
 return Harness

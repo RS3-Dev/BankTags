@@ -131,6 +131,10 @@ assert(melee.root.y > list.list.root.height, "melee starts below the visible lis
 
 -- Right-clicking a tag row offers its actions; Select shows it on a later tick
 local menu = h:ContentMenu()
+-- Native row hover wins when Windows DPI makes raw mouse pixels disagree
+h.bankHost.mouse = { x = -1000, y = -1000 }
+menu = h:ContentMenu()
+assert(Harness.Has(menu, "Select <col=f2c66d>Melee</col>"))
 for _, labelText in ipairs({ "Select", "Edit", "Rename", "Select items", "Remove", "Remove from folder",
     "Move to folder" }) do
     local found = false

@@ -1,7 +1,6 @@
 -- Build the tag list shown in the Tags tab and layout editor
 
 local BankControls = require("banktags/ui/bank_controls")
-local Geometry = require("banktags/ui/geometry")
 local NativeUi = require("banktags/ui/native_ui")
 local SidebarRows = require("banktags/ui/sidebar_rows")
 local Text = require("banktags/core/text")
@@ -314,23 +313,11 @@ function TagList:ToggleFolder(folderKey)
     return true
 end
 
--- Check whether a parent point lies inside a component
-local function contains(component, parent, x, y, scrollY, height)
-    local left, top = Geometry.relativePosition(component, parent)
-    if left == nil then return false end
-    top = top - (scrollY or 0)
-    local width = tonumber(component.width) or 0
-    height = tonumber(component.height) or height or 0
-    return x >= left and x < left + width and y >= top and y < top + height
-end
-
--- Find the tag or folder row drawn under a parent point
-function TagList:EntryAt(x, y)
-    if x == nil or y == nil or self.list.root.hidden or not contains(self.list.root, self.parent, x, y) then
-        return nil
-    end
+-- Find the row the client currently highlights
+function TagList:HoveredEntry()
+    if self.list.root.hidden then return nil end
     for _, row in ipairs(self.list.rows or {}) do
-        if contains(row.root, self.parent, x, y, self.list.scrollY, SidebarRows.ENTRY_HEIGHT) then
+        if row.root.isMouseOver == true then
             local folderKey = folderKeyOf(row.entry.id)
             if folderKey ~= nil then return { kind = "folder", key = folderKey } end
             return { kind = "tag", tag = row.entry.id }
