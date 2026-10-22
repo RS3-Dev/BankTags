@@ -100,6 +100,44 @@ list.list:Click("ranged")
 h:Tick(2)
 assert(app.shownTag == nil and layout.selectedTag == nil and not hasEditButton())
 
+-- The click-through experiment opens a scrolled tag only after the real native All Items operation
+local nativeAll = ui.Layer.new(h.bankHost.window.all)
+nativeAll:SetPos(350, 12)
+nativeAll:SetSize(44, 36)
+nativeAll.alpha, nativeAll.clickthrough, nativeAll.interfaceID = 1, false, 517
+nativeAll.opConfig = { numOpNames = 1, GetOpName = function(_, index)
+    return index == 0 and "View all" or ""
+end }
+h.bankHost.window.parts[166] = nativeAll
+local beforeExperimentDetect = layout.DetectNativeViewAll
+layout.nativeViewAll = false
+layout.DetectNativeViewAll = function() return false end
+local clickedRow = tab:RowFor("melee")
+list = tab.controls.list
+list.list.scrollY = clickedRow.root.y
+local rowLeft, rowTop = require("banktags/ui/geometry").absolutePosition(clickedRow.root)
+clickedRow.root.xyGlobal = { x = rowLeft, y = rowTop - list.list.scrollY }
+h:PointAt(clickedRow.root, 20, 10 - clickedRow.root.y)
+clickedRow.root.hooks.mouseover()
+assert(tab.ctx:IsAllItemsClickActive() and clickedRow.root.clickthrough)
+local _, nativeParentY = require("banktags/ui/geometry").absolutePosition(nativeAll.parent)
+assert(nativeAll.y == clickedRow.root.xyGlobal.y - nativeParentY, "native input follows the scrolled row")
+local nativeEntry = { verbText = "View all", componentData = { component = nativeAll } }
+local nativeMenu = h:HostMenu({ nativeEntry })
+assert(Harness.LeftClick(nativeMenu) == "View all", "the click reaches native All Items")
+list.list:Click("melee")
+assert(app.shownTag == nil, "the plugin waits rather than opening against the old native tab")
+h:Fire("MiniMenuEntrySelected", { entry = nativeEntry })
+layout.DetectNativeViewAll = function() return true end
+h:Tick(2)
+assert(app.shownTag == "melee" and layout.pageState.view.key == "tag:melee")
+assert(nativeAll.x == 350 and nativeAll.y == 12 and nativeAll.width == 44 and nativeAll.alpha == 1)
+assert(app.handle:LeavePage())
+h:Tick(2)
+h.bankHost.window.parts[166] = nil
+layout.DetectNativeViewAll = beforeExperimentDetect
+nativeAll:Destroy()
+
 -- Outside All Items the page is refused and Bank Core shows its guidance
 layout.nativeViewAll = false
 local detect = layout.DetectNativeViewAll

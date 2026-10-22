@@ -183,8 +183,18 @@ function TagTab:Build()
         listHeight = math.max(1, bottom - SidebarRows.LIST_TOP - 4),
         isSelected = function(tag) return tag == app.shownTag or tag == app.select:Tag() end,
         onSelect = function(tag)
+            if ctx.IsAllItemsClickActive ~= nil and ctx:IsAllItemsClickActive() then return end
             app:ShowStatus(nil)
             app:ToggleTag(tag)
+        end,
+        onTagHover = function(tag, component)
+            if ctx.PrepareAllItemsClick == nil then return end
+            ctx:PrepareAllItemsClick(component, function()
+                if self.ctx == ctx and app.store.data.tags[tag] ~= nil then
+                    app:ShowStatus(nil)
+                    app:ShowTag(tag)
+                end
+            end)
         end,
         onChanged = function() app:Changed(nil) end,
     })
