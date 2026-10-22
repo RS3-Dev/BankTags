@@ -13,6 +13,7 @@ local TagPage = require("banktags/tags/tag_page")
 local TagStore = require("banktags/tags/tag_store")
 local TagTab = require("banktags/sidebar/tag_tab")
 local Windows = require("banktags/windows/windows")
+local Tutorial = require("banktags/windows/tutorial")
 local debugLog = DebugLog.Write
 
 local App = {}
@@ -69,6 +70,7 @@ function App.new()
     app.select = SelectMode.new(app)
     app.menus = TagMenus.new(app)
     app.tab = TagTab.new(app)
+    app.tutorial = Tutorial.new(app)
     -- Explain a tag too large for Bank Core to show
     app.noticeMount = { mount = function(ctx) app:DrawNotice(ctx) end }
     -- Bank Tags' section of Bank Core's settings window
@@ -119,7 +121,10 @@ function App:Connect()
             onState = function(state) self:OnState(state) end,
             onPage = function(pageID, key) self:OnPage(pageID, key) end,
             onBankItems = function() self:OnBankItems() end,
-            onBankClose = function() self.windows:CloseBankWindows() end,
+            onBankClose = function()
+                self.tutorial:Stop(false)
+                self.windows:CloseBankWindows()
+            end,
         })
     end
     if ok then ok, failure = handle:SetSettings({ mount = self.settingsMount }) end
@@ -135,6 +140,7 @@ end
 
 -- Drop the owner handle and everything that needs Bank Core
 function App:Disconnect()
+    self.tutorial:Stop(false)
     self.windows:CloseBankWindows()
     self.menus:Stop()
     self.select:Forget()

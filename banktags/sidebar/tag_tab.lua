@@ -57,6 +57,7 @@ end
 
 -- Forget the column when Bank Core unmounts it
 function TagTab:Unmount()
+    self.app.tutorial:Stop(false)
     self:DestroyControls()
     self.ctx = nil
 end
@@ -136,6 +137,7 @@ function TagTab:BuildFooter(controls, height, width)
     local editing = app.shownTag ~= nil
     local newTagX = FOOTER_X + ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP
     local newTagWidth = width - ICON_BUTTON_SIZE - FOOTER_BUTTON_GAP
+        - ICON_BUTTON_SIZE - FOOTER_BUTTON_GAP
         - (editing and ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP or 0)
     controls.newTagButton = BankControls.button(parent, "New Tag", function()
         app:ShowStatus(nil)
@@ -146,13 +148,19 @@ function TagTab:BuildFooter(controls, height, width)
     })
     owned[#owned + 1] = controls.newTagButton
     if editing then
-        owned[#owned + 1] = BankControls.button(parent, nil, function()
+        controls.editTagButton = BankControls.button(parent, nil, function()
             app.windows:OpenLayoutEditor(app.shownTag)
         end, {
             x = newTagX + newTagWidth + FOOTER_BUTTON_GAP, y = top, size = ICON_BUTTON_SIZE, iconSize = 18,
             spriteName = "PENCIL", tooltip = "Edit tag layout",
         })
+        owned[#owned + 1] = controls.editTagButton
     end
+    controls.tutorialButton = BankControls.button(parent, "?", function() app.tutorial:Start() end, {
+        x = FOOTER_X + width - ICON_BUTTON_SIZE, y = top,
+        width = ICON_BUTTON_SIZE, height = FOOTER_BUTTON_HEIGHT, tooltip = "Bank Tags tutorial",
+    })
+    owned[#owned + 1] = controls.tutorialButton
 end
 
 -- Build the column inside Bank Core's parent
@@ -197,6 +205,7 @@ function TagTab:Build()
         self:BuildSelectPanel(controls, bounds.height - SidebarRows.FOOTER_HEIGHT - PANEL_HEIGHT, width)
     end
     self:BuildFooter(controls, bounds.height, width)
+    app.tutorial:Mounted()
 end
 
 -- Show current tags, rebuilding only when the arrangement changed

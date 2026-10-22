@@ -4,7 +4,7 @@ local Config = require("banktags/core/config")
 
 local Settings = {}
 
-local KEYS = { "showTagSprites", "preserveTagLayout", "arrowKeyMovement", "enableDebug" }
+local KEYS = { "showTagSprites", "preserveTagLayout", "arrowKeyMovement", "enableDebug", "tutorialSeen" }
 
 -- Create a fresh set of preferences with their default values
 function Settings.defaults()
@@ -13,6 +13,7 @@ function Settings.defaults()
         preserveTagLayout = true,
         arrowKeyMovement = false,
         enableDebug = false,
+        tutorialSeen = false,
     }
 end
 

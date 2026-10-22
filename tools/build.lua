@@ -100,6 +100,7 @@ function Build.Plan()
     local files = {
         { path = "main.lua", source = plugin.entry .. ".lua", entry = true },
         { path = "plugin.json", source = plugin.manifest, manifest = true },
+        { path = "resources/tutorial_step.ogg", source = "plugins/banktags/resources/tutorial_step.ogg" },
     }
     for _, moduleName in ipairs(ModuleGraph.PluginModules(plugin.entry)) do
         files[#files + 1] = { path = moduleName .. ".lua", source = moduleName .. ".lua" }
@@ -143,7 +144,8 @@ local function previousManifest(out)
         and type(manifest.files) == "table" and type(manifest.directories) == "table"
     for _, filePath in ipairs(valid and manifest.files or {}) do
         local stem, extension = string.match(tostring(filePath), "^(.*)%.(%a+)$")
-        if (extension ~= "lua" and extension ~= "json") or not isRelativePath(stem) then valid = false end
+        if (extension ~= "lua" and extension ~= "json" and filePath ~= "resources/tutorial_step.ogg")
+            or not isRelativePath(stem) then valid = false end
     end
     for _, directory in ipairs(valid and manifest.directories or {}) do
         if not isRelativePath(directory) then valid = false end
