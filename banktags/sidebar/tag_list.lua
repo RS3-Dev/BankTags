@@ -23,8 +23,8 @@ local FOLDER_CHEVRON_SIZE = 14
 local FOLDER_LABEL_LEFT = 26
 -- Indent folder members to line up with the folder name
 local FOLDER_INDENT = FOLDER_LABEL_LEFT - TAG_ROW_LEFT
-local FOLDER_ROW = 0x302A21FF
--- Folder members use warmer striped rows, darker than the header
+local FOLDER_ROW = 0x211E1AFF
+-- Folder members use warmer striped rows
 local FOLDER_ROW_ODD = 0x27231DFF
 local FOLDER_ROW_EVEN = 0x2D2823FF
 local FOLDER_ACCENT_WIDTH = 2
