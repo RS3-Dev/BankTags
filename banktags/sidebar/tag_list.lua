@@ -11,8 +11,8 @@ local debugLog = require("banktags/core/debug_log").Write
 local TagList = {}
 TagList.__index = TagList
 
-local SORT_BUTTON_SIZE = 26
-local SORT_BUTTON_GAP = 6
+local HELP_BUTTON_SIZE = 26
+local HELP_BUTTON_GAP = 6
 local SORT_ARROW_SIZE = 20
 local SORT_ARROW_GAP = 2
 local SORT_CONTROLS_WIDTH = SORT_ARROW_SIZE * 2 + SORT_ARROW_GAP + 8
@@ -69,7 +69,7 @@ function TagList.new(parent, options)
         clicks = 0,
     }, TagList)
     local contentWidth = SidebarRows.ContentWidth(self.width)
-    self.search = SidebarRows.CreateSearch(parent, contentWidth - SORT_BUTTON_SIZE - SORT_BUTTON_GAP, {
+    self.search = SidebarRows.CreateSearch(parent, contentWidth - HELP_BUTTON_SIZE - HELP_BUTTON_GAP, {
         placeholder = "Search tags...",
         text = self.state.searchQuery,
         onChange = function(_, _, content)
@@ -81,9 +81,9 @@ function TagList.new(parent, options)
     self.sortButton = BankControls.button(parent, nil, function()
         self:SetSortMode(not self.sortMode)
     end, {
-        x = SidebarRows.CONTENT_X + contentWidth - SORT_BUTTON_SIZE,
-        y = SidebarRows.SEARCH_TOP,
-        size = SORT_BUTTON_SIZE,
+        x = options.sortButton.x,
+        y = options.sortButton.y,
+        size = options.sortButton.size,
         iconSize = 18,
         spriteName = "SWAP",
         tooltip = "Sort tags and folders",

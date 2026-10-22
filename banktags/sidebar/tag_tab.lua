@@ -15,6 +15,7 @@ local FOOTER_X = SidebarRows.CONTENT_X
 local FOOTER_BUTTON_HEIGHT = 28
 local FOOTER_BUTTON_GAP = 8
 local ICON_BUTTON_SIZE = 28
+local HELP_BUTTON_SIZE = SidebarRows.SEARCH_HEIGHT
 local STATUS_HEIGHT = 40
 local PANEL_HEIGHT = 156
 local PANEL_INSET = 10
@@ -126,7 +127,7 @@ function TagTab:BuildSelectPanel(controls, top, width)
     })
 end
 
--- Draw the footer with Import/Share, New Tag, and the layout editor
+-- Draw footer actions and Help beside Search
 function TagTab:BuildFooter(controls, height, width)
     local app, parent, owned = self.app, controls.parent, controls.owned
     local top = height - 36
@@ -136,7 +137,7 @@ function TagTab:BuildFooter(controls, height, width)
     })
     owned[#owned + 1] = controls.importShareButton
     local editing = app.shownTag ~= nil
-    local newTagX = FOOTER_X + ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP
+    local newTagX = FOOTER_X + (ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP) * 2
     local newTagWidth = width - ICON_BUTTON_SIZE - FOOTER_BUTTON_GAP
         - ICON_BUTTON_SIZE - FOOTER_BUTTON_GAP
         - (editing and ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP or 0)
@@ -158,8 +159,8 @@ function TagTab:BuildFooter(controls, height, width)
         owned[#owned + 1] = controls.editTagButton
     end
     controls.tutorialButton = BankControls.button(parent, "", function() app.tutorial:Start() end, {
-        x = FOOTER_X + width - ICON_BUTTON_SIZE, y = top,
-        width = ICON_BUTTON_SIZE, height = FOOTER_BUTTON_HEIGHT, tooltip = "Help",
+        x = FOOTER_X + width - HELP_BUTTON_SIZE, y = SidebarRows.SEARCH_TOP,
+        size = HELP_BUTTON_SIZE, tooltip = "Help",
     })
     owned[#owned + 1] = controls.tutorialButton
     -- The native Help sprite supplies its own button frame
@@ -167,7 +168,7 @@ function TagTab:BuildFooter(controls, height, width)
     help.alpha = 0
     controls.tutorialIcon = ui.Sprite.new(parent)
     local icon = controls.tutorialIcon
-    icon:SetPos(FOOTER_X + width - ICON_BUTTON_SIZE + 4, top + 4)
+    icon:SetPos(FOOTER_X + width - HELP_BUTTON_SIZE + 3, SidebarRows.SEARCH_TOP + 3)
     icon:SetSize(19, 19)
     icon.spriteID = NativeUi.SPRITES.HELP_BUTTON
     icon.clickthrough = true
@@ -215,6 +216,11 @@ function TagTab:Build()
         settings = function() return app.settings end,
         state = self.listState,
         width = bounds.width,
+        sortButton = {
+            x = FOOTER_X + ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP,
+            y = bounds.height - 36,
+            size = ICON_BUTTON_SIZE,
+        },
         listHeight = math.max(1, bottom - SidebarRows.LIST_TOP - 4),
         isSelected = function(tag) return tag == app.shownTag or tag == app.select:Tag() end,
         onSelect = function(tag)

@@ -25,6 +25,29 @@ app:Changed()
 
 local tab = app.tab
 local list = tab.controls.list
+-- Help shares the search row; footer actions fill the width
+local function checkButtons(editing)
+    local controls = tab.controls
+    local search = controls.list.search.root
+    local help = controls.tutorialButton.root
+    local share = controls.importShareButton.root
+    local sort = controls.list.sortButton.root
+    local newTag = controls.newTagButton.root
+    assert(help.y == search.y and help.x == search.x + search.width + 6)
+    assert(help.height == search.height)
+    assert(sort.x == share.x + share.width + 8 and sort.y == share.y)
+    assert(sort.height == share.height)
+    assert(newTag.x == sort.x + sort.width + 8 and newTag.y == share.y)
+    if editing then
+        local edit = controls.editTagButton.root
+        assert(edit.x == newTag.x + newTag.width + 8 and edit.y == share.y)
+        assert(edit.x + edit.width == help.x + help.width)
+    else
+        assert(controls.editTagButton == nil)
+        assert(newTag.x + newTag.width == help.x + help.width)
+    end
+end
+checkButtons(false)
 -- Count the tag rows the list draws
 local function tagRows()
     local count = 0
@@ -100,6 +123,7 @@ assert(not list.sortMode)
 list.list:Click("melee")
 h:Tick(2)
 assert(app.shownTag == "melee" and layout.pageState.view.key == "tag:melee")
+checkButtons(true)
 local state = app.handle:GetState()
 assert(#state.pages == 1 and state.pages[1] == "tag" and state.openPage == "tag")
 local entries = layout:VisibleMirrorEntries()
