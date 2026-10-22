@@ -82,7 +82,6 @@ end
 
 -- Create the import and sharing pages
 function ImportShare.new(parent, options)
-    options = options or {}
     local self = setmetatable({
         options = options,
         controls = {},
@@ -108,7 +107,7 @@ function ImportShare.new(parent, options)
         onClose = function()
             self:CancelImportRequest()
             self.closed = true
-            if options.onClose ~= nil then options.onClose() end
+            options.onClose()
         end,
     })
 
@@ -227,7 +226,7 @@ function ImportShare.new(parent, options)
     self.controls.shareCopy = text(sharePage.content,
         "Each field contains one compact tag group. Click a field, then press Ctrl+A and Ctrl+C.",
         38, { height = 32, maxLines = 2 })
-    self:RebuildShareRows(options.tagExports or {})
+    self:RefreshExports()
     self:RefreshSources()
     self:SelectSource(CodeImportSource.key)
     return self
@@ -390,7 +389,7 @@ function ImportShare:RefreshImportFolders(selectedID)
     selectedID = selectedID or self.importFolder:GetSelectedID() or IMPORT_NO_FOLDER
     local entries = { { id = IMPORT_NO_FOLDER, label = "No folder", order = 1 } }
     local available = { [IMPORT_NO_FOLDER] = true, [IMPORT_NEW_FOLDER] = true }
-    local folders = self.options.onGetFolders ~= nil and self.options.onGetFolders() or {}
+    local folders = self.options.onGetFolders()
     local function addFolder(key, name)
         local entryID = IMPORT_FOLDER_PREFIX .. key
         if available[entryID] then return end
@@ -429,7 +428,7 @@ end
 
 -- Ignore picker results once the draft has changed
 function ImportShare:ChooseImportSprite()
-    if self.closed or self.importSingleTag == nil or self.options.onChooseImportSprite == nil then return end
+    if self.closed or self.importSingleTag == nil then return end
     local revision = self.importRevision
     self.options.onChooseImportSprite(function(objectID)
         if self.importRevision == revision then self:SetImportSprite(objectID) end
@@ -458,7 +457,7 @@ function ImportShare:RebuildShareRows(exports)
     self:DestroyShareRows()
     local startY = 74
     local rowHeight = 34
-    for index, export in ipairs(exports or {}) do
+    for index, export in ipairs(exports) do
         local root = ui.Layer.new(self.sharePage.content)
         root:SetPos(18, startY + (index - 1) * rowHeight)
         root:SetSize(452, 30)
@@ -513,13 +512,12 @@ end
 
 -- Reload share codes and refresh the sharing rows
 function ImportShare:RefreshExports()
-    if self.options.onGetTagExports == nil then return end
     self:RebuildShareRows(self.options.onGetTagExports())
 end
 
 -- Save the readable draft to the chosen destination
 function ImportShare:Import()
-    if self.closed or self.options.onImport == nil then return end
+    if self.closed then return end
     if self.source.builtin then
         local source = self.importField:GetText()
         if source ~= self.importSource then self:RefreshImportPreview(source) end
@@ -545,7 +543,7 @@ function ImportShare:Import()
         self:SetPageStatus(self.importStatus, reason or "Could not import the tags.", false)
         return
     end
-    self:RefreshExports()
+    -- The app's change shows the new share codes
     self:RefreshImportFolders()
     local count = summary.tags or 0
     local message = "Imported " .. tostring(count) .. (count == 1 and " tag." or " tags.")

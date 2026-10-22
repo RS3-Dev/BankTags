@@ -66,8 +66,7 @@ function LayoutEditorClipboard:PasteClipboard()
         return false
     end
     self:SelectItems(keys)
-    self:RefreshCenter()
-    self:NotifyChanged()
+    self:NotifyChanged(tag)
     return true
 end
 

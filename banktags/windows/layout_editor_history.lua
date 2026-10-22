@@ -82,8 +82,7 @@ function LayoutEditorHistory:StepHistory(step)
         return false
     end
     history.index = history.index + step
-    self:RefreshCenter()
-    self:NotifyChanged()
+    self:NotifyChanged(tag)
     return true
 end
 

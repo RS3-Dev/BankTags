@@ -165,7 +165,7 @@ function Windows:OpenLayoutEditor(tag)
         columns = state.columns,
         bounds = state.bounds,
         bankItems = app:BankItems(),
-        onChanged = function() app:Changed() end,
+        onChanged = function(changedTag) app:Changed(changedTag) end,
         onPromptLabel = function(options) self:OpenPageLabelPrompt(options) end,
         onConfirmRemoveRow = function(options) self:OpenRowRemoveConfirm(options) end,
         onClose = function(value)
@@ -204,8 +204,9 @@ function Windows:BankItemsChanged()
 end
 
 -- Show store changes in the open editor and Import/Share
-function Windows:StoreChanged()
-    if self.layoutEditor ~= nil then self.layoutEditor:StoreChanged() end
+-- A tag names the only tag whose items or layout changed
+function Windows:StoreChanged(tag)
+    if self.layoutEditor ~= nil then self.layoutEditor:StoreChanged(tag) end
     if self.importShare ~= nil then self.importShare:RefreshExports() end
 end
 
@@ -309,7 +310,6 @@ function Windows:OpenImportShare()
     if parent == nil then return end
     local window
     window = ImportShare.new(parent, {
-        tagExports = app.store:TagExports(),
         onGetTagExports = function() return app.store:TagExports() end,
         onGetFolders = function() return app.store:GetFolders() end,
         importProviders = app.imports.providers,

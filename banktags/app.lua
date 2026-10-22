@@ -232,21 +232,24 @@ function App:ToggleTag(tag)
     return self:ShowTag(tag)
 end
 
--- Refresh everything that shows the store
-function App:Changed()
-    self.tab:Refresh()
-    self.windows:StoreChanged()
-    local tag = self.shownTag
-    if tag ~= nil and self.handle ~= nil then
-        if self.store.data.tags[tag] ~= nil then
-            self:PutPage(tag)
+-- Refresh what shows the store
+-- A tag names the only tag whose items or layout changed; nil means anything may have
+function App:Changed(tag)
+    -- The Tags tab shows only tag names and folders
+    if tag == nil then self.tab:Refresh() end
+    self.windows:StoreChanged(tag)
+    local shown = self.shownTag
+    if shown ~= nil and self.handle ~= nil and (tag == nil or tag == shown) then
+        if self.store.data.tags[shown] ~= nil then
+            self:PutPage(shown)
         else
             self.handle:LeavePage()
         end
     end
-    if self.select:Tag() ~= nil and self.store.data.tags[self.select:Tag()] == nil then
+    local selecting = self.select:Tag()
+    if selecting ~= nil and self.store.data.tags[selecting] == nil then
         self.select:Stop()
-    else
+    elseif tag == nil or tag == selecting then
         self.select:Refresh()
     end
 end
@@ -255,10 +258,7 @@ end
 function App:Renamed(oldTag, newTag)
     self.select:Rename(oldTag, newTag)
     self.windows:TagRenamed(oldTag, newTag)
-    if self.shownTag == oldTag and self.handle ~= nil then
-        self.shownTag = newTag
-        self:PutPage(newTag)
-    end
+    if self.shownTag == oldTag then self.shownTag = newTag end
     self:Changed()
 end
 
@@ -274,7 +274,7 @@ function App:AddItemToTag(tag, objectID, copy)
         return false
     end
     self:ShowStatus(nil)
-    if added then self:Changed() end
+    if added then self:Changed(tag) end
     return true
 end
 
@@ -285,7 +285,7 @@ function App:RemoveFromTag(tag, layoutKey)
         self:ShowStatus(tostring(reason))
         return false
     end
-    if removed then self:Changed() end
+    if removed then self:Changed(tag) end
     return true
 end
 
@@ -295,15 +295,15 @@ function App:CreateTagWithItem(objectID, copy)
         self:ShowStatus(NEEDS_ALL_ITEMS)
         return false
     end
-    local created, tag, reason = self.store:CreatePlaceholderTag()
-    if not created then
+    local tag
+    local saved, reason = self.store:SaveTogether(function()
+        local created, createdTag, createReason = self.store:CreatePlaceholderTag()
+        if not created then return false, createReason end
+        tag = createdTag
+        return self.store:AddTag(tag, objectID, ItemIdentity.LayoutKey(objectID, copy))
+    end)
+    if not saved then
         self:ShowStatus(tostring(reason))
-        return false
-    end
-    local tagged, tagReason = self.store:AddTag(tag, objectID, ItemIdentity.LayoutKey(objectID, copy))
-    if not tagged then
-        self.store:DeleteTag(tag)
-        self:ShowStatus(tostring(tagReason))
         return false
     end
     self:ShowStatus(nil)

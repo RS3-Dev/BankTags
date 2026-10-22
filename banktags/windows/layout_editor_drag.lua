@@ -19,8 +19,7 @@ local LayoutEditorDrag = {}
 
 -- Shrink a drag surface back over its own panel
 function LayoutEditorDrag:RestoreDragSurface(surface, kind)
-    if surface == nil then return end
-    local pane = self.panes ~= nil and self.panes[kind] or nil
+    local pane = self.panes[kind]
     local rightX = Size.RIGHT_X + Size.VIEW_INSET
     if pane ~= nil then
         surface:SetPos(pane.x, pane.y)
@@ -37,7 +36,6 @@ end
 
 -- Stretch a drag surface over the editor so drags can cross panels
 function LayoutEditorDrag:CaptureDragSurface(surface, kind)
-    if surface == nil then return false end
     self:RestoreDragSurface(surface, kind)
     surface:SetPos(0, 0)
     surface:SetSize(
@@ -45,17 +43,14 @@ function LayoutEditorDrag:CaptureDragSurface(surface, kind)
         tonumber(self.content.height) or Size.HEIGHT
     )
     surface:MoveToFront()
-    if self.drag ~= nil and self.drag.ghost ~= nil then
-        self.drag.ghost:MoveToFront()
-    end
-    return true
+    self.drag.ghost:MoveToFront()
 end
 
 -- Find the search result under a search-panel point
 function LayoutEditorDrag:SearchSurfaceResult(y)
     y = tonumber(y)
     if y == nil then return nil end
-    local contentY = y + (tonumber(self.searchList and self.searchList.scrollY) or 0)
+    local contentY = y + (tonumber(self.searchList.scrollY) or 0)
     local index = math.floor(contentY / 32) + 1
     return self.searchResults[index]
 end
@@ -77,7 +72,7 @@ function LayoutEditorDrag:ScrollWheel(component, delta, kind)
         local pane = self:PaneAt(x, y)
         kind = pane ~= nil and pane.name or (self:OnSearchList(x, y) and "search" or nil)
     end
-    local pane = self.panes ~= nil and self.panes[kind] or nil
+    local pane = self.panes[kind]
     -- A hidden tab never scrolls
     if pane ~= nil and not pane.hidden then return pane.view._onScrollWheel(component, delta) end
     if kind == "search" and self.rightTab == "search" then
@@ -254,7 +249,7 @@ function LayoutEditorDrag:FinishCenterDrag(x, y)
     local drag = self.drag
     local pane, paneX, paneY = self:PaneAt(x, y)
     self.drag = nil
-    if drag.ghost ~= nil then pcall(function() drag.ghost:Destroy() end) end
+    pcall(function() drag.ghost:Destroy() end)
     self:RestoreDragSurface(drag.sourceSurface, drag.sourceSurfaceKind)
     local saved, reason, changed = true, nil, false
     if pane ~= nil and pane.name == "sorted" then
@@ -272,12 +267,9 @@ function LayoutEditorDrag:FinishCenterDrag(x, y)
         end)
         changed = saved
     end
-    self:RefreshCenter()
-    if not saved then
-        self:ShowError(reason or "Could not save the layout position.")
-    elseif changed then
-        self:NotifyChanged()
-    end
+    -- A saved change redraws through the app; otherwise put the dragged item back
+    if changed then self:NotifyChanged(self.selectedTag) else self:RefreshCenter() end
+    if not saved then self:ShowError(reason or "Could not save the layout position.") end
     return false
 end
 
@@ -287,7 +279,7 @@ function LayoutEditorDrag:SearchPointer(hit, x, y)
     if originX == nil then return nil, nil end
     return originX + (tonumber(x) or 0),
         originY + (tonumber(y) or 0)
-            - (tonumber(self.searchList and self.searchList.scrollY) or 0)
+            - (tonumber(self.searchList.scrollY) or 0)
 end
 
 -- Start dragging a search result into the layout
@@ -298,7 +290,7 @@ function LayoutEditorDrag:BeginSearchDrag(result, hit, x, y)
         return false
     end
     local pointX, pointY = self:ContentPointer()
-    if pointX == nil and hit ~= nil then
+    if pointX == nil then
         pointX, pointY = self:SearchPointer(hit, x, y)
     end
     if pointX == nil then return false end
@@ -326,8 +318,8 @@ function LayoutEditorDrag:UpdateDragAt(x, y)
     self.drag.pointerX = tonumber(x) or self.drag.pointerX
     self.drag.pointerY = tonumber(y) or self.drag.pointerY
     self.drag.ghost:SetPos(
-        (tonumber(x) or 0) - math.floor((self.drag.ghostWidth or 36) / 2),
-        (tonumber(y) or 0) - math.floor((self.drag.ghostHeight or 32) / 2)
+        (tonumber(x) or 0) - math.floor(self.drag.ghostWidth / 2),
+        (tonumber(y) or 0) - math.floor(self.drag.ghostHeight / 2)
     )
     if self.drag.kind == "label" then
         if self.drag.ghost.hidden and not self:OnLabelButton(x, y) then
@@ -458,12 +450,8 @@ function LayoutEditorDrag:FinishLabelDrag(x, y)
     local saved, reason, changed = self:RecordEdit(self.selectedTag, function()
         return self.store:MoveLabel(self.selectedTag, drag.fromRow, row, Size.CENTER_COLUMNS)
     end)
-    self:RefreshCenter()
-    if not saved then
-        self:ShowError(reason or "Could not move the label.")
-    elseif changed then
-        self:NotifyChanged()
-    end
+    if changed then self:NotifyChanged(self.selectedTag) else self:RefreshCenter() end
+    if not saved then self:ShowError(reason or "Could not move the label.") end
     return false
 end
 
@@ -475,7 +463,7 @@ function LayoutEditorDrag:FinishSearchDrag(x, y)
     local destination = pane ~= nil and pane.name == "sorted"
         and self:SlotIndexAt(pane, paneX, paneY) or nil
     self.drag = nil
-    if drag.ghost ~= nil then pcall(function() drag.ghost:Destroy() end) end
+    pcall(function() drag.ghost:Destroy() end)
     self:RestoreDragSurface(drag.sourceSurface, drag.sourceSurfaceKind)
     if destination ~= nil then self:AddCatalogResult(drag.result, destination) end
     return false
@@ -499,16 +487,12 @@ end
 function LayoutEditorDrag:FinishDrag(commit)
     local drag = self.drag
     self.drag = nil
-    if drag ~= nil and drag.ghost ~= nil then
-        pcall(function() drag.ghost:Destroy() end)
-    end
-    if drag ~= nil and drag.highlight ~= nil then
-        pcall(function() drag.highlight:Destroy() end)
-    end
-    if drag ~= nil and drag.preview ~= nil then self.ClearGroupPreview(drag) end
-    if drag ~= nil then
-        self:RestoreDragSurface(drag.sourceSurface, drag.sourceSurfaceKind)
-    end
+    if drag == nil then return commit == true end
+    pcall(function() drag.ghost:Destroy() end)
+    -- Only label drags shade a row, and only group drags preview cells
+    if drag.highlight ~= nil then pcall(function() drag.highlight:Destroy() end) end
+    if drag.preview ~= nil then self.ClearGroupPreview(drag) end
+    self:RestoreDragSurface(drag.sourceSurface, drag.sourceSurfaceKind)
     return commit == true
 end
 

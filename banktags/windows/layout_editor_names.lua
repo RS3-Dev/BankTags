@@ -37,7 +37,7 @@ function LayoutEditorNames:CreateItemNames()
     end)
 end
 
--- Find a grid item's name and cell under a content point
+-- Find a grid item and its cell under a content point
 function LayoutEditorNames:GridItemAt(x, y)
     local pane, paneX, paneY = self:PaneAt(x, y)
     if pane == nil then return nil end
@@ -51,10 +51,7 @@ function LayoutEditorNames:GridItemAt(x, y)
     if paneX - cellX >= Size.GRID_SLOT_SIZE or paneY < cellY or paneY - cellY >= Size.GRID_SLOT_SIZE then
         return nil
     end
-    return {
-        name = ObjectConfig.DisplayName(slot.objectID),
-        x = pane.x + cellX, y = pane.y + cellY, size = Size.GRID_SLOT_SIZE,
-    }
+    return { objectID = slot.objectID, x = pane.x + cellX, y = pane.y + cellY, size = Size.GRID_SLOT_SIZE }
 end
 
 -- Show the name of the item under the pointer, or hide it
@@ -68,11 +65,13 @@ function LayoutEditorNames:UpdateItemName()
     end
     local x, y = self:ContentPointer()
     local item = x ~= nil and self:GridItemAt(x, y) or nil
-    local name = item ~= nil and Text.plain(item.name) or ""
-    -- An item the client cannot name shows nothing
-    if name == "" then return self:HideItemName() end
-    local shown = name .. "@" .. item.x .. "," .. item.y
+    if item == nil then return self:HideItemName() end
+    -- The client's name is read only when the pointer reaches another item or cell
+    local shown = item.objectID .. "@" .. item.x .. "," .. item.y
     if self.nameShown ~= shown then
+        local name = Text.plain(ObjectConfig.DisplayName(item.objectID))
+        -- An item the client cannot name shows nothing
+        if name == "" then return self:HideItemName() end
         self.nameShown = shown
         self.nameAnchor:SetPos(item.x, item.y)
         self.nameAnchor:SetSize(item.size, item.size)

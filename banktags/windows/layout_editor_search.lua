@@ -102,42 +102,36 @@ function LayoutEditorSearch:ShowSearchResults(results)
 end
 
 -- Save a search result to the tag at a sorted slot
+-- Adding and placing it is one save and one undo step, or nothing changes
 function LayoutEditorSearch:AddCatalogResult(result, destination)
-    local objectID = math.tointeger(tonumber(result and result.objectId))
-    if self.selectedTag == nil or objectID == nil then return false end
+    local tag = self.selectedTag
+    local objectID = math.tointeger(tonumber(result.objectId))
+    if tag == nil or objectID == nil then return false end
     local source = nil
-    for _, item in ipairs(self.store:GetTaggedItems(self.selectedTag)) do
+    for _, item in ipairs(self.store:GetTaggedItems(tag)) do
         if item.objectID == objectID then source = source or item end
     end
-    -- Adding and placing the item undo together
-    local saved, layoutKey, reason, positioned, positionReason
-    self:RecordEdit(self.selectedTag, function()
-        -- An item already in the tag gets a ghost copy
-        if source == nil then
-            layoutKey = ItemIdentity.LayoutKey(objectID, 1)
-            saved, reason = self.store:AddTag(self.selectedTag, objectID, layoutKey)
-        else
-            saved, layoutKey, reason = self.store:DuplicateLayoutItem(self.selectedTag, source.layoutKey)
-        end
-        if not saved then return end
-        positioned, positionReason = self.store:MoveLayoutItem(
-            self.selectedTag, layoutKey, destination, Size.CENTER_COLUMNS)
+    local layoutKey
+    local saved, reason = self:RecordEdit(tag, function()
+        return self.store:SaveTogether(function()
+            local added, addReason
+            -- An item already in the tag gets a ghost copy
+            if source == nil then
+                layoutKey = ItemIdentity.LayoutKey(objectID, 1)
+                added, addReason = self.store:AddTag(tag, objectID, layoutKey)
+            else
+                added, layoutKey, addReason = self.store:DuplicateLayoutItem(tag, source.layoutKey)
+            end
+            if not added then return false, addReason end
+            return self.store:MoveLayoutItem(tag, layoutKey, destination, Size.CENTER_COLUMNS)
+        end)
     end)
     if not saved then
         self:ShowError(reason or "Could not add the item to this tag.")
         return false
     end
     self:SelectOnly(layoutKey)
-    self:RefreshCenter()
-    if not positioned then
-        if self.onChanged ~= nil then self.onChanged(self.selectedTag) end
-        self:ShowError(
-            "Item added to the tag, but its layout position was not saved: "
-                .. tostring(positionReason or "unknown persistence error")
-        )
-        return false
-    end
-    self:NotifyChanged()
+    self:NotifyChanged(tag)
     return true
 end
 

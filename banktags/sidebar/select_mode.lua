@@ -90,7 +90,8 @@ end
 -- Add a picked item's copy to the session's tag and outline it
 function SelectMode:Picked(session, item)
     if self.session ~= session then return end
-    if self.app:AddItemToTag(session.tag, item.objectID, item.copy) then self:Refresh() end
+    -- Adding the item outlines it through the app's change
+    self.app:AddItemToTag(session.tag, item.objectID, item.copy)
 end
 
 -- End the session once Bank Core drops its outline
@@ -119,10 +120,9 @@ function SelectMode:Forget()
 end
 
 -- Follow a renamed tag, keeping the session running under its new name
+-- The rename's app change outlines its items again
 function SelectMode:Rename(oldTag, newTag)
-    if self:Tag() ~= oldTag then return end
-    self.session.tag = newTag
-    self:Refresh()
+    if self:Tag() == oldTag then self.session.tag = newTag end
 end
 
 -- Outline the tag's members again, or end a cleared session

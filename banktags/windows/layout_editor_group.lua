@@ -105,8 +105,7 @@ function LayoutEditorGroup:UpdateActionTooltips()
     if self.groupTooltips == grouped then return end
     self.groupTooltips = grouped
     for name, tooltip in pairs(GROUP_TOOLTIPS) do
-        local button = self[name]
-        if button ~= nil then button:SetTooltip(grouped and tooltip or self.actionTooltips[name]) end
+        self[name]:SetTooltip(grouped and tooltip or self.actionTooltips[name])
     end
 end
 
@@ -156,7 +155,7 @@ end
 
 -- Remove the cells drawn for a group drop
 function LayoutEditorGroup.ClearGroupPreview(drag)
-    for index = #(drag.preview or {}), 1, -1 do
+    for index = #drag.preview, 1, -1 do
         local node = drag.preview[index]
         pcall(function() node:Destroy() end)
     end
@@ -204,8 +203,7 @@ function LayoutEditorGroup:FinishGroupDrag(x, y)
     if not saved then
         self:ShowError(reason or "Could not move the items.")
     elseif changed then
-        self:RefreshCenter()
-        self:NotifyChanged()
+        self:NotifyChanged(self.selectedTag)
     end
     return false
 end

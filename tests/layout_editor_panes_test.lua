@@ -38,9 +38,9 @@ local editorSize = h:TagsModule("banktags/windows/layout_editor_parts").size
 local editorTheme = h:TagsModule("banktags/ui/theme")
 local changes = 0
 local onChanged = editor.onChanged
-editor.onChanged = function()
+editor.onChanged = function(tag)
     changes = changes + 1
-    onChanged()
+    onChanged(tag)
 end
 editor.window.tooltipContext = { position = function()
     return Geometry.absolutePosition(editor.content)

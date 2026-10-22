@@ -35,9 +35,9 @@ local function openEditor(tag)
     editor = app.windows.layoutEditor
     changes = 0
     local onChanged = editor.onChanged
-    editor.onChanged = function()
+    editor.onChanged = function(tag)
         changes = changes + 1
-        onChanged()
+        onChanged(tag)
     end
     editor.window.tooltipContext = { position = function()
         return Geometry.absolutePosition(editor.content)

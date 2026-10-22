@@ -106,7 +106,7 @@ end
 
 -- Describe the rows in sidebar order, with folders where they start
 function TagList:Entries()
-    local query = string.lower(self.state.searchQuery or "")
+    local query = string.lower(self.state.searchQuery)
     local entries, rowNumber = {}, 0
     -- Choose alternating row colours, warmer inside folders
     local function rowColour(inFolder)
@@ -205,13 +205,12 @@ function TagList:DecorateRows()
     local function accentHeight(index)
         local nextRow = rows[index + 1]
         if nextRow == nil then return ROW_HEIGHT end
-        local nextEntry = self.entriesByID[nextRow.entry.id] or nextRow.entry
-        return nextEntry.inFolder and SidebarRows.ENTRY_HEIGHT or ROW_HEIGHT
+        return self.entriesByID[nextRow.entry.id].inFolder and SidebarRows.ENTRY_HEIGHT or ROW_HEIGHT
     end
     for index, row in ipairs(rows) do
         Geometry.trackPointer(row.root)
         -- PrettyUI may keep only the entry fields it knows, so read our own entry
-        local entry = self.entriesByID[row.entry.id] or row.entry
+        local entry = self.entriesByID[row.entry.id]
         row.background:SetSize(0, ROW_HEIGHT, 1.0, 0)
         row.label.font = id.Font.MUSEO_SANS_11PT_REGULAR
         row.root.opConfig:ClearOpCursors()
@@ -229,7 +228,7 @@ function TagList:DecorateRows()
             row.label:SetPos(labelLeft, 0)
             local chevronLeft = -FOLDER_CHEVRON_RIGHT - FOLDER_CHEVRON_SIZE - rightInset
             row.label:SetSize(chevronLeft - labelLeft - 4, ROW_HEIGHT, 1.0, 0)
-            row.label.content = tostring(entry.label or "") .. " (" .. tostring(entry.memberCount or 0) .. ")"
+            row.label.content = entry.label .. " (" .. entry.memberCount .. ")"
             row.label:MoveToFront()
             -- Sprites turn anticlockwise from the up-facing bank arrow
             local chevron = ui.Sprite.new(row.root)
@@ -293,7 +292,7 @@ end
 -- Toggle sort mode, clearing the search so moves stay visible
 function TagList:SetSortMode(enabled)
     self.sortMode = enabled == true
-    if self.sortMode and (self.state.searchQuery or "") ~= "" then
+    if self.sortMode and self.state.searchQuery ~= "" then
         self.state.searchQuery = ""
         self.search:SetText("", false)
     end

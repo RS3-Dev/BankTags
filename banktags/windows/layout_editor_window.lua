@@ -49,13 +49,6 @@ local PANE_NAMES = { "sorted", "unsorted" }
 -- Right-column tabs, left to right; Unsorted shows first
 local RIGHT_TABS = { "unsorted", "search" }
 
--- Destroy saved UI parts newest first, skipping ones already gone
-local function destroyAll(values)
-    for index = #(values or {}), 1, -1 do
-        pcall(function() values[index]:Destroy() end)
-    end
-end
-
 -- Create the layout editor over the bank
 function LayoutEditorWindow.new(parent, options)
     local self = setmetatable({
@@ -133,10 +126,6 @@ function LayoutEditorWindow.new(parent, options)
     end
     self.content = self.window.content
     self:CreatePanels()
-    if self.selectedTag == nil then
-        local tags = self.store:AllTags()
-        self.selectedTag = tags[1]
-    end
     self:SelectTag(self.selectedTag)
     Event.Logic.Unsubscribe(DRAG_EVENT)
     Event.Logic.Subscribe(DRAG_EVENT, function() self:PollDrag() end)
@@ -159,7 +148,7 @@ end
 -- Remember copy quantities and each object's best stack
 function LayoutEditorWindow:SetBankItems(items)
     local byKey, byObject = {}, {}
-    for _, item in ipairs(items or {}) do
+    for _, item in ipairs(items) do
         local style = { quantity = item.quantity, placeholder = item.placeholder }
         byKey[ItemIdentity.LayoutKey(item.objectID, item.copy)] = style
         local existing = byObject[item.objectID]
@@ -169,19 +158,20 @@ function LayoutEditorWindow:SetBankItems(items)
         end
     end
     self.styles = { byKey = byKey, byObject = byObject }
-    self.bankItemList = items or {}
+    self.bankItemList = items
     if self.panes ~= nil then self:RefreshCenter() end
 end
 
--- Show outside changes, keeping the open tag if it still exists
-function LayoutEditorWindow:StoreChanged()
-    if self.window == nil then return end
+-- Show saved changes, keeping the open tag if it still exists
+-- A named tag means only that tag's items or layout changed
+function LayoutEditorWindow:StoreChanged(tag)
+    if tag ~= nil and tag ~= self.selectedTag then return end
     if self.selectedTag ~= nil and self.store.data.tags[self.selectedTag] == nil then
         self:SelectTag(self.store:AllTags()[1])
         return
     end
     self:CheckHistory()
-    self:RefreshTags()
+    if tag == nil then self:RefreshTags() end
     self:RefreshCenter()
 end
 
@@ -449,7 +439,6 @@ end
 -- Saves happen on every change, so only problems and copying are shown
 function LayoutEditorWindow:ShowError(message, colour)
     self:HideError()
-    if self.centerPanel == nil then return end
     local width = Size.CENTER_SURFACE_WIDTH - Size.TAG_NAME_X - Size.VIEW_INSET
     local banner = ui.Layer.new(self.centerPanel)
     banner:SetPos(Size.TAG_NAME_X, Size.TAG_NAME_Y)
@@ -504,7 +493,6 @@ end
 
 -- Show every tag in the rail, the open one outlined and named
 function LayoutEditorWindow:RefreshTags()
-    if self.tagRail == nil then return end
     local entries = TagRail.Entries(self.store)
     self.tagRail:SetTags(entries, self.selectedTag)
     local name = ""
@@ -523,7 +511,6 @@ end
 
 -- End drags and load the selected tag's layout
 function LayoutEditorWindow:SelectTag(tag)
-    if type(tag) ~= "string" or tag == "" then tag = nil end
     -- Another tag starts both grids at the top, with no undo steps or copied items
     if tag ~= self.selectedTag then
         self:ClearHistory()
@@ -536,9 +523,10 @@ function LayoutEditorWindow:SelectTag(tag)
     self:RefreshCenter()
 end
 
--- Destroy grid decorations and release their references
+-- Destroy grid decorations newest first, skipping ones already gone
 function LayoutEditorWindow:DestroyCenterNodes()
-    destroyAll(self.centerNodes)
+    local nodes = self.centerNodes
+    for index = #nodes, 1, -1 do pcall(function() nodes[index]:Destroy() end) end
     self.centerNodes = {}
 end
 
@@ -677,12 +665,6 @@ function LayoutEditorWindow:LabelRowAt(pane, x, y)
     return nil
 end
 
--- Refresh after a label edit if its tag is open, then tell the app
-function LayoutEditorWindow:LabelChanged(tag)
-    if self.window ~= nil and self.selectedTag == tag then self:RefreshCenter() end
-    self:NotifyChanged()
-end
-
 -- Rename or delete a label through the text prompt
 function LayoutEditorWindow:EditLabel(row)
     local tag = self.selectedTag
@@ -695,7 +677,7 @@ function LayoutEditorWindow:EditLabel(row)
                 return self.store:SetLabel(tag, row, value, Size.CENTER_COLUMNS)
             end)
             if not saved then return false, reason end
-            self:LabelChanged(tag)
+            self:NotifyChanged(tag)
             return true, nil
         end,
         onDelete = function()
@@ -703,7 +685,7 @@ function LayoutEditorWindow:EditLabel(row)
                 return self.store:RemoveLabel(tag, row, Size.CENTER_COLUMNS)
             end)
             if not saved then return false, reason end
-            self:LabelChanged(tag)
+            self:NotifyChanged(tag)
             return true, nil
         end,
     })
@@ -720,7 +702,7 @@ function LayoutEditorWindow:PromptNewLabel(row)
                 return self.store:InsertLabel(tag, row, value, Size.CENTER_COLUMNS)
             end)
             if not saved then return false, reason end
-            self:LabelChanged(tag)
+            self:NotifyChanged(tag)
             return true, nil
         end,
     })
@@ -766,8 +748,7 @@ function LayoutEditorWindow:InsertEmptyRow(line)
         self:ShowError(reason or "Could not add the row.")
         return false
     end
-    self:RefreshCenter()
-    self:NotifyChanged()
+    self:NotifyChanged(self.selectedTag)
     return true
 end
 
@@ -820,8 +801,7 @@ function LayoutEditorWindow:SaveRowRemoval(tag, line)
         self:ShowError(reason or "Could not remove the row.")
         return false, reason
     end
-    self:RefreshCenter()
-    self:NotifyChanged()
+    self:NotifyChanged(tag)
     return true, nil
 end
 
@@ -889,8 +869,7 @@ function LayoutEditorWindow:UnarrangeSelected()
     end)
     if not saved then self:ShowError(reason); return false end
     self.selectedLayoutKey = nil
-    self:RefreshCenter()
-    self:NotifyChanged()
+    self:NotifyChanged(self.selectedTag)
     return true
 end
 
@@ -910,14 +889,13 @@ function LayoutEditorWindow:RemoveSelected()
         return false
     end
     self.selectedLayoutKey = nil
-    self:RefreshCenter()
-    self:NotifyChanged()
+    self:NotifyChanged(self.selectedTag)
     return true
 end
 
--- Tell the app the store changed
-function LayoutEditorWindow:NotifyChanged()
-    if self.onChanged ~= nil then self.onChanged() end
+-- Tell the app a tag's items or layout changed, which redraws the grids
+function LayoutEditorWindow:NotifyChanged(tag)
+    if self.onChanged ~= nil then self.onChanged(tag) end
 end
 
 -- Show the editor window

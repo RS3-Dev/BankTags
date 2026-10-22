@@ -39,9 +39,9 @@ local COLUMNS = Size.CENTER_COLUMNS
 assert(COLUMNS >= 8)
 local changes = 0
 local onChanged = editor.onChanged
-editor.onChanged = function()
+editor.onChanged = function(tag)
     changes = changes + 1
-    onChanged()
+    onChanged(tag)
 end
 editor.window.tooltipContext = { position = function()
     return Geometry.absolutePosition(editor.content)

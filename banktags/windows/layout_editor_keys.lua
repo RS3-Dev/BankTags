@@ -90,10 +90,7 @@ function LayoutEditorKeys:NudgeSelected(columnStep, lineStep)
         self:ShowError(reason or "Could not move the items.")
         return false
     end
-    if changed then
-        self:RefreshCenter()
-        self:NotifyChanged()
-    end
+    if changed then self:NotifyChanged(self.selectedTag) end
     return changed
 end
 

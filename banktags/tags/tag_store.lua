@@ -70,6 +70,11 @@ function TagStore:Commit(nextData, failureMessage)
     for key in pairs(nextData.folders) do
         if not used[key] then nextData.folders[key] = nil end
     end
+    -- Edits saved together are written once at the end
+    if self.holdSave then
+        self.data, self.members = nextData, {}
+        return true, nil
+    end
     if PersistentDB == nil or PersistentDB.SetString == nil then
         return false, "PersistentDB is unavailable."
     end
@@ -88,6 +93,22 @@ end
 -- Save the current data
 function TagStore:Save()
     return self:Commit(self.data, "Could not save the tags.")
+end
+
+-- Save several store edits in one write, keeping the old data if any edit or the write fails
+-- The edit returns success and a reason, as each store edit does
+function TagStore:SaveTogether(edit)
+    local before = self.data
+    self.holdSave = true
+    -- An edit that errors must not leave later saves held
+    local ran, done, reason = pcall(edit)
+    self.holdSave = false
+    if ran and done and self.data ~= before then
+        done, reason = self:Commit(self.data, "Could not save the tags.")
+    end
+    if not (ran and done) then self.data, self.members = before, {} end
+    if not ran then error(done, 0) end
+    return done == true, reason
 end
 
 -- Return the set of item copies in a tag, or nil when the tag does not exist
