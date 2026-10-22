@@ -51,7 +51,7 @@ function TagSettingsEditor.new(parent, options)
 
     local content = self.window.content
     self.nameLabel = prettyui.Text.new(content, {
-        text = "Tag name",
+        text = options.nameLabel or "Tag name",
         x = MARGIN,
         y = 10,
         width = FIELD_WIDTH,
@@ -64,8 +64,8 @@ function TagSettingsEditor.new(parent, options)
         width = FIELD_WIDTH,
         height = 30,
         text = options.tag or "",
-        placeholder = "Tag name",
-        maxLength = TagRules.MAX_TAG_NAME,
+        placeholder = options.nameLabel or "Tag name",
+        maxLength = options.maxLength or TagRules.MAX_TAG_NAME,
         onSubmit = function(_, value) self:Save(value) end,
     })
     local selectedObject = objectFromID(self.spriteObjectID)

@@ -218,10 +218,17 @@ function TagList:DecorateRows()
         row.root.cursorConfig.mouseOverCursor = -1
         local rightInset = self.sortMode and SORT_CONTROLS_WIDTH or 0
         if folderKeyOf(entry.id) ~= nil then
+            local objectID = self.settings().showTagSprites
+                and self.store:GetFolderSprite(folderKeyOf(entry.id)) or nil
+            local labelLeft = FOLDER_LABEL_LEFT
+            if objectID ~= nil then
+                SidebarRows.AddRowIcon(row, objectID, TAG_ROW_LEFT)
+                labelLeft = TAG_ROW_LEFT + 28
+            end
             row.label.rgba = Theme.HEADING_TEXT
-            row.label:SetPos(FOLDER_LABEL_LEFT, 0)
+            row.label:SetPos(labelLeft, 0)
             local chevronLeft = -FOLDER_CHEVRON_RIGHT - FOLDER_CHEVRON_SIZE - rightInset
-            row.label:SetSize(chevronLeft - FOLDER_LABEL_LEFT - 4, ROW_HEIGHT, 1.0, 0)
+            row.label:SetSize(chevronLeft - labelLeft - 4, ROW_HEIGHT, 1.0, 0)
             row.label.content = tostring(entry.label or "") .. " (" .. tostring(entry.memberCount or 0) .. ")"
             row.label:MoveToFront()
             -- Sprites turn anticlockwise from the up-facing bank arrow

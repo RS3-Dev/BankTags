@@ -160,11 +160,29 @@ assert(store:SetTagFolder("food", nil))
 assert(store:SetFolderCollapsed(folderKey, true))
 assert(TagStore.new():GetFolder(folderKey).collapsed == true)
 
+-- Folder icons survive saves and share codes without changing membership
+assert(store:RenameFolder(folderKey, "Gathering Skills", 385))
+assert(store:GetFolderSprite(folderKey) == 385 and store:GetFolder(folderKey).icon == "shark")
+assert(TagStore.new():GetFolderSprite(folderKey) == 385)
+local sharedFolder = assert(TagData.Decode(TagData.Encode(store.data, "mining")))
+assert(sharedFolder.folders[folderKey].icon == "shark")
+local importedFolder = TagStore.new()
+assert(importedFolder:ImportText(TagData.Encode(store.data, "mining")))
+assert(importedFolder:GetFolderSprite(folderKey) == 385)
+local folderBefore = Json.encode(store.data)
+assert(not store:RenameFolder(folderKey, "Gathering Skills", -1))
+assert(Json.encode(store.data) == folderBefore)
+failWrites = true
+assert(not store:RenameFolder(folderKey, "Gathering Skills", 4151))
+assert(Json.encode(store.data) == folderBefore)
+failWrites = false
+
 -- Renaming a tag keeps its folder; renaming the folder keeps its tags in it
 assert(store:UpdateTag("mining", "mining gear"))
 assert(store:GetTagFolder("mining gear") == folderKey)
 local renamed, renamedKey = store:RenameFolder(folderKey, "Skilling")
 assert(renamed and renamedKey == "skilling" and store:GetTagFolder("mining gear") == "skilling")
+assert(store:GetFolderSprite("skilling") == 385)
 assert(not store:UpdateTag("mining gear", "woodcutting"))
 assert(store:CreateFolder("Other", "food"))
 assert(not store:RenameFolder("other", "skilling"))

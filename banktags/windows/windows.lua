@@ -99,24 +99,35 @@ function Windows:OpenCreateFolderPrompt(tag)
     })
 end
 
--- Ask for a folder's new name
+-- Edit a folder's name and item icon
 function Windows:OpenRenameFolderPrompt(folderKey)
     local app = self.app
     local folder = app.store:GetFolder(folderKey)
     if folder == nil then return end
-    self:OpenTextPrompt({
+    self:Close("tagSettingsEditor")
+    local parent = parentFor("the folder settings editor")
+    if parent == nil then return end
+    local editor
+    editor = TagSettingsEditor.new(parent, {
         title = "Rename Folder",
-        heading = "Folder name",
-        text = folder.name,
-        placeholder = "Folder name",
+        nameLabel = "Folder name",
+        tag = folder.name,
+        spriteObjectID = app.store:GetFolderSprite(folderKey),
         maxLength = TagRules.MAX_FOLDER_NAME,
-        onSave = function(value)
-            local saved, _, reason = app.store:RenameFolder(folderKey, value)
+        onChooseSprite = function()
+            if self.tagSettingsEditor ~= editor then return end
+            self:OpenSpritePicker(editor, function(result) editor:SetSprite(result.objectId) end)
+        end,
+        onSave = function(value, spriteObjectID)
+            local saved, _, reason = app.store:RenameFolder(folderKey, value, spriteObjectID)
             if not saved then return false, reason end
             app:Changed()
             return true, nil
         end,
     })
+    self.tagSettingsEditor = editor
+    editor:Show()
+    self:SyncEditorOverlays()
 end
 
 -- Ask for a label's text over the layout editor

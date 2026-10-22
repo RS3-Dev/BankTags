@@ -57,6 +57,29 @@ assert(app.store:GetFolder("combat").collapsed and tagRows() == 70)
 list.list:Click("__banktags_folder:combat")
 assert(not app.store:GetFolder("combat").collapsed and tagRows() == 72)
 
+-- Folder settings reuse the tag icon picker and save only on confirmation
+app.windows:OpenRenameFolderPrompt("combat")
+local folderEditor = app.windows.tagSettingsEditor
+assert(folderEditor.field.text == "Combat" and folderEditor.nameLabel.content == "Folder name")
+folderEditor.spriteSlot.root.hooks.click()
+assert(app.windows.spritePickerOwner == folderEditor)
+app.windows.spritePicker.onSelect({ objectId = 385 })
+assert(app.store:GetFolderSprite("combat") == nil)
+folderEditor:Save("Combat")
+assert(app.store:GetFolderSprite("combat") == 385)
+local folderRow = tab:RowFor("__banktags_folder:combat")
+local folderIcon
+for _, child in ipairs(folderRow.root.children) do
+    if child.associatedObjectID == 385 then folderIcon = child end
+end
+assert(folderIcon ~= nil and folderIcon.clickthrough and folderRow.label.x > folderIcon.x)
+app.windows:Close("tagSettingsEditor")
+app.windows:OpenRenameFolderPrompt("combat")
+assert(app.windows.tagSettingsEditor.spriteObjectID == 385)
+app.windows.tagSettingsEditor:SetSprite(4151)
+app.windows:Close("tagSettingsEditor")
+assert(app.store:GetFolderSprite("combat") == 385, "cancel keeps the saved folder icon")
+
 -- Sorting shows arrows that move an entry one step within its own group
 local sortButton = list.sortButton.root
 sortButton.hooks.pressed()
@@ -244,5 +267,9 @@ layout.tabRail.settingsButton.root.hooks.pressed()
 assert(session.bankSettings.window.nav:Click("banktags"))
 app.settingsSection.controls.showTagSprites:SetSelected("showTagSprites", false, true)
 assert(app.settings.showTagSprites == false and iconRows() == 0)
+tab.controls.list.search.root.hooks.contentchanged(nil, "change", "combat")
+assert(iconRows() == 0, "the sprite preference hides folder icons too")
+app.settingsSection.controls.showTagSprites:SetSelected("showTagSprites", true, true)
+assert(iconRows() == 1, "enabling sprites restores the folder icon")
 
 print("tag_tab_test: ok")

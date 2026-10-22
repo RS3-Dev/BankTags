@@ -1,6 +1,7 @@
 -- Group tags into folders and keep the sidebar order for TagStore
 
 local TagRules = require("banktags/tags/tag_rules")
+local ItemIdentity = require("banktags/tags/item_identity")
 local copyTable = TagRules.copy
 local folderName = TagRules.folderName
 
@@ -25,11 +26,17 @@ function TagStoreFolders:GetTagFolder(tag)
     return record ~= nil and record.folder or nil
 end
 
--- Return a copy of one folder's display name and collapse state
+-- Return a copy of one folder's settings
 function TagStoreFolders:GetFolder(key)
     local folder = type(key) == "string" and self.data.folders[key] or nil
     if type(folder) ~= "table" then return nil end
-    return { key = key, name = folder.name, collapsed = folder.collapsed == true }
+    return { key = key, name = folder.name, collapsed = folder.collapsed == true, icon = folder.icon }
+end
+
+-- Resolve a folder's saved item icon
+function TagStoreFolders:GetFolderSprite(key)
+    local folder = self.data.folders[key]
+    return folder ~= nil and ItemIdentity.ObjectID(folder.icon) or nil
 end
 
 -- Group the ordered tags so each folder sits where its first member appears
@@ -166,7 +173,7 @@ function TagStoreFolders:CreateFolder(folder, tag)
 end
 
 -- Rename a folder, moving its tags to the new name's key
-function TagStoreFolders:RenameFolder(key, folder)
+function TagStoreFolders:RenameFolder(key, folder, spriteObjectID)
     local current = type(key) == "string" and self.data.folders[key] or nil
     if type(current) ~= "table" then return false, nil, "The folder no longer exists." end
     local nextKey, display = folderName(folder)
@@ -177,9 +184,15 @@ function TagStoreFolders:RenameFolder(key, folder)
     if nextKey ~= key and type(self.data.folders[nextKey]) == "table" then
         return false, nil, "A folder with that name already exists."
     end
+    local icon
+    if spriteObjectID ~= nil then
+        icon = ItemIdentity.Reference(spriteObjectID)
+        if icon == nil then return false, nil, "Choose a valid item icon." end
+    end
     local nextData = copyTable(self.data)
     local value = nextData.folders[key]
     value.name = display
+    value.icon = icon or value.icon
     if nextKey ~= key then
         nextData.folders[key] = nil
         nextData.folders[nextKey] = value

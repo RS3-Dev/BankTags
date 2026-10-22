@@ -171,7 +171,8 @@ function TagData.Decode(text, allowEmpty)
             if key ~= nil and data.folders[key] == nil then
                 folderCount = folderCount + 1
                 if folderCount > MAX_FOLDERS then return nil, "The import has too many folders." end
-                data.folders[key] = { name = display, collapsed = folder.collapsed == true }
+                data.folders[key] = { name = display, collapsed = folder.collapsed == true,
+                    icon = type(folder.icon) == "string" and folder.icon or nil }
             end
             tag.folder = key
             data.tags[name] = tag
