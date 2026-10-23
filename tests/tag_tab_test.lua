@@ -135,7 +135,7 @@ assert(#app.handle:GetState().pages == 1)
 list = tab.controls.list
 h:ClickRow("ranged")
 h:Tick(2)
-assert(app.shownTag == nil and layout.selectedTag == nil and not hasEditButton())
+assert(app.shownTag == nil and layout.selection == nil and not hasEditButton())
 
 -- Outside All Items the page is refused and Bank Core shows its guidance
 layout.nativeViewAll = false
@@ -147,7 +147,7 @@ layout.ShowPageGuidance = function(_, reason) guidance = reason end
 list = tab.controls.list
 h:ClickRow("melee")
 h:Tick(2)
-assert(app.shownTag == nil and layout.selectedTag == nil and guidance == "not_all_items")
+assert(app.shownTag == nil and layout.selection == nil and guidance == "not_all_items")
 layout.nativeViewAll, layout.DetectNativeViewAll, layout.ShowPageGuidance = true, detect, showGuidance
 
 -- Scroll a row to the top of the list and point at it

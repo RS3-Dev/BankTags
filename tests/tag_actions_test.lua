@@ -217,7 +217,7 @@ assert(app.select:Tag() == nil and app.shownTag == "melee" and app.status == nil
 -- Starting select mode while a tag is shown leaves the tag first
 assert(app.select:Toggle("ranged"))
 h:Tick(2)
-assert(app.shownTag == nil and layout.selectedTag == nil and app.select:Tag() == "ranged")
+assert(app.shownTag == nil and layout.selection == nil and app.select:Tag() == "ranged")
 -- A native tab ends it and the tab says why
 layout.DetectNativeViewAll = function() return false end
 layout:SetNativeViewAll(false)

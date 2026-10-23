@@ -6,7 +6,7 @@ local h = Harness.new("tutorial")
 h.bankHost:SetItems({ { 385, 20, "Shark" } })
 local core = h:LoadCore()
 local other = assert(core.result.RegisterExtension("example.before", "Other"))
-assert(other:RegisterTab("other", { label = "Other", icon = "STAR", rows = {} }))
+assert(other:RegisterTab("other", { label = "Other", icon = "STAR", mount = { mount = function() end } }))
 local tags = h:LoadTags()
 local cues, stops = 0, 0
 tags.env.Plugin = { resources = { tutorial_step = "step-cue" } }
