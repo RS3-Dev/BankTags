@@ -390,6 +390,8 @@ function TagList:PlaceCover()
     local gesture, list = self.gesture, self.list
     gesture.row.root:SetPos(0, list.scrollY)
     gesture.row.root:SetSize(gesture.width, list.viewport.height)
+    -- Later sibling rows must not intercept the held pointer
+    gesture.row.root:MoveToFront()
 end
 
 -- Find where the dragged entry would go at a height in the rows

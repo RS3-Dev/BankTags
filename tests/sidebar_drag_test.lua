@@ -119,6 +119,9 @@ local gesture = list.gesture
 assert(gesture.dragging and gesture.row.root == root)
 assert(list:RowFor("alpha") == nil, "the cover leaves PrettyUI's rows")
 assert(root.y == list.list.scrollY and root.height == list.list.viewport.height)
+for _, row in ipairs(list.list.rows) do
+    assert(root.front > (row.root.front or 0), "the capture row stays above every sibling input target")
+end
 assert(root.hooks.mouserepeat == nil, "the moved cover does not recalibrate the pointer")
 for _, part in ipairs(gesture.row.parts) do assert(part.hidden) end
 assert(gesture.ghost.clickthrough and not gesture.ghost.destroyed)
