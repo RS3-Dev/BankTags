@@ -216,6 +216,13 @@ function App:ShowTag(tag)
     else
         opened, reason = self.handle:OpenPage(TagPage.PAGE_ID)
     end
+    if not opened then
+        if reason == "not_all_items" then
+            self.handle:ShowWarning('Select "All Items" to view this tag.')
+        elseif reason == "preset_open" then
+            self.handle:ShowWarning('Close the preset selector to view this tag.')
+        end
+    end
     if opened then self.shownTag = tag end
     self.tab:Refresh()
     return opened, reason

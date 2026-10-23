@@ -137,18 +137,16 @@ h:ClickRow("ranged")
 h:Tick(2)
 assert(app.shownTag == nil and layout.selection == nil and not hasEditButton())
 
--- Outside All Items the page is refused and Bank Core shows its guidance
+-- Outside All Items Tags supplies the warning text
 layout.nativeViewAll = false
 local detect = layout.DetectNativeViewAll
 layout.DetectNativeViewAll = function() return false end
-local guidance = nil
-local showGuidance = layout.ShowPageGuidance
-layout.ShowPageGuidance = function(_, reason) guidance = reason end
 list = tab.controls.list
 h:ClickRow("melee")
 h:Tick(2)
-assert(app.shownTag == nil and layout.selection == nil and guidance == "not_all_items")
-layout.nativeViewAll, layout.DetectNativeViewAll, layout.ShowPageGuidance = true, detect, showGuidance
+assert(app.shownTag == nil and layout.selection == nil and layout.warningPanel.children[3].content == 'Select "All Items" to view this tag.')
+layout.nativeViewAll, layout.DetectNativeViewAll = true, detect
+layout:StopWarning()
 
 -- Scroll a row to the top of the list and point at it
 local function pointAtRow(entryID)
