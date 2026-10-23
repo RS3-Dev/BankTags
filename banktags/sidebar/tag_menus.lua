@@ -65,6 +65,7 @@ end
 -- Run an action next tick if current() still returns true
 -- Bank entries also need the editor to stay closed; editor entries check their editor in current()
 function TagMenus:Defer(current, action, forEditor)
+    -- Recheck occlusion and the target before queued actions run
     local function live() return (forEditor or not self:EditorOpen()) and current() end
     return function()
         if not live() then return end
@@ -182,6 +183,7 @@ function TagMenus:AddRowEntries(menu)
         end
     end
     local entries = {}
+    -- Wrap each row action with the same once-only menu guard
     local function offer(label, name, action)
         entries[#entries + 1] = { label = label, subject = name, action = chosen(label, action) }
     end
@@ -231,6 +233,7 @@ function TagMenus:AddEditorEntries(menu)
     local current = function() return windows.layoutEditor == editor and editor:RowTargetCurrent(target) end
     local rowMenu = { id = "editor row " .. target.row, opened = false, used = false }
     local children = {}
+    -- Accept one explicit choice from this opened editor menu
     local function chosen(action)
         local deferred = self:Defer(current, action, true)
         return function()
@@ -239,6 +242,7 @@ function TagMenus:AddEditorEntries(menu)
             deferred()
         end
     end
+    -- Build row submenu entries with the same validity check
     local function offer(label, action)
         children[#children + 1] = { label = label, action = chosen(action) }
     end

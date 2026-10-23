@@ -390,6 +390,7 @@ function ImportShare:RefreshImportFolders(selectedID)
     local entries = { { id = IMPORT_NO_FOLDER, label = "No folder", order = 1 } }
     local available = { [IMPORT_NO_FOLDER] = true, [IMPORT_NEW_FOLDER] = true }
     local folders = self.options.onGetFolders()
+    -- Keep imported and existing folders from appearing twice
     local function addFolder(key, name)
         local entryID = IMPORT_FOLDER_PREFIX .. key
         if available[entryID] then return end

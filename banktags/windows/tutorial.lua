@@ -117,6 +117,7 @@ function Tutorial:Start()
         colour = Theme.TEXT, font = id.Font.MUSEO_SANS_11PT_REGULAR, maxLines = 2,
     })
     self.buttons = {}
+    -- Keep step controls together so closing releases every button
     local function button(label, x, action)
         local value = prettyui.SimpleButton.new(self.window.content, label, action,
             { x = x, y = 72, width = 26, height = 26 })

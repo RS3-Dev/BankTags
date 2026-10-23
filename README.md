@@ -1,77 +1,96 @@
 # Bank Tags
 
-Bank Tags (`banktags`) is a standalone plugin for tags, folders, saved layouts, select mode, and Import/Share in the bank. It runs on [Bank Utilities Core](https://github.com/RS3-Dev/bank-utilities) (`bankcore`) and reaches the bank only through Bank Core's public extension API: no private Core module or native bank component is used. It adds its own right-click entries from the client's menu event, asking Bank Core which bank item a menu belongs to. The full contract, including the API other plugins use to add import sources, is in [CONTRACT.md](CONTRACT.md). The staged plan it was built from is in [docs/STANDALONE_PLAN.md](docs/STANDALONE_PLAN.md).
+Bank Tags lets you group bank items into named tags and arrange them into your own layouts. An item can belong to more than one tag. Tags are views of your bank: removing an item from a tag does **not** destroy or withdraw the bank item.
 
-Everything here is checked against Bank Core's stand-in host only. Nothing in this repository has been verified in the live client yet; see [Not yet verified live](#not-yet-verified-live).
+## Before you start
 
-## Features
+Enable **PrettyUI**, **Bank Core**, and **Bank Tags** in the client's plugin manager. **RuneQL** is optional: it lets item and icon searches cover its full catalog. Without it, those searches cover your bank, exact item IDs, and config names.
 
-- **First-run tutorial.** An empty tag list opens a nine-step guide: open Bank Tags from the rail, create a tag, drag in an item, open the tag, edit and place the item in Layout, close the editor, withdraw an item, create a folder, and open Import/Share to copy the tag code. Native yellow/white flash frames and the native tutorial pointer mark the current control. The 521x144 help window uses the native info icon and navigation arrow sprites, with a quiet step cue. Actions advance automatically; numbered buttons and arrows revisit or skip steps. Editing must place an item in Layout, folder creation must use a new folder, and withdrawal advances from the native Withdraw action for this tag. The last step points to Share and the tag's code field, leaving that field available for Ctrl+A and Ctrl+C. Closing or finishing dismisses it, and the sidebar's Help icon replays it. The guide creates no sample data. Closing the bank or unloading removes the guide and its listeners. The guide uses component coordinates; its placement, mirrored arrows, and sound still need a live-client check. See [native tutorial assets](docs/NATIVE_TUTORIAL_ASSETS.md) for the live component and sprite IDs.
+Open a bank and click **Bank Tags** on the left rail. There is no separate Bank Tags ribbon panel.
 
-- **Tags tab.** A sidebar tab Bank Core mounts, drawn by Bank Tags: search, sorting, folders with collapse, tag and folder icons, a status line, and a footer with Import/Share, New Tag, and the layout editor. Use Rename folder to choose its icon with the same picker as tags. Icons are included in saved folders and share codes, and follow Show tag sprites. Any number of tags fits; the list is Bank Tags' own, not Core's row list.
-- **Showing a tag.** Choosing a tag shows it through one Bank Core page, keyed `tag:<name>`, with its saved layout: labels, deliberate empty rows, exact copies, ghost copies that open their source, and Unsorted items under their own heading. Choosing the shown tag again returns to the bank's own view. Bank Core names the page's items that have no bank stack beneath them, such as ghosts; Bank Tags adds nothing over the page.
-- **Right-click menus.** Tag rows offer Select, Edit (opens the layout editor), Rename (name and icon), Select items, Remove, Remove from folder, and an Add to folder or Move to folder submenu listing the other folders, Create new folder, and Cancel. Folder rows offer Collapse or Expand, Rename folder, and Ungroup folder. Items of the shown tag, including ghosts and items the bank does not hold, offer Remove from the tag, which removes the copy that slot was drawn for. While the layout editor is open, nothing beneath it gets entries; a row of its sorted grid, an item, empty cell, or label, offers an Edit row submenu under Cancel, which stays the left click. Add row above and Add row below insert a full empty row at that grid line, moving every later row and label down in one save, and split a row that wraps across the line (the last line has no Add row below). Remove row is offered on every line of the layout: it removes just that line and what is on it, also one line of a wrapped row, and moves every later row and label up in one save and one undo step. An empty line goes at once; a line with items or reserved slots first asks in a confirmation window that counts them and says only the tag changes, and a label's line asks before removing only the label. Its items leave the tag as Remove does, so a copy elsewhere keeps the stack it opens. Cancel, or a confirmation made stale by any save, another tag, or a closed editor, removes nothing. Unsorted, Search, the tag rail, the tab headers, the scrollbar, the drop row, and the empty rows after the layout offer nothing. Like Tags row entries, they act once, only when picked from the opened menu, and not after the layout, open tag, editor size, or editor changes or a drag starts. Cancel does nothing.
-- **Drag and drop.** Dragging a bank item onto a tag row adds that copy; dropping it on New Tag creates a tag holding it and opens it for naming.
-- **Select mode.** Select items makes "Add to <tag>" the left click on bank items and outlines the tag's members in gold. The Tags tab shows the tag being filled, pulses its row, and offers Done.
-- **Layout editor.** A window over the bank, sized and placed from Bank Core's bank bounds, laid out at Bank Core's grid columns so it matches the page. A narrow tag rail runs down the left edge, like Bank Core's tab rail: one button per tag in the Tags tab's order, folder members included, showing the tag's icon (or its first letters when it has none), with the open tag outlined in gold and "Folder / Tag" as its tooltip; arrows page through more tags than fit. The rail and both columns start right under the title bar, and the title bar's close button closes the editor. It closes with the bank, on leaving the game, and when Bank Core stops, through Bank Core's `onBankClose`; a resize reopens it at the new size. The sorted grid sits beside the rail at Bank Core's columns under a single PrettyUI Layout tab, with the open tag's name beside it; it is level with Unsorted and the same height, and both columns use the same tab header and one framed item area. The rail's outline and tooltips also show the open tag, and the Tags tab's Rename changes its name or icon. New Tag and Import/Share stay in the Tags tab. The right column takes the rest of the width with Unsorted and Search tabs; Unsorted is shown first, at as many columns as the column fits (nine at the default size), and each grid scrolls separately. One row under both columns, from the rail to the right edge, holds Copy, Paste, Remove, Move to Unsorted, New label, and a red Close at the right; their tooltips give the shortcuts and drag hints, and changes save automatically. Drag items and labels, drag an item between the sorted grid and Unsorted, and drag search results into the sorted grid. Shift-click sorted items to add or remove them from a group, all outlined in gold; Shift-click never drags, and pressing any group item without Shift drags the whole group, keeping each item's row and column offset from the one grabbed. While dragging, every cell the group would take is shaded gold, or red when the drop is refused: a group cannot reach past the grid's edges, onto a label's line, or into Unsorted. Items it lands on, and empty or reserved cells, fill the cells it left in reading order, all in one save; a refused or failed drop changes nothing and says why. A plain click on an item outside the group selects only that item. With a group selected, Remove, Move to Unsorted, and Delete act on nothing and say to select one item, while Copy takes the whole group; New label goes above the item last grabbed. Changing tag clears the group, and items removed or moved to Unsorted elsewhere leave it. Labels stay in the sorted grid, and Unsorted keeps its own order. Hovering an item in the sorted grid or Unsorted shows its name, also while the grids' drag surfaces cover them; a drag, an open menu, or the label prompt, tag settings, or sprite picker over the editor hides it. Changing tab ends a drag in progress; the search text and each list's scroll are kept. Renaming the open tag keeps it open; deleting it opens the first tag. After pressing an item in either grid, Delete removes it, once per key press. Copy or Ctrl+C puts the selected item or group on the editor's clipboard, saving nothing; clicking an empty cell in the sorted grid outlines it in gold, and Paste or Ctrl+V adds new copies there that open the same bank stacks, never duplicating an item. A group keeps each item's offset from its top-left one. Every cell they would take must be empty and inside the grid, or nothing is pasted and the editor says why. The pasted copies are selected, and the clipboard pastes again until the tag changes or the editor closes; renaming the tag keeps it. Unsorted cells are never paste cells. With Arrow-key movement turned on in Bank settings (it is off by default, since the client's camera also hears the arrows), the arrow keys, without Shift, Ctrl, or Alt, move the selected sorted item or group one cell, once per press, by the same rules as dragging it there: items it lands on swap into the cells it left, a group keeps its offsets, and it stays selected. A grid edge stops it without a message, nothing wraps to the next line, a label's line refuses it and says why, Down past the last row adds one, and Unsorted items do not move. Ctrl+Z undoes and Ctrl+Y redoes the open tag's layout edits, once per press: moves and drags, group drags, Paste, Remove, Move to Unsorted, search drops, label changes, and added or removed rows, each one step that saves once. Up to 50 steps are kept for the open tag while the editor is open; changing tag or closing the editor ends them, renaming the open tag keeps them, and a change to the open tag from outside the editor ends them rather than being overwritten. Undo puts back only that tag's rows, labels, copies, and Unsorted list, never its name, icon, folder, other tags, or settings. A failed save keeps the step. They need no selected item. Ctrl counts when the key event or `Keyboard.IsControlDown` reports it; with Shift or Alt also held, including AltGr, which arrives as Ctrl and Alt, no shortcut runs. The OS's repeats of a held key are ignored. The Remove button's tooltip names these keys. The client reports no focused text field, so the keys stop working once the search field, the Search tab, or a menu other than the sorted grid's own Edit row menu is opened, the label prompt, tag settings, or a row confirmation is open, or the game loses focus, until the grid is pressed again. With debug logging on, each key press with a modifier, and each shortcut key, is logged with its key codes, modifiers, and what blocked it. A text field elsewhere, such as chat or a window not opened from the editor, is not detected.
-- **Import/Share.** Share codes per tag, import with a preview, renaming, a sprite, and a folder, and import sources other plugins register.
-- **Bank settings.** Show tag sprites, where new items go (Unsorted or the first empty slot), Arrow-key movement in the layout editor (off by default; the arrows also move the camera), and debug logging, in Bank Tags' section of Bank Core's settings window (the gear at the bottom of the bank sidebar). Bank Tags registers the section with `owner:SetSettings` and saves the values itself.
-- **No plugin window entry.** Bank Tags has no ribbon icon or panel in the Plugins window; Import/Share opens from the Tags tab's footer.
+## Make your first tag
 
-## Requirements and load order
+1. Click **New Tag** at the bottom of the sidebar.
+2. Enter a name, choose an icon if you want one, and save.
+3. Drag a bank item onto the tag's row to add it.
+4. Click the tag to view its items. Click it again to return to the normal bank view.
 
-- **PrettyUI** is a required dependency.
-- **Bank Core** (`bankcore`) is needed for anything in the bank. It is declared as an optional dependency only because the host reports changes for optional dependencies; required dependencies get no change notification. Without Bank Core, Bank Tags loads, keeps its tags, and waits; other plugins can still register import sources.
-- **RuneQL** (`runeql`) is optional. With it, the sprite picker and the editor's item search cover every item. Without it they find items in the bank by name, an exact item ID, or an exact config name, and say so. Once the host reports RuneQL unloaded, search stops reading it, even if its global remains, until the host reports it loaded again.
+You can also drop an item onto **New Tag**, then name the new tag. Dragging adds the item to the tag; it does not move the item out of your bank.
 
-Any load order works: Bank Tags connects when Bank Core loads, reconnects when Bank Core reloads, and lets go when Bank Core unloads, through the host's `PluginDependencyUpdate`. Reloading Bank Tags shuts down the previous copy in the same Lua state first; a copy whose owner ID a newer load took stays idle. A typical development reload is Bank Core first, then Bank Tags, but either can reload alone.
+An empty tag list offers a guided tutorial. Click the **Help “i” beside Search** to replay it. Its arrows and numbered steps let you go back or skip ahead.
 
-## Saved data
+## Add several bank items
 
-- Tags save under `banktags:tags:v3:*` and preferences under `banktags:settings:v1`, in Bank Tags' own saved data.
-- **A new install starts with no tags.** Each plugin's saved data is separate, so Bank Tags cannot read the old Bank Utilities plugin's `bankutils:tags:*` data, and it never changes or deletes it. Tags made with the old plugin come across through its per-tag share codes, if you have them: paste each into Import. The share format, `bankutilities-tags` version 3, is unchanged. The old Bank Utilities plugin is not expected to work against this Bank Core, whose private bridge it used was removed.
-- A tag holds at most 9,998 rows, labels, and items, so Bank Core can always add the Unsorted heading. A larger saved tag is kept whole; until it is made smaller, its page explains why it is not drawn.
-- A save that cannot be read is reported in the Tags tab and never overwritten; nothing is saved until it is fixed or removed.
+Right-click a tag and choose **Select items**. Click bank items to add them to that tag; items already included have a gold outline. Click **Done** in the sidebar to finish.
 
-## Changes from the old integrated plugin
+Select mode needs the bank's **All Items** view. Drops from numbered native bank tabs use the item's first stack when the exact stack cannot be identified.
 
-- Drops onto a tag row or New Tag work from any native bank tab. From All Items a drop tags the exact copy dragged; a numbered tab's order is its own, so Bank Core names no copy and the drop tags the object's first copy (with duplicate stacks, that may not be the stack dragged).
-- Select mode works in the bank's All Items view only, where copy numbers are known, and ends on another native tab.
-- Select mode outlines members in gold, Bank Core's highlight, not white. Its status and Done button are in the Tags tab, not a panel over the bank's right column. The left-click entry reads "Add to <tag>" followed by the item's name.
-- Right-clicking a sorted layout item offers Move to Unsorted, Edit row, Remove from Tag, and Cancel, in that order. Item actions affect the clicked copy and can be undone. Blank cells and labels offer Edit row and Cancel. The footer also has Copy, Paste, Remove, and Move to Unsorted. The editor chooses tags from an icon rail, and its item icons use the client's default look because Bank Core does not report a stack's outline or shadow.
-- Tag names may be up to 80 characters in the tag settings field, matching what saving always allowed.
-- Cleanup, RuneQL queries, and Advanced Bank Search are not part of Bank Tags.
+## Rename, group, and sort tags
 
-## Layout
+- **Rename:** right-click a tag to change its name or icon.
+- **Folders:** right-click a tag and use **Add to folder** or **Move to folder**. Create a new folder there if needed.
+- **Folder icons:** right-click the folder and choose **Rename folder**.
+- **Expand or collapse:** click a folder's row.
+- **Sort:** click the Sort icon beside Import/Share in the footer, then use the row arrows. Click Sort again to finish.
+- **Remove:** removing a tag deletes the tag and its saved layout, not the bank items. Removing it from a folder keeps the tag.
 
-- `plugins/banktags/`: the entry (`main.lua`) and manifest.
-- `banktags/`: every runtime module. All require paths start with `banktags/`, so none can collide with Bank Core's modules.
-- `tools/`: the build and check tools, and the test harness that loads Bank Core beside Bank Tags.
-- `tests/`: the tests; see [tests/README.md](tests/README.md).
-- `reference/`: the preserved source from Bank Utilities `beba274`, kept as an archive. Nothing in it is built or loaded. `EXTRACTION_MANIFEST.json` records where each preserved file came from.
+## Arrange a tag's layout
 
-## Build and check
+Right-click the tag and choose **Edit**, or use the sidebar's Edit button while that tag is open.
 
-```text
-lua54 tools/build.lua
-lua54 tools/check.lua
-```
+The left grid is **Layout**. The right side contains **Unsorted** items and **Search**. Items in Unsorted still belong to the tag; they simply have no chosen layout position.
 
-The build writes only `dist/banktags/`: `main.lua`, `plugin.json`, the 51 modules the entry's require graph loads, and the tutorial's Ogg sound resource, with the entry's module eviction list generated from that graph. It refuses output paths inside the source tree and removes only what its previous build wrote. The check builds into `dist/check`, runs every test, compiles every built file, and fails on unexpected globals, a runtime source the entry never loads, or anything from `reference/`, `tests/`, or `tools/` in the package. Tests that load Bank Core read it from `BANKCORE_ROOT`.
+- Drag items into Layout to position them. Moving onto another item swaps positions.
+- Shift-click Layout items to select a group, then drag a selected item without Shift to move the group. The group keeps its shape. Gold previews fit; red previews are refused.
+- **New label** adds a heading. Labels can be renamed, moved, or removed.
+- Right-click a Layout item for **Move to Unsorted**, **Edit row**, **Remove from Tag**, and **Cancel**.
+- Right-click a blank cell or label for row editing.
+- **Edit row** offers row insertion and removal. Removing a populated row asks for confirmation and removes its contents from the tag, not your bank.
+- Click **Close** or the title-bar X to leave the editor. Edits save automatically.
 
-The toolchain used locally is a Lua 5.4 interpreter with `luac54` beside it, which the compile step needs.
+### Copy, paste, and undo
 
-## Not yet verified live
+Click an item before using a shortcut. Click an empty Layout cell to choose where to paste.
 
-- Keyboard focus in the Tags tab's search field inside Bank Core's mounted column, and tooltips drawn through the mount's overlay.
-- How the host positions PrettyUI list rows and scrolls them; drops and right-clicks find rows by where they are drawn, which the stand-in host models.
-- How the host clones exports. Bank Core's and Bank Tags' roots are plain tables, and the tests inject an ordinary field-by-field clone of each, but the client's own copy, and whether functions it copies can be called across plugins, are unverified. Bank Tags also falls back to `__bankcore_api` when the shared Lua state has it, and never reads `LIMITS`.
-- When the host calls `PluginDependencyUpdate` on reloads, whether it re-injects the global, and whether module caches are scoped per plugin.
-- The drop hook's return value and naming, which Bank Core owns.
-- Bank Core's bank bounds as screen coordinates for placing the layout editor, and how 80-character names fit the bank header.
-- PrettyUI's item slot `SetTooltip` and the item grid in the sprite picker, which the stand-in host does not draw.
-- The layout editor's item names: that its drag surfaces hear hover over the grids and results, and that a name beside the editor stays in front of it. The stand-in host's tooltips record their text and target; they are not drawn.
-- The layout editor's arrow keys, Ctrl+C, Ctrl+V, Ctrl+Z, and Ctrl+Y: that the client sends `KeyDown` with the documented `GameKey.LEFT`, `RIGHT`, `UP`, `DOWN`, `C`, `V`, `Z`, and `Y` with the grid pressed, and reports Ctrl through `ModifierKey.CONTROL` in the event or `Keyboard.IsControlDown`. Captured live events use Ctrl = 4, Alt = 2, and Shift = 1; shortcut matching uses those values. Debug logging records shortcuts for diagnosis. The stand-in host sends the key events directly.
-- The Edit row submenu as the client draws it beside the editor, and that picking a child acts once and reaches nothing beneath; the tests run PrettyUI's real `AddSubmenu`, not its drawn rows.
-- The layout editor's group selection: that `Keyboard.IsShiftDown` reads Shift at the moment the grid's surface hears the press, that a drag surface's click and release arrive in that order for a Shift-click, and how the translucent gold and red drop cells and the group's count draw over the grid while it scrolls. The stand-in host sets Shift directly.
-- The folder submenu as the client draws it beside a Tags row menu, and that clicking one of its folders moves the tag once and reaches no Tags row beneath; the tests run PrettyUI's real `AddSubmenu` and its clear-then-act order, not its drawn rows.
+| Action | Shortcut | What it does |
+| --- | --- | --- |
+| Copy | Ctrl+C | Copies the selected item or group to the editor clipboard |
+| Paste | Ctrl+V | Places additional layout copies into empty cells |
+| Remove | Delete | Removes the selected single item from the tag |
+| Undo | Ctrl+Z | Reverses the last layout edit |
+| Redo | Ctrl+Y | Reapplies an undone edit |
+
+Layout copies point to the same bank stack; they do not duplicate real items. Every destination cell must be empty for a paste to succeed. **Cut is not implemented.**
+
+Undo keeps up to 50 steps for the current tag while the editor stays open. Switching tags or closing the editor clears undo and the clipboard. Renaming the tag keeps them. Changes made elsewhere to that tag end its undo history.
+
+Remove and Move to Unsorted require a single selection; Copy supports a group. Shortcuts pause while you type in editor fields or use its dialogs. Click the grid again to resume them.
+
+Arrow-key movement is **off by default**. Enable it in Bank settings → Bank Tags if desired. The arrows also move the game's camera.
+
+## Import and share
+
+Click **Import/Share** at the bottom-left of the sidebar.
+
+- **Share:** select the tag's code field and copy its text.
+- **Import:** choose a source, enter the code or source details, review the preview, then confirm the import.
+
+Sharing a tag shares its layout, labels, icon, and folder information, not bank ownership or quantities. Keep a share code for important layouts before making large changes.
+
+## Settings and troubleshooting
+
+Open the sidebar gear and choose **Bank Tags** to change tag icons, new-item placement, arrow-key movement, or debug logging.
+
+- **Nothing appears:** check that Bank Core and PrettyUI are enabled.
+- **Cannot open a tag or use select mode:** switch to the native All Items tab and try again.
+- **Limited item search:** enable RuneQL for the full catalog.
+- **Shortcut does nothing:** close dialogs, click the grid, and release Shift/Alt before using Ctrl.
+- **Save error:** read the displayed message. Unreadable saved data is protected from being overwritten; do not delete it without a backup.
+
+A new installation starts empty. Tags from the older integrated Bank Utilities plugin must be transferred with its share codes; they are not imported automatically.
+
+## For reviewers and developers
+
+[Build, saved-data details, architecture, and validation limits](docs/DEVELOPMENT.md) · [API contract](CONTRACT.md) · [code style](STYLE_GUIDE.md).
+
+The current build has automated regression coverage. Live-client checks are still required for the exact release, especially scaling, drag-and-drop, shortcuts, menus, and tutorial placement.
