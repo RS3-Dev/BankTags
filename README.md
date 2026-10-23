@@ -25,13 +25,14 @@ Right-click a tag and choose **Select items**. Click bank items to add them to t
 
 Select mode needs the bank's **All Items** view. Drops from numbered native bank tabs use the item's first stack when the exact stack cannot be identified.
 
-## Rename, group, and sort tags
+## Rename, group, and reorder tags
 
 - **Rename:** right-click a tag to change its name or icon.
 - **Folders:** right-click a tag and use **Add to folder** or **Move to folder**. Create a new folder there if needed.
 - **Folder icons:** right-click the folder and choose **Rename folder**.
 - **Expand or collapse:** click a folder's row.
-- **Sort:** click the Sort icon beside Import/Share in the footer, then use the row arrows. Click Sort again to finish.
+- **Reorder:** drag a tag or folder row and release it where the gold line shows. A folder moves with all its tags, even while collapsed. A tag inside a folder moves only among that folder's tags; right-click it and use **Move to folder** or **Remove from folder** to change folders. Clear the search first: rows don't move while a search filters the list.
+- **Cancel a drag:** drop the row back where it started, or move the pointer out of the list.
 - **Remove:** removing a tag deletes the tag and its saved layout, not the bank items. Removing it from a folder keeps the tag.
 
 ## Arrange a tag's layout

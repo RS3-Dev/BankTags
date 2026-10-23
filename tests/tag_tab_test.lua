@@ -25,19 +25,17 @@ app:Changed()
 
 local tab = app.tab
 local list = tab.controls.list
--- Help shares the search row; footer actions fill the width
+-- Help shares the search row; Import/Share, a wide New Tag, and Edit fill the footer
 local function checkButtons(editing)
     local controls = tab.controls
     local search = controls.list.search.root
     local help = controls.tutorialButton.root
     local share = controls.importShareButton.root
-    local sort = controls.list.sortButton.root
     local newTag = controls.newTagButton.root
     assert(help.y == search.y and help.x == search.x + search.width + 6)
     assert(help.height == search.height)
-    assert(sort.x == share.x + share.width + 8 and sort.y == share.y)
-    assert(sort.height == share.height)
-    assert(newTag.x == sort.x + sort.width + 8 and newTag.y == share.y)
+    assert(newTag.x == share.x + share.width + 8 and newTag.y == share.y)
+    assert(newTag.height == share.height)
     if editing then
         local edit = controls.editTagButton.root
         assert(edit.x == newTag.x + newTag.width + 8 and edit.y == share.y)
@@ -75,9 +73,9 @@ list.search.root.hooks.contentchanged(nil, "change", "")
 assert(pagesPut == 0 and tagRows() == 72)
 
 -- Collapsing a folder hides its members and saves the state
-list.list:Click("__banktags_folder:combat")
+h:ClickRow("__banktags_folder:combat")
 assert(app.store:GetFolder("combat").collapsed and tagRows() == 70)
-list.list:Click("__banktags_folder:combat")
+h:ClickRow("__banktags_folder:combat")
 assert(not app.store:GetFolder("combat").collapsed and tagRows() == 72)
 
 -- Folder settings reuse the tag icon picker and save only on confirmation
@@ -103,24 +101,16 @@ app.windows.tagSettingsEditor:SetSprite(4151)
 app.windows:Close("tagSettingsEditor")
 assert(app.store:GetFolderSprite("combat") == 385, "cancel keeps the saved folder icon")
 
--- Sorting shows arrows that move an entry one step within its own group
-local sortButton = list.sortButton.root
-sortButton.hooks.pressed()
-assert(list.sortMode and #list.sortButtons > 0)
-local before = app.store:AllTags()
-for _, button in ipairs(list.sortButtons) do
-    if button.spriteName == "ARROW_DOWN" and button.root.parent == list.list.rows[1].root then
-        button.action()
-        break
+-- Rows are reordered by dragging them, so the column has no Sort button or row arrows
+for _, spriteName in ipairs({ "SWAP", "ARROW_UP", "ARROW_DOWN" }) do
+    for _, control in ipairs(tab.controls.owned) do assert(control.spriteName ~= spriteName) end
+    for _, row in ipairs(list.list.rows) do
+        for _, child in ipairs(row.root.children) do assert(child.spriteName ~= spriteName) end
     end
 end
-assert(app.store:AllTags()[1] ~= before[1], "the first entry moved down")
-sortButton = list.sortButton.root
-sortButton.hooks.pressed()
-assert(not list.sortMode)
 
 -- Choosing a tag shows it through Bank Tags' one page, keyed by the tag
-list.list:Click("melee")
+h:ClickRow("melee")
 h:Tick(2)
 assert(app.shownTag == "melee" and layout.pageState.view.key == "tag:melee")
 checkButtons(true)
@@ -138,12 +128,12 @@ end
 assert(hasEditButton())
 list = tab.controls.list
 -- Another tag updates the same page with a new key; the shown tag again leaves it
-list.list:Click("ranged")
+h:ClickRow("ranged")
 h:Tick(2)
 assert(app.shownTag == "ranged" and layout.pageState.view.key == "tag:ranged")
 assert(#app.handle:GetState().pages == 1)
 list = tab.controls.list
-list.list:Click("ranged")
+h:ClickRow("ranged")
 h:Tick(2)
 assert(app.shownTag == nil and layout.selectedTag == nil and not hasEditButton())
 
@@ -155,7 +145,7 @@ local guidance = nil
 local showGuidance = layout.ShowPageGuidance
 layout.ShowPageGuidance = function(_, reason) guidance = reason end
 list = tab.controls.list
-list.list:Click("melee")
+h:ClickRow("melee")
 h:Tick(2)
 assert(app.shownTag == nil and layout.selectedTag == nil and guidance == "not_all_items")
 layout.nativeViewAll, layout.DetectNativeViewAll, layout.ShowPageGuidance = true, detect, showGuidance

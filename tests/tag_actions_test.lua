@@ -211,7 +211,7 @@ assert((host.items[1].outlineWidth or 0) == 0 and Harness.Find(h:TabParent(), "S
 
 -- Opening a tag ends select mode quietly
 assert(app.select:Toggle("ranged"))
-app.tab.controls.list.list:Click("melee")
+h:ClickRow("melee")
 h:Tick(2)
 assert(app.select:Tag() == nil and app.shownTag == "melee" and app.status == nil)
 -- Starting select mode while a tag is shown leaves the tag first

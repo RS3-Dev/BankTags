@@ -527,6 +527,13 @@ function Harness.Has(menu, label)
     return false
 end
 
+-- Click a Tags row as the client does: PrettyUI's row hears the press, then the row hears the release
+function Harness:ClickRow(entryID)
+    local list = self:App().tab.controls.list
+    assert(list.list:Click(entryID), tostring(entryID) .. " has no row")
+    list:RowFor(entryID).root.hooks.release()
+end
+
 -- Point the mouse at a position relative to a component
 function Harness:PointAt(component, x, y)
     local Geometry = require("banktags/ui/geometry")

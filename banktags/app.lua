@@ -334,6 +334,17 @@ function App:MoveTagToFolder(tag, folderKey)
     return true
 end
 
+-- Move a tag or folder in the Tags tab, saving the new order once
+function App:MoveSidebarEntry(source, target, after)
+    local saved, reason = self.store:MoveSidebarEntry(source, target, after)
+    if not saved then
+        if reason ~= nil then self:ShowStatus(tostring(reason)) end
+        return false
+    end
+    self:Changed()
+    return true
+end
+
 -- Remove a folder while keeping its tags
 function App:DeleteFolder(folderKey)
     local saved, reason = self.store:DeleteFolder(folderKey)

@@ -3,6 +3,7 @@
 local Geometry = {}
 
 local MAX_PARENT_DEPTH = 32
+local POINTER_HOOK = "banktags_pointer_scale"
 local pointerScale, pointerInterfaceScale
 
 -- Read the game's current interface scale
@@ -29,10 +30,15 @@ end
 
 -- Keep pointer conversion aligned with native hover events
 function Geometry.trackPointer(component)
-    component:Subscribe(ui.Hook.ONMOUSEREPEAT, "banktags_pointer_scale", function(value, x, y)
+    component:Subscribe(ui.Hook.ONMOUSEREPEAT, POINTER_HOOK, function(value, x, y)
         Geometry.calibratePointer(value, x, y)
         return false
     end)
+end
+
+-- Stop calibrating from a component's hover events
+function Geometry.untrackPointer(component)
+    component:Unsubscribe(ui.Hook.ONMOUSEREPEAT, POINTER_HOOK)
 end
 
 -- Locate a component relative to an ancestor

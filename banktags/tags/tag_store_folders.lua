@@ -67,34 +67,38 @@ function TagStoreFolders:TagTree()
     return nodes
 end
 
--- Move a tag or folder one place, keeping folder members together
-function TagStoreFolders:MoveSidebarEntry(tag, folderKey, offset)
-    if offset ~= -1 and offset ~= 1 then return false, "Choose up or down." end
-    local tree = self:TagTree()
-    local siblings, source
+-- Find the list holding a tag or folder in the tree, and its place there
+-- A folder's tags are listed in the folder; other tags and folders in the tree
+local function locate(tree, entry)
     for index, node in ipairs(tree) do
-        if folderKey ~= nil and node.kind == "folder" and node.key == folderKey then
-            siblings, source = tree, index
-            break
-        elseif folderKey == nil then
-            if node.kind == "tag" and node.tag == tag then
-                siblings, source = tree, index
-                break
-            elseif node.kind == "folder" then
-                for memberIndex, member in ipairs(node.tags) do
-                    if member == tag then
-                        siblings, source = node.tags, memberIndex
-                        break
-                    end
-                end
-                if source ~= nil then break end
+        if entry.kind == "folder" then
+            if node.kind == "folder" and node.key == entry.key then return tree, index end
+        elseif node.kind == "tag" then
+            if node.tag == entry.tag then return tree, index end
+        else
+            for memberIndex, member in ipairs(node.tags) do
+                if member == entry.tag then return node.tags, memberIndex end
             end
         end
     end
-    if source == nil then return false, "The sidebar entry no longer exists." end
-    local destination = source + offset
-    if destination < 1 or destination > #siblings then return false, nil end
-    siblings[source], siblings[destination] = siblings[destination], siblings[source]
+    return nil, nil
+end
+
+-- Move a tag or folder before or after another in one save
+-- Entries are { kind = "tag", tag = name } or { kind = "folder", key = key }
+-- A folder moves with its tags, and a folder's tags move only within it
+-- A move that changes nothing saves nothing and gives no reason
+function TagStoreFolders:MoveSidebarEntry(source, target, after)
+    local tree = self:TagTree()
+    local siblings, from = locate(tree, source)
+    local targetSiblings, to = locate(tree, target)
+    if siblings == nil or targetSiblings == nil then return false, "The sidebar entry no longer exists." end
+    if siblings ~= targetSiblings then return false, "A tag can only move among the tags beside it." end
+    local destination = after and to + 1 or to
+    -- Taking the entry out first shifts every later place up by one
+    if destination > from then destination = destination - 1 end
+    if destination == from then return false, nil end
+    table.insert(siblings, destination, table.remove(siblings, from))
     return self:SaveTagOrder(treeTagOrder(tree))
 end
 

@@ -132,7 +132,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         -- A child chosen after a row click, a removed folder, or a rebuilt tab moves nothing
         pointAtRow("ranged")
         menu = h:ContentMenu()
-        app.tab.controls.list.list:Click("ranged")
+        h:ClickRow("ranged")
         Harness.ChooseChild(menu, moveRanged, "Combat")
         h:Tick(2)
         assert(app.store:GetTagFolder("ranged") == "archery" and app:ToggleTag("ranged"), where)
@@ -192,7 +192,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         assert(app.store:GetFolder("combat").collapsed, where)
         menu = shows(folderRow, named({ "Expand", "Rename folder", "Ungroup folder" }, "Combat"))
         -- A left click runs the default and the row's own click; the row answers it once
-        local function click(id) app.tab.controls.list.list:Click(id) end
+        local function click(id) h:ClickRow(id) end
         local function leftClickRow(id)
             pointAtRow(id)
             local default = leftClick(h:ContentMenu())
@@ -302,7 +302,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         -- An entry chosen after a row click, or from a rebuilt tab, does nothing
         pointAtRow("ranged")
         menu = h:ContentMenu()
-        app.tab.controls.list.list:Click("melee")
+        h:ClickRow("melee")
         Harness.Choose(menu, "Edit <col=f2c66d>Ranged</col>")
         h:Tick(2)
         assert(app.shownTag == "melee" and app.windows.tagSettingsEditor == nil, where)

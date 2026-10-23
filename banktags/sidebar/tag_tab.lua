@@ -137,9 +137,8 @@ function TagTab:BuildFooter(controls, height, width)
     })
     owned[#owned + 1] = controls.importShareButton
     local editing = app.shownTag ~= nil
-    local newTagX = FOOTER_X + (ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP) * 2
+    local newTagX = FOOTER_X + ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP
     local newTagWidth = width - ICON_BUTTON_SIZE - FOOTER_BUTTON_GAP
-        - ICON_BUTTON_SIZE - FOOTER_BUTTON_GAP
         - (editing and ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP or 0)
     controls.newTagButton = BankControls.button(parent, "New Tag", function()
         app:ShowStatus(nil)
@@ -216,11 +215,6 @@ function TagTab:Build()
         settings = function() return app.settings end,
         state = self.listState,
         width = bounds.width,
-        sortButton = {
-            x = FOOTER_X + ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP,
-            y = bounds.height - 36,
-            size = ICON_BUTTON_SIZE,
-        },
         listHeight = math.max(1, bottom - SidebarRows.LIST_TOP - 4),
         isSelected = function(tag) return tag == app.shownTag or tag == app.select:Tag() end,
         onSelect = function(tag)
@@ -228,6 +222,7 @@ function TagTab:Build()
             app:ToggleTag(tag)
         end,
         onChanged = function() app:Changed(nil) end,
+        onReorder = function(source, target, after) app:MoveSidebarEntry(source, target, after) end,
     })
     self.controls = controls
     if app.status ~= nil then

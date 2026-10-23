@@ -28,7 +28,7 @@ local function clickRow(tag)
     app.tab.controls.list.list.scrollY = row.root.y
     h:PointAt(row.root, 20, 10 - row.root.y)
     local default = Harness.LeftClick(h:ContentMenu())
-    app.tab.controls.list.list:Click(tag)
+    h:ClickRow(tag)
     h:Tick(2)
     -- Select is the left click, which the row answers once; no window opens unasked
     assert(string.sub(tostring(default), 1, 7) == "Select ", tostring(default))
