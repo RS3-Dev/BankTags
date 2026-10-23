@@ -11,7 +11,6 @@ Tutorial.__index = Tutorial
 local EVENT = "banktags_tutorial"
 local WIDTH, HEIGHT = 521, 144
 local STEPS = {
-    { title = "Open Bank Tags", text = "Click the Bank Tags icon on the left-hand sidebar rail to open your tag list." },
     { title = "Create a tag", text = "Click New Tag, give it a name, then Save. Tags group bank items without moving them out of your bank." },
     { title = "Add bank items", text = "In All Items, drag an item you have in your bank onto the new tag in the sidebar. The item stays in your bank." },
     { title = "Open your tag", text = "Click your tag to see its items. Select the bank's All Items tab first if you are viewing a numbered bank tab." },
@@ -74,6 +73,7 @@ end
 -- Offer the first tour only to an empty store
 function Tutorial:Offer(state)
     if not self.active and not self.offered and not self.app.settings.tutorialSeen
+        and self.app.tab.controls ~= nil
         and state ~= nil and state.bounds ~= nil and self.app.store.loadError == nil
         and #self.app.store:AllTags() == 0 then self:Start() end
 end
@@ -86,6 +86,7 @@ end
 -- Open the guide without creating tutorial data
 function Tutorial:Start()
     if self.active then return end
+    if self.app.tab.controls == nil then return end
     local parent = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__GAME_AREA)
         or ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__BANK_LAYER)
     if parent == nil or self.app.state == nil or self.app.state.bounds == nil then return end
@@ -164,7 +165,6 @@ function Tutorial:Start()
     self.arrow:SetSize(41, 54)
     self.arrow.clickthrough = true
     self:Go(1)
-    self.firstRailVisit = true
     self.window:Show()
     Event.Logic.Subscribe(EVENT, function() self:Tick() end)
     Event.MiniMenuEntrySelected.Subscribe(EVENT, function(event) self:ObserveWithdrawal(event.entry) end)
@@ -172,7 +172,7 @@ end
 
 -- Observe a native withdrawal from this tag
 function Tutorial:ObserveWithdrawal(entry)
-    if not self.active or self.step ~= 7 or self.app.handle == nil or entry == nil then return end
+    if not self.active or self.step ~= 6 or self.app.handle == nil or entry == nil then return end
     local verb = tostring(entry.verbText or ""):gsub("<[^>]*>", ""):lower()
     if not verb:match("^withdraw") then return end
     local item = self.app.handle:GetMenuItem(entry)
@@ -196,7 +196,7 @@ function Tutorial:WatchShare(window, field)
     self:UnwatchShare()
     self.shareField, self.shareWindow = field, window
     field.root:Subscribe(ui.Hook.ONCLICK, EVENT, function()
-        if self.active and self.step == 9 and self.app.windows.importShare == window then self.shareClicked = true end
+        if self.active and self.step == 8 and self.app.windows.importShare == window then self.shareClicked = true end
         return false
     end)
 end
@@ -216,8 +216,7 @@ function Tutorial:Go(step)
     if not self.active or step < 1 or step > #STEPS then return end
     self:UnwatchShare()
     self.step, self.ticks = step, 0
-    self.firstRailVisit = false
-    if step == 2 then
+    if step == 1 then
         self.initialTags = {}
         for _, tag in ipairs(self.app.store:AllTags()) do self.initialTags[tag] = true end
     end
@@ -225,7 +224,6 @@ function Tutorial:Go(step)
     self.shownBefore = self.app.shownTag
     self.layoutBefore = self.tag ~= nil and Json.encode(self.app.store:LayoutState(self.tag)) or nil
     self.hadEditor = self.app.windows.layoutEditor ~= nil
-    self.activeBefore = self.app.handle ~= nil and self.app.handle:GetState().activeTab or nil
     self.withdrawObject = nil
     self.foldersBefore = {}
     for _, folder in ipairs(self.app.store:GetFolders()) do self.foldersBefore[folder.key] = true end
@@ -247,34 +245,31 @@ function Tutorial:Target()
     local app, step = self.app, self.step
     local controls, editor = app.tab.controls, app.windows.layoutEditor
     local state = app.handle ~= nil and app.handle:GetState() or {}
+    if controls == nil then return nil end
     if step == 1 then
-        return state.tabBounds ~= nil and state.tabBounds.tags or nil
-    end
-    if controls == nil then return state.tabBounds ~= nil and state.tabBounds.tags or nil end
-    if step == 2 then
         local settings = app.windows.tagSettingsEditor
         if settings ~= nil and settings.window.root.hidden ~= true then
             return settings.saveButton.root
         end
         return controls.newTagButton.root
-    elseif step == 3 or step == 4 or step == 8 then
+    elseif step == 2 or step == 3 or step == 7 then
         local prompt = app.windows.textPrompt
-        if step == 8 and prompt ~= nil and prompt.folderTag == self.tag then
+        if step == 7 and prompt ~= nil and prompt.folderTag == self.tag then
             return prompt.buttons[#prompt.buttons].root
         end
         local row = self.tag ~= nil and app.tab:RowFor(self.tag) or nil
         return row ~= nil and row.root or controls.newTagButton.root
-    elseif step == 5 then
+    elseif step == 4 then
         if editor == nil then
             local row = self.tag ~= nil and app.tab:RowFor(self.tag) or nil
             return row ~= nil and row.root or nil
         end
         return editor.panes.sorted.view.root
-    elseif step == 6 then
+    elseif step == 5 then
         return editor ~= nil and editor.closeButton.root or nil
-    elseif step == 7 then
+    elseif step == 6 then
         return state.pageBounds
-    elseif step == 9 then
+    elseif step == 8 then
         local window = app.windows.importShare
         if window == nil then return controls.importShareButton.root end
         if window.tabs:GetActiveIndex() ~= 2 then return window.tabs:GetTab(2).hit end
@@ -292,19 +287,15 @@ function Tutorial:Check()
     end
     local complete = false
     if step == 1 then
-        local active = app.handle ~= nil and app.handle:GetState().activeTab or nil
-        if active ~= "tags" then self.activeBefore = active end
-        complete = active == "tags" and (self.firstRailVisit or self.activeBefore ~= "tags")
-    elseif step == 2 then
         for _, tag in ipairs(app.store:AllTags()) do
             if not self.initialTags[tag] then self.tag, complete = tag, true; break end
         end
-    elseif step == 3 then
+    elseif step == 2 then
         complete = self.tag ~= nil and #app.store:GetTaggedItems(self.tag) > self.itemsBefore
-    elseif step == 4 then
+    elseif step == 3 then
         if app.shownTag ~= self.tag then self.shownBefore = app.shownTag end
         complete = self.tag ~= nil and app.shownTag == self.tag and app.shownTag ~= self.shownBefore
-    elseif step == 5 then
+    elseif step == 4 then
         local arranged = false
         local record = self.tag ~= nil and app.store.data.tags[self.tag] or nil
         for _, row in ipairs(record ~= nil and record.rows or {}) do
@@ -312,15 +303,15 @@ function Tutorial:Check()
         end
         complete = app.windows.layoutEditor ~= nil and self.tag ~= nil and self.layoutBefore ~= nil
             and arranged and Json.encode(app.store:LayoutState(self.tag)) ~= self.layoutBefore
-    elseif step == 6 then
+    elseif step == 5 then
         if app.windows.layoutEditor ~= nil then self.hadEditor = true end
         complete = self.hadEditor and app.windows.layoutEditor == nil
-    elseif step == 7 then
+    elseif step == 6 then
         complete = self.withdrawObject ~= nil
-    elseif step == 8 then
+    elseif step == 7 then
         local folder = self.tag ~= nil and app.store:GetTagFolder(self.tag) or nil
         complete = folder ~= nil and folder ~= self.folderBefore and not self.foldersBefore[folder]
-    elseif step == 9 then
+    elseif step == 8 then
         complete = self.shareClicked and self.app.windows.importShare == self.shareWindow
     end
     if complete then
@@ -351,7 +342,7 @@ function Tutorial:Position()
     x, y = x - parentX, y - parentY
     -- Rows outside their scrolling viewport must not light up
     local controls = self.app.tab.controls
-    if (self.step == 3 or self.step == 4 or self.step == 8) and controls ~= nil
+    if (self.step == 2 or self.step == 3 or self.step == 7) and controls ~= nil
         and target == (self.tag ~= nil and self.app.tab:RowFor(self.tag) or {}).root then
         local _, viewportY, _, viewportHeight = bounds(controls.list.list.root)
         if viewportY ~= nil and (y + parentY < viewportY or y + parentY + height > viewportY + viewportHeight) then

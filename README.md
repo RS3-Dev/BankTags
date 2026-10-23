@@ -17,7 +17,7 @@ Open a bank and click **Bank Tags** on the left rail. There is no separate Bank 
 
 You can also drop an item onto **New Tag**, then name the new tag. Dragging adds the item to the tag; it does not move the item out of your bank.
 
-An empty tag list offers a guided tutorial. Click the **Help “i” beside Search** to replay it. Its arrows and numbered steps let you go back or skip ahead.
+Opening an empty tag list offers an eight-step tutorial, starting with **New Tag**. Click the **Help “i” beside Search** to replay it. Its arrows and numbered steps let you go back or skip ahead.
 
 ## Add several bank items
 
