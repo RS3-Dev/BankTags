@@ -55,7 +55,7 @@ A tag becomes `{ title, key = "tag:<name>", layout = rows }`:
 - Labels become `{ label = text }`, rows become `{ slots = ... }`, and a deliberately empty row stays `{ slots = {} }`.
 - A first copy is its object ID; a later copy or ghost is `{ item, copy, source }`. An item this client cannot resolve, or a copy the page already shows, becomes `false` in place.
 - Unsorted items follow under `{ label = "Unsorted" }` in one row, only when there are any.
-- The page counts at most 10,000 entries, Bank Core's limit. Edits and imports keep a tag within 9,998 so Unsorted always fits. A larger saved tag gets a notice page (`body` with one plugin block) saying how many entries it has; its saved data is not cut.
+- The page counts at most 10,000 entries, Bank Core's limit. Edits and imports keep a tag within 9,998 so Unsorted always fits. A larger saved tag gets a notice page (an empty `layout` whose `mount` draws the text) saying how many entries it has; its saved data is not cut.
 
 ## Host behavior Bank Tags relies on
 

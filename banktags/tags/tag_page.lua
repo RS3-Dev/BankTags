@@ -84,8 +84,7 @@ function TagPage.Build(store, tag, noticeMount)
     -- The saved tag stays whole; Bank Core just cannot draw it
     local notice = "This tag has " .. count .. " rows, labels, and items. Bank Core shows at most "
         .. TagPage.MAX_ENTRIES .. ". Remove some in the layout editor to show it."
-    return { title = title, key = TagPage.Key(tag), mount = noticeMount,
-        body = { { ui = "notice", height = 80 } } }, notice
+    return { title = title, key = TagPage.Key(tag), mount = noticeMount, layout = {} }, notice
 end
 
 return TagPage

@@ -137,7 +137,7 @@ assert(ChunkedStringStore.Write({ manifestKey = "banktags:tags:v3:manifest",
 local legacy = TagStore.new()
 assert(legacy.loadError == nil and TagData.EntryCount(legacy.data.tags.full) == TagData.MAX_TAG_ENTRIES)
 page, notice = TagPage.Build(legacy, "full", { mount = function() end })
-assert(notice ~= nil and page.body ~= nil and page.layout == nil)
+assert(notice ~= nil and page.mount ~= nil and #page.layout == 0)
 assert(string.find(notice, tostring(TagData.MAX_TAG_ENTRIES + 2), 1, true))
 assert(accepts(page))
 -- Loading, unrelated edits, and saving keep the oversized tag whole

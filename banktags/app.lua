@@ -363,12 +363,11 @@ function App:DeleteFolder(folderKey)
     return true
 end
 
--- Explain a tag page too large for Bank Core to show
+-- Explain a tag page too large for Bank Core to show, at the top of its empty page
 function App:DrawNotice(ctx)
-    local block = ctx:GetBlocks().notice
     local text = ui.Text.new(ctx.parent)
-    text:SetPos(12, block.y + 8)
-    text:SetSize(ctx:GetBounds().width - 24, block.height - 16)
+    text:SetPos(12, 8)
+    text:SetSize(ctx:GetBounds().width - 24, 64)
     text.content = tostring(self.notice or "")
     text.font = id.Font.MUSEO_SANS_11PT_REGULAR
     text.rgba = 0xE7D7B0FF
