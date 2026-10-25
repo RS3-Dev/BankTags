@@ -33,7 +33,7 @@ end
 function Harness.CoreRoot()
     local root = os.getenv("BANKCORE_ROOT") or "../bank-utilities"
     root = string.gsub(root, "\\", "/")
-    if not exists(root .. "/plugins/bankcore/main.lua") then
+    if not exists(root .. "/main.lua") then
         error("Bank Core was not found at " .. root .. "; set BANKCORE_ROOT to a bank-utilities checkout", 0)
     end
     local contract = readText(root .. "/HOST_CONTRACT.md") or ""
@@ -306,7 +306,7 @@ function Harness.new(name, options)
         menuOrder = "core_first",
         coreRoot = coreRoot,
         out = out,
-        coreFolder = coreRoot .. "/plugins/bankcore",
+        coreFolder = coreRoot,
         tagsFolder = built.folder,
         built = built,
     }, { __index = Harness })
