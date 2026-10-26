@@ -116,7 +116,7 @@ assert(app.shownTag == "melee" and layout.pageState.view.key == "tag:melee")
 checkButtons(true)
 local state = app.handle:GetState()
 assert(#state.pages == 1 and state.pages[1] == "tag" and state.openPage == "tag")
-local entries = layout:VisibleMirrorEntries()
+local entries = layout:BuildPageItems()
 assert(#entries == 1 and entries[1].objectID == 4151)
 -- The footer offers the layout editor only while a tag is shown
 local function hasEditButton()

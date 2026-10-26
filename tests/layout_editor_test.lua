@@ -128,7 +128,7 @@ assert(#row == 12 and row[12].layoutKey == key(385, 1), "the shark landed at row
 h:Tick(4)
 -- Bank Core draws the page at the same columns
 local whipY, sharkX, sharkY = nil, nil, nil
-for _, entry in ipairs(layout:VisibleMirrorEntries()) do
+for _, entry in ipairs(layout:BuildPageItems()) do
     if entry.objectID == 4151 then whipY = entry.y end
     if entry.objectID == 385 then sharkX, sharkY = entry.x, entry.y end
 end

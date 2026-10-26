@@ -110,7 +110,7 @@ app:Changed()
 editor.closeButton.action()
 h:Tick(5)
 assert(tour.step == 6 and tour:Target() ~= nil)
-local target = layout.nativeLease.visibleInteractionTargets[1].root
+local target = layout.itemHover.visibleItemInputTargets[1].root
 h:PointAt(target, 5, 5)
 h:Tick(2)
 local menu = h:MenuFor(h.bankHost.items[1])
@@ -125,7 +125,7 @@ assert(tour.step == 6, "a quantity change alone is not a withdrawal action")
 h.bankHost:SetItems({ { 385, 20, "Shark" } })
 h:Fire("InventoryUpdated", { inv = { id = 95 } })
 h:Tick(8)
-target = layout.nativeLease.visibleInteractionTargets[1].root
+target = layout.itemHover.visibleItemInputTargets[1].root
 h:PointAt(target, 5, 5)
 h:Tick(2)
 menu = h:MenuFor(h.bankHost.items[1])

@@ -46,7 +46,7 @@ local app = h:App()
 assert(app.store.loadError == nil)
 assert(app.store.loadError == nil)
 local session, layout = h:OpenBank()
-local engine = layout.listEngine
+local engine = layout.pageDisplay
 h:Tick(2)
 
 -- Find the notice text the app drew in the page's mounted parent
@@ -68,7 +68,7 @@ local opened, reason = app:ShowTag("full")
 assert(opened, tostring(reason))
 h:Tick(2)
 assert(app.shownTag == "full" and layout.selection ~= nil)
-assert(session.extensionPages:PageTitle(layout.selection) == TagPage.Title("full"))
+assert(session.pluginPages:PageTitle(layout.selection) == TagPage.Title("full"))
 local text, mount = noticeText()
 assert(text ~= nil, "the notice page mounted no text")
 -- The text says how many entries the tag has and what to do
@@ -82,15 +82,15 @@ assert(parent.parent == engine.pageUILayer and text.parent == parent)
 assert(text.x == 12 and text.y == 8 and text.width == bounds.width - 24 and text.height == 64)
 assert(text.x + text.width <= bounds.width and text.y + text.height <= bounds.height)
 -- The page has no slots, so nothing native is moved under it
-assert(#layout:VisibleMirrorEntries() == 0 and #mount.ctx:GetLayout().slots == 0)
-assert(#layout.nativeLease.interactionEntries == 0)
+assert(#layout:BuildPageItems() == 0 and #mount.ctx:GetLayout().slots == 0)
+assert(#layout.itemHover.clickablePageItems == 0)
 for slot, native in ipairs(h.bankHost.items) do assert(native.x == 10 + (slot - 1) * 44, slot) end
 
 -- Showing a tag that fits replaces the notice with that tag's items
 assert(app:ShowTag("small"))
 h:Tick(2)
 assert(text.destroyed and engine.pageMount == nil and app.notice == nil)
-assert(#layout:VisibleMirrorEntries() == 1 and layout:VisibleMirrorEntries()[1].objectID == 385)
+assert(#layout:BuildPageItems() == 1 and layout:BuildPageItems()[1].objectID == 385)
 -- And showing the oversized tag again mounts a fresh notice
 assert(app:ShowTag("full"))
 h:Tick(2)

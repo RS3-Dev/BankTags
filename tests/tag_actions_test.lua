@@ -1,6 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Drive Bank Tags' item menus, drops, select mode, and bank snapshots
+-- Drive Bank Tags' item menus, drops, select mode, and bank bankItems
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -63,7 +63,7 @@ assert(layout.pageState.view.key == "tag:melee")
 -- A ghost removes its own copy, not the stack beneath
 pointAt(52, 4)
 h:Tick()
-assert(layout.nativeLease:HasInteractionLease())
+assert(layout.itemHover:HasHoveredBankStack())
 local menu = h:MenuFor(host.items[1])
 Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
 assert(app.store:HasTag("melee", key(4151, 3)))
@@ -130,7 +130,7 @@ app.windows:Close("tagSettingsEditor")
 layout.nativeViewAll = false
 local detect = layout.DetectNativeViewAll
 layout.DetectNativeViewAll = function() return false end
-h:Session().extensionPages:Notify()
+h:Session().pluginPages:Notify()
 h:Tick(2)
 assert(app.status == nil, tostring(app.status))
 layout:SetNativeViewAll(false)
@@ -175,7 +175,7 @@ app:Changed()
 assert(not app:AddItemToTag("ranged", 4151, nil) and not app.store:HasTag("ranged", key(4151, 1)))
 layout.nativeViewAll, layout.DetectNativeViewAll = true, detect
 app:ShowStatus(nil)
-h:Session().extensionPages:Notify()
+h:Session().pluginPages:Notify()
 h:Tick(2)
 assert(app.status == nil)
 
@@ -244,7 +244,7 @@ assert(app.select:Tag() == "fighting" and app.select:Label() == "Add to Fighting
 assert(app.handle:GetState().highlighted and app.select:Stop())
 h:Tick(2)
 
--- Bank snapshots ---------------------------------------------------------------------
+-- Bank bankItems ---------------------------------------------------------------------
 
 -- The editor and search keep the last good snapshot while Core rereads
 assert(app.bankItems ~= nil)
@@ -253,7 +253,7 @@ assert(app:ShowTag("fighting"))
 h:Tick(2)
 pointAt(8, 4)
 h:Tick()
-assert(layout.nativeLease:HasInteractionLease())
+assert(layout.itemHover:HasHoveredBankStack())
 host:Rebuild(function(specs) specs[3][2] = 99 end)
 layout:HandleInventoryUpdate()
 h:Tick(2)

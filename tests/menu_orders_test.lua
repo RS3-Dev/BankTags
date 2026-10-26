@@ -262,7 +262,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
             assert(app.shownTag == (count % 2 == 1 and "ranged" or nil), count .. where)
         end
         -- The row answers the left click, so the default alone does nothing
-        local pages = session.extensionPages
+        local pages = session.pluginPages
         local leave, leaves = pages.LeavePage, 0
         pages.LeavePage = function(...)
             leaves = leaves + 1
@@ -326,7 +326,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         h:Tick(2)
         pointAt(52, 4)
         h:Tick()
-        assert(layout.nativeLease:HasInteractionLease(), where)
+        assert(layout.itemHover:HasHoveredBankStack(), where)
         menu = h:MenuFor(host.items[1])
         assert(leftClick(menu) == "Withdraw-1", table.concat(Harness.Labels(menu), "|") .. where)
         Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
