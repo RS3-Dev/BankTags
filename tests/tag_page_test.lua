@@ -27,15 +27,14 @@ local function blank() return { kind = "blank" } end
 local function row(...) return { kind = "row", slots = { ... } } end
 local function label(text) return { kind = "label", text = text } end
 
--- A test owner registers pages through Core's public API, as Bank Tags does
+-- A test owner passes pages to Core's public API, as Bank Tags does
+-- The bank is closed, and Core checks a page before the bank, so a good page is refused only for that
 local owner = assert(api.RegisterExtension("test.tags", "Tag pages"))
-local registered = 0
--- Register a page and report whether Core accepted it
+-- Report whether Core accepted a page
 local function accepts(page)
-    registered = registered + 1
-    local ok, reason, detail = owner:RegisterPage("p" .. registered, page)
-    if not ok then return false, tostring(reason) .. ": " .. tostring(detail) end
-    assert(owner:RemovePage("p" .. registered))
+    local ok, reason, detail = owner:CreatePage(page)
+    assert(not ok)
+    if reason ~= "bank_closed" then return false, tostring(reason) .. ": " .. tostring(detail) end
     return true
 end
 

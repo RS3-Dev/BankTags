@@ -132,7 +132,8 @@ function TagMenus:AddItemEntries(menu, item)
             action = self:Defer(current, function() select:Picked(session, item) end) })
         return
     end
-    if item.pageID ~= TagPage.PAGE_ID or item.slot == nil then return end
+    -- Bank Core gives a page's key only to its owner, so a tag key means Bank Tags' own page
+    if item.slot == nil then return end
     local tag = TagPage.TagFromKey(item.key)
     if tag == nil then return end
     local layoutKey = ItemIdentity.LayoutKey(item.objectID, item.slot.copy)

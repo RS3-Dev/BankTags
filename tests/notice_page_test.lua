@@ -67,8 +67,8 @@ end
 local opened, reason = app:ShowTag("full")
 assert(opened, tostring(reason))
 h:Tick(2)
-assert(app.shownTag == "full" and layout.selection ~= nil)
-assert(session.pluginPages:PageTitle(layout.selection) == TagPage.Title("full"))
+assert(app.shownTag == "full" and layout.shownPage ~= nil)
+assert(layout.shownPage.title == TagPage.Title("full"))
 local text, mount = noticeText()
 assert(text ~= nil, "the notice page mounted no text")
 -- The text says how many entries the tag has and what to do
@@ -101,7 +101,7 @@ assert(again ~= nil and again ~= text and again.content == app.notice)
 h:CloseBank()
 h:Tick(2)
 assert(again.destroyed and engine.pageMount == nil and engine.pageUILayer == nil)
-assert(layout.selection == nil)
+assert(layout.shownPage == nil)
 for slot, native in ipairs(h.bankHost.items) do assert(native.x == 10 + (slot - 1) * 44, slot) end
 -- Loading never cut the saved tag
 assert(TagData.EntryCount(app.store.data.tags.full) == TagData.MAX_TAG_ENTRIES)

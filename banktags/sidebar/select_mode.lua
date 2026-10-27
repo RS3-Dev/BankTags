@@ -73,7 +73,7 @@ function SelectMode:Start(tag)
     local handle = app.handle
     if handle == nil then return false end
     -- Select mode needs the bank's own view
-    if handle:GetState().openPage ~= nil then handle:LeavePage() end
+    if handle:GetState().pageVisible then handle:LeavePage() end
     local started, reason = handle:SetItemHighlight(highlight(app.store, tag))
     if not started then
         app:ShowStatus(SelectMode.Explain(reason))

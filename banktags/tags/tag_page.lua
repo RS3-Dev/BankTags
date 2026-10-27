@@ -1,4 +1,4 @@
--- Describe a saved tag as the single Bank Core page that shows it
+-- Describe a saved tag as the Bank Core page that shows it
 
 local Text = require("banktags/core/text")
 local TagData = require("banktags/tags/tag_data")
@@ -6,8 +6,6 @@ local ItemIdentity = require("banktags/tags/item_identity")
 
 local TagPage = {}
 
--- The one page ID Bank Tags registers
-TagPage.PAGE_ID = "tag"
 TagPage.UNSORTED_LABEL = "Unsorted"
 local KEY_PREFIX = "tag:"
 -- Bank Core's limit on labels, rows, and slots in one page

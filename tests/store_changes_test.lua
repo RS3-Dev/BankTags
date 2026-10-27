@@ -9,7 +9,7 @@ local h = Harness.new("store_changes")
 local host = h.bankHost
 host:SetItems({ { 4151, 1, "Abyssal whip" }, { 385, 20, "Shark" } })
 host.itemLayer.interfaceID = 517
-h:LoadCore()
+local core = h:LoadCore()
 h:LoadTags()
 local app = h:App()
 h:OpenBank()
@@ -38,9 +38,9 @@ end
 reset()
 local tabRefresh = app.tab.Refresh
 app.tab.Refresh = function(tab) counts.tab = counts.tab + 1; return tabRefresh(tab) end
-app.PutPage = function(self, tag)
+app.CreateTagPage = function(self, tag)
     counts.pages[#counts.pages + 1] = tag
-    return App.PutPage(self, tag)
+    return App.CreateTagPage(self, tag)
 end
 local Chunks = h:TagsModule("banktags/core/chunked_string_store")
 local write = Chunks.Write
@@ -217,5 +217,25 @@ assert(saved and name == "kit")
 app:Renamed("gear", "kit")
 assert(#counts.pages == 1 and counts.pages[1] == "kit" and app.shownTag == "kit")
 assert(editor.selectedTag == "kit" and counts.center == 1)
+
+-- A change to the shown tag never takes the bank from another plugin's page,
+-- even before Bank Tags hears that its page went; the player's click shows the tag again
+local layout = h:Session().layout
+local other = assert(core.result.RegisterExtension("test.other", "Other"))
+assert(other:CreatePage({ title = "Other", key = "other", layout = { { slots = { 385 } } } }))
+reset()
+assert(app.shownTag == "kit" and app:AddItemToTag("kit", 385, 2))
+assert(#counts.pages == 0 and layout.shownPage.title == "Other")
+h:Tick(2)
+assert(app.shownTag == nil and layout.shownPage.title == "Other")
+assert(app:ShowTag("kit") and layout.shownPage.key == "tag:kit" and app.shownTag == "kit")
+-- Once the player picks a native tab, a change to the tag shows nothing
+layout:SetNativeViewAll(false)
+reset()
+assert(app:AddItemToTag("kit", 385, 3))
+h:Tick(2)
+assert(#counts.pages == 0 and layout.shownPage == nil and app.shownTag == nil)
+layout:SetNativeViewAll(true)
+assert(other:Dispose())
 
 print("store changes test passed")

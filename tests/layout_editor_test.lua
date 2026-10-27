@@ -287,7 +287,7 @@ h:Tick(2)
 app.windows:OpenTagDeleteConfirm("snacks")
 app.windows.tagDeleteConfirm.confirmButton.root.hooks.click()
 h:Tick(2)
-assert(app.store.data.tags.snacks == nil and app.shownTag == nil and layout.selection == nil)
+assert(app.store.data.tags.snacks == nil and app.shownTag == nil and layout.shownPage == nil)
 
 -- The footer Close button closes the editor, as does Bank Core unloading
 assert(app:ShowTag("melee"))

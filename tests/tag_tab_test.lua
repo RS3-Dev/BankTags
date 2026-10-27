@@ -58,8 +58,8 @@ assert(tagRows() == 72, "every tag has a row: " .. tagRows())
 
 -- Searching filters only the tab's own list and never touches the page
 local pagesPut = 0
-local putPage = app.PutPage
-app.PutPage = function(...)
+local putPage = app.CreateTagPage
+app.CreateTagPage = function(...)
     pagesPut = pagesPut + 1
     return putPage(...)
 end
@@ -112,10 +112,10 @@ end
 -- Choosing a tag shows it through Bank Tags' one page, keyed by the tag
 h:ClickRow("melee")
 h:Tick(2)
-assert(app.shownTag == "melee" and layout.pageState.view.key == "tag:melee")
+assert(app.shownTag == "melee" and layout.shownPage.key == "tag:melee")
 checkButtons(true)
 local state = app.handle:GetState()
-assert(#state.pages == 1 and state.pages[1] == "tag" and state.openPage == "tag")
+assert(state.pageVisible and state.pageKey == "tag:melee")
 local entries = layout:BuildPageItems()
 assert(#entries == 1 and entries[1].objectID == 4151)
 -- The footer offers the layout editor only while a tag is shown
@@ -130,12 +130,12 @@ list = tab.controls.list
 -- Another tag updates the same page with a new key; the shown tag again leaves it
 h:ClickRow("ranged")
 h:Tick(2)
-assert(app.shownTag == "ranged" and layout.pageState.view.key == "tag:ranged")
-assert(#app.handle:GetState().pages == 1)
+assert(app.shownTag == "ranged" and layout.shownPage.key == "tag:ranged")
+assert(app.handle:GetState().pageVisible)
 list = tab.controls.list
 h:ClickRow("ranged")
 h:Tick(2)
-assert(app.shownTag == nil and layout.selection == nil and not hasEditButton())
+assert(app.shownTag == nil and layout.shownPage == nil and not hasEditButton())
 
 -- Outside All Items Tags supplies the warning text
 layout.nativeViewAll = false
@@ -144,7 +144,7 @@ layout.DetectNativeViewAll = function() return false end
 list = tab.controls.list
 h:ClickRow("melee")
 h:Tick(2)
-assert(app.shownTag == nil and layout.selection == nil and layout.warningPanel.children[3].content == 'Select "All Items" to view this tag.')
+assert(app.shownTag == nil and layout.shownPage == nil and layout.warningPanel.children[3].content == 'Select "All Items" to view this tag.')
 layout.nativeViewAll, layout.DetectNativeViewAll = true, detect
 layout:StopWarning()
 
@@ -181,7 +181,7 @@ end
 Harness.Choose(menu, "Select <col=f2c66d>Melee</col>")
 assert(app.shownTag == nil)
 h:Tick(2)
-assert(app.shownTag == "melee" and layout.pageState.view.key == "tag:melee")
+assert(app.shownTag == "melee" and layout.shownPage.key == "tag:melee")
 assert(app.handle:LeavePage())
 h:Tick(2)
 

@@ -25,7 +25,7 @@ local _, layout = h:OpenBank()
 h:Tick(2)
 local tabParent = h:TabParent()
 assert(tabParent ~= nil and Harness.Find(tabParent, "Melee") ~= nil)
-assert(app:ShowTag("melee") and layout.pageState.view.key == "tag:melee")
+assert(app:ShowTag("melee") and layout.shownPage.key == "tag:melee")
 
 -- Core reloads and Bank Tags reconnects through a fresh clone
 h.host:Reload("bankcore", { shutdown = true, notify = true, reinject = true })
@@ -35,7 +35,7 @@ assert(freshClone ~= coreClone and freshClone ~= core.result)
 assert(app:IsConnected() and app.bank == freshClone)
 _, layout = h:OpenBank()
 h:Tick(2)
-assert(h:TabParent() ~= nil and app:ShowTag("melee") and layout.pageState.view.key == "tag:melee")
+assert(h:TabParent() ~= nil and app:ShowTag("melee") and layout.shownPage.key == "tag:melee")
 
 -- A plugin that requires Bank Tags adds an import source using only its injected clone
 local folder = h.out .. "/importer"

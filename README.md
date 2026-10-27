@@ -82,7 +82,7 @@ Sharing a tag shares its layout, labels, icon, and folder information, not bank 
 
 Open the sidebar gear and choose **Bank Tags** to change tag icons, new-item placement, arrow-key movement, or debug logging.
 
-- **Nothing appears:** check that Bank Core and PrettyUI are enabled.
+- **Nothing appears:** check that Bank Core and PrettyUI are enabled. If the client log says Bank Tags needs a newer Bank Core, update Bank Core.
 - **Cannot open a tag or use select mode:** switch to the native All Items tab and try again.
 - **Limited item search:** enable RuneQL for the full catalog.
 - **Shortcut does nothing:** close dialogs, click the grid, and release Shift/Alt before using Ctrl.

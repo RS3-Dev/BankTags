@@ -283,7 +283,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         chooseSelect("ranged", "Select <col=f2c66d>Ranged</col>")
         assert(app.shownTag == "ranged" and leaves == 0, where)
         chooseSelect("ranged", "Select <col=f2c66d>Ranged</col>")
-        assert(app.shownTag == nil and layout.selection == nil and leaves == 1, where)
+        assert(app.shownTag == nil and layout.shownPage == nil and leaves == 1, where)
         chooseSelect(folderRow, "Collapse <col=f2c66d>Combat</col>")
         assert(app.store:GetFolder("combat").collapsed, where)
         chooseSelect(folderRow, "Expand <col=f2c66d>Combat</col>")
@@ -366,7 +366,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         pointAtRow("ranged")
         Harness.Choose(h:ContentMenu(), "Select items <col=f2c66d>Ranged</col>")
         h:Tick(2)
-        assert(app.select:Tag() == "ranged" and app.shownTag == nil and layout.selection == nil, where)
+        assert(app.select:Tag() == "ranged" and app.shownTag == nil and layout.shownPage == nil, where)
         for slot = 1, 3 do
             menu = h:MenuFor(host.items[slot])
             assert(leftClick(menu) == "Add to Ranged <col=f2c66d>Item</col>",

@@ -21,6 +21,9 @@ App.__index = App
 
 local TAB_ID = "tags"
 local NEEDS_ALL_ITEMS = 'Select "All Items" before adding items to tags.'
+local NEEDS_NEWER_CORE = "Bank Tags needs a newer Bank Core. Update Bank Core to show tags."
+-- Reasons Bank Core gives for a page it cannot show, rather than for the bank's view
+local PAGE_REFUSALS = { invalid_page = true, unknown_item = true, duplicate_slot = true, too_large = true }
 
 -- Find a running Bank Core API, trying the one passed in before the global copy
 local function findBank()
@@ -48,11 +51,10 @@ function App.new()
         -- Bank Core's API and this plugin's owner handle
         bank = nil,
         handle = nil,
-        -- What Bank Core last reported
+        -- What Bank Core last reported, and the tag whose page it shows
         state = nil,
         shownTag = nil,
         bankItems = nil,
-        pageRegistered = false,
         -- A notice the Tags tab shows
         status = nil,
         -- Preferences shown while their settings section is open
@@ -112,6 +114,12 @@ function App:Connect()
         debugLog("Bank Tags could not register with Bank Core: ", tostring(reason))
         return false, reason
     end
+    -- An older Bank Core shows pages another way, so it needs updating first
+    if type(handle.CreatePage) ~= "function" then
+        handle:Dispose()
+        log(NEEDS_NEWER_CORE)
+        return false, "bankcore_outdated"
+    end
     self.bank, self.handle = api, handle
     local ok, failure = handle:RegisterTab(TAB_ID, {
         label = "Tags", icon = "LIST_LAYOUT", tooltip = "Bank tags", mount = self.tab.callbacks,
@@ -146,7 +154,7 @@ function App:Disconnect()
     self.select:Forget()
     local handle = self.handle
     self.handle, self.bank = nil, nil
-    self.state, self.shownTag, self.bankItems, self.pageRegistered = nil, nil, nil, false
+    self.state, self.shownTag, self.bankItems = nil, nil, nil
     if handle ~= nil then pcall(function() handle:Dispose() end) end
 end
 
@@ -159,9 +167,14 @@ function App:OnState(state)
 end
 
 -- Remember which tag Bank Core shows, if any
-function App:OnPage(pageID, key)
-    self.shownTag = pageID == TagPage.PAGE_ID and TagPage.TagFromKey(key) or nil
+function App:OnPage(visible, key)
+    self.shownTag = visible and TagPage.TagFromKey(key) or nil
     self.tab:Refresh()
+end
+
+-- Report whether Bank Core shows this plugin's page now, whatever the last notice said
+function App:PageVisible()
+    return self.handle ~= nil and self.handle:GetState().pageVisible == true
 end
 
 -- Read bank items, keeping the last good copy while loading
@@ -185,47 +198,36 @@ function App:ShowStatus(text)
     self.tab:Refresh()
 end
 
--- Give Bank Core the page for a tag, registering the page the first time
-function App:PutPage(tag)
+-- Show a tag's page in the bank, through the Tags tab while it is mounted
+function App:CreateTagPage(tag)
     local page, notice = TagPage.Build(self.store, tag, self.noticeMount)
     if page == nil then return false, notice end
     self.notice = notice
+    local ctx = self.tab.ctx
     local ok, reason, detail
-    if self.pageRegistered then
-        ok, reason, detail = self.handle:UpdatePage(TagPage.PAGE_ID, page)
+    if ctx ~= nil then
+        ok, reason, detail = ctx:CreatePage(page)
     else
-        ok, reason, detail = self.handle:RegisterPage(TagPage.PAGE_ID, page)
-        self.pageRegistered = ok == true
+        ok, reason, detail = self.handle:CreatePage(page)
     end
-    if not ok then debugLog("Bank Core refused the page for ", tag, ": ", tostring(reason), " ", tostring(detail)) end
+    if not ok then debugLog("Bank Core did not show the page for ", tag, ": ", tostring(reason), " ", tostring(detail)) end
     return ok, reason
 end
 
 -- Show a tag, only from the bank's All Items view
 function App:ShowTag(tag)
     if self.handle == nil or self.store.data.tags[tag] == nil then return false end
-    local ok, reason = self:PutPage(tag)
-    if not ok then
+    local shown, reason = self:CreateTagPage(tag)
+    if reason == "not_all_items" then
+        self.handle:ShowWarning('Select "All Items" to view this tag.')
+    elseif reason == "preset_open" then
+        self.handle:ShowWarning('Close the preset selector to view this tag.')
+    elseif PAGE_REFUSALS[reason] then
         self:ShowStatus("This tag could not be shown (" .. tostring(reason) .. ").")
-        return false
     end
-    local ctx = self.tab.ctx
-    local opened
-    if ctx ~= nil then
-        opened, reason = ctx:OpenPage(TagPage.PAGE_ID)
-    else
-        opened, reason = self.handle:OpenPage(TagPage.PAGE_ID)
-    end
-    if not opened then
-        if reason == "not_all_items" then
-            self.handle:ShowWarning('Select "All Items" to view this tag.')
-        elseif reason == "preset_open" then
-            self.handle:ShowWarning('Close the preset selector to view this tag.')
-        end
-    end
-    if opened then self.shownTag = tag end
+    if shown then self.shownTag = tag end
     self.tab:Refresh()
-    return opened, reason
+    return shown, reason
 end
 
 -- Show a tag, or return to the bank's own view when that tag is already shown
@@ -246,9 +248,10 @@ function App:Changed(tag)
     if tag == nil then self.tab:Refresh() end
     self.windows:StoreChanged(tag)
     local shown = self.shownTag
-    if shown ~= nil and self.handle ~= nil and (tag == nil or tag == shown) then
+    -- Redraw only while Bank Core still shows the tag; another page may have taken the bank
+    if shown ~= nil and (tag == nil or tag == shown) and self:PageVisible() then
         if self.store.data.tags[shown] ~= nil then
-            self:PutPage(shown)
+            self:CreateTagPage(shown)
         else
             self.handle:LeavePage()
         end

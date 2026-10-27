@@ -176,7 +176,7 @@ function Tutorial:ObserveWithdrawal(entry)
     local verb = tostring(entry.verbText or ""):gsub("<[^>]*>", ""):lower()
     if not verb:match("^withdraw") then return end
     local item = self.app.handle:GetMenuItem(entry)
-    if item == nil or item.view ~= "page" or item.pageID ~= "tag" or self.app.shownTag ~= self.tag then return end
+    if item == nil or item.view ~= "page" or item.key == nil or self.app.shownTag ~= self.tag then return end
     for _, tagged in ipairs(self.app.store:GetTaggedItems(self.tag)) do
         if tagged.objectID == item.objectID then self.withdrawObject = item.objectID; return end
     end
