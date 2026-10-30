@@ -3,9 +3,8 @@
 -- A Tags row handles its own left click, so its entries only act when picked from the open menu
 
 local Config = require("banktags/core/config")
-local ItemIdentity = require("banktags/tags/item_identity")
 local MenuEntries = require("banktags/ui/menu_entries")
-local TagPage = require("banktags/tags/tag_page")
+local ObjectConfig = require("banktags/core/object_config")
 local Text = require("banktags/core/text")
 local debugLog = require("banktags/core/debug_log").Write
 
@@ -84,27 +83,17 @@ function TagMenus:Defer(current, action, forEditor)
     end
 end
 
--- Check that an item's handle and bank view are still current
-function TagMenus:ItemCheck(item, extra)
-    local app, handle = self.app, self.app.handle
-    return function()
-        return app.handle == handle and handle ~= nil and item.viewID ~= nil
-            and handle:GetState().viewID == item.viewID
-            and (extra == nil or extra())
-    end
-end
-
 -- Answer one menu: entries for the bank item beneath the pointer, or for the Tags row
 -- The layout editor covers the bank, so nothing beneath it gets entries; only its own grid does
 function TagMenus:HandleMenu(menu)
     self.rowMenu = nil
-    local handle = self.app.handle
-    if handle == nil then return end
+    local ext = self.app.ext
+    if ext == nil then return end
     if self:EditorOpen() then
         self:AddEditorEntries(menu)
         return
     end
-    local item = handle:GetMenuItem(menu)
+    local item = ext:GetMenuItem(menu)
     if item ~= nil then
         self:AddItemEntries(menu, item)
     else
@@ -112,33 +101,25 @@ function TagMenus:HandleMenu(menu)
     end
 end
 
--- Add select mode's Add to and the shown tag's Remove from
--- Without a known copy or outline, Cancel stays the left click
+-- Add select mode's Add to, or Remove from on the shown tag's page
+-- Remove from takes the clicked slot, and only while the page set when it was offered shows
 function TagMenus:AddItemEntries(menu, item)
-    local app = self.app
-    local select = app.select
-    if item.view == "native" then
-        local session = select.session
-        if session == nil then return end
-        if item.copy == nil or not select:IsShown() then
-            MenuEntries.PromoteCancel(menu)
-            return
-        end
-        local current = self:ItemCheck(item, function()
-            return select.session == session and select:IsShown()
-        end)
-        MenuEntries.AddDefault(menu, { label = select:Label(),
-            subject = Text.plain(item.name or "Item"),
-            action = self:Defer(current, function() select:Picked(session, item) end) })
+    local app, ext = self.app, self.app.ext
+    local session = app.select.session
+    if session ~= nil then
+        local current = function() return app.ext == ext and app.select.session == session end
+        MenuEntries.AddDefault(menu, { label = app.select:Label(),
+            subject = Text.plain(ObjectConfig.DisplayName(item.objectID) or "Item"),
+            action = self:Defer(current, function() app.select:Picked(session, item.objectID) end) })
         return
     end
-    -- Bank Core gives a page's key only to its owner, so a tag key means Bank Tags' own page
-    if item.slot == nil then return end
-    local tag = TagPage.TagFromKey(item.key)
-    if tag == nil then return end
-    local layoutKey = ItemIdentity.LayoutKey(item.objectID, item.slot.copy)
-    if not app.store:HasTag(tag, layoutKey) then return end
-    local current = self:ItemCheck(item, function() return app.store:HasTag(tag, layoutKey) end)
+    -- Bank Core gives a slot only on Bank Tags' own page
+    local tag, layoutKey = app:ShownTag(), item.slot ~= nil and app.pageKeys[item.slot] or nil
+    if tag == nil or not layoutKey then return end
+    local revision = app.revision
+    local current = function()
+        return app.ext == ext and app.revision == revision and app:ShownTag() == tag
+    end
     MenuEntries.AddLow(menu, { { label = "Remove from", subject = subject(tag),
         action = self:Defer(current, function() app:RemoveFromTag(tag, layoutKey) end) } })
 end
@@ -163,8 +144,7 @@ function TagMenus:AddRowEntries(menu)
     local list = tab.controls.list
     local clicks = list.clicks
     local current = function()
-        return tab.ctx == ctx and type(ctx:GetBounds()) == "table"
-            and tab.controls ~= nil and tab.controls.list == list and list.clicks == clicks
+        return tab.ctx == ctx and tab.controls ~= nil and tab.controls.list == list and list.clicks == clicks
     end
     if entry.kind == "tag" then
         local mounted = current
@@ -177,7 +157,7 @@ function TagMenus:AddRowEntries(menu)
         return function()
             debugLog("Bank Tags row entry ", label, " for ", rowMenu.id, ": opened ", tostring(rowMenu.opened),
                 ", used ", tostring(rowMenu.used), ", clicks ", clicks, " now ", list.clicks,
-                ", shown ", tostring(app.shownTag))
+                ", shown ", tostring(app:ShownTag()))
             if not rowMenu.opened or rowMenu.used then return end
             rowMenu.used = true
             deferred()

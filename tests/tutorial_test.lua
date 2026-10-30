@@ -5,8 +5,9 @@ local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("tutorial")
 h.bankHost:SetItems({ { 385, 20, "Shark" } })
 local core = h:LoadCore()
-local other = assert(core.result.RegisterExtension("example.before", "Other"))
-assert(other:RegisterTab("other", { label = "Other", icon = "STAR", mount = { mount = function() end } }))
+-- Rail entries are ordered by ID, so this column comes before Bank Tags'
+assert(core.result.Register({ id = "aa.before", name = "Other", icon = "STAR",
+    column = { mount = function() end } }))
 local tags = h:LoadTags()
 local cues, stops = 0, 0
 tags.env.Plugin = { resources = { tutorial_step = "step-cue" } }
@@ -20,14 +21,16 @@ tags.env.audio = {
 }
 local app = h:App()
 local session, layout = h:OpenBank()
-layout:SetSidebarMode("__bankutils_ext_tab:example.before/other")
+layout:SetSidebarMode("__bankutils_ext_tab:aa.before")
 h:Tick(2)
 local tour = app.tutorial
 assert(not tour.active and cues == 0, "the guide waits until the tag list is open")
 assert(#app.store:AllTags() == 0, "the tour creates no sample data")
 assert(app.tab.controls == nil)
-for _, button in ipairs(layout.tabRail.buttons) do
-    if button.tabID == "__bankutils_ext_tab:banktags/tags" then
+local rail = layout.tabRail
+for slot, button in ipairs(rail.buttons) do
+    if rail.tabs[rail.view.first + slot - 1].id == "__bankutils_ext_tab:banktags" then
+        -- Core selects a rail icon when its press is released
         h:PointAt(button.root, 5, 5)
         button.root.hooks.click()
         button.root.hooks.release()
@@ -79,7 +82,7 @@ app.windows.tagSettingsEditor:Save("Tutorial tag")
 h:Tick(5)
 assert(tour.step == 2 and tour.tag == "tutorial tag" and cues == 2)
 app.windows:Close("tagSettingsEditor")
-assert(app:AddItemToTag("tutorial tag", 385, 1))
+assert(app:AddItemToTag("tutorial tag", 385))
 h:Tick(5)
 assert(tour.step == 3)
 assert(app:ShowTag("tutorial tag"))
@@ -99,7 +102,8 @@ app:Changed()
 h:Tick(5)
 assert(tour.step == 4, "opening the editor or adding only a label does not place an item")
 assert(editor:RecordEdit("tutorial tag", function()
-    return app.store:MoveLayoutItem("tutorial tag", "object:385:1", 11, editor.columns)
+    local shark = app.store:GetTaggedItems("tutorial tag")[1].layoutKey
+    return app.store:MoveLayoutItem("tutorial tag", shark, 11, editor.columns)
 end))
 app:Changed()
 h:Tick(5)
@@ -109,7 +113,8 @@ assert(app.store:CreateFolder("Existing", "untoured"))
 app:Changed()
 editor.closeButton.action()
 h:Tick(5)
-assert(tour.step == 6 and tour:Target() ~= nil)
+-- The withdraw step points at nothing; its text says to click an item in the tag
+assert(tour.step == 6 and tour:Target() == nil and tour.highlight.hidden)
 local target = layout.itemHover.visibleItemInputTargets[1].root
 h:PointAt(target, 5, 5)
 h:Tick(2)
@@ -131,7 +136,7 @@ h:Tick(2)
 menu = h:MenuFor(h.bankHost.items[1])
 for _, entry in ipairs(menu.entries) do if entry.verbText == "Withdraw-1" then withdrawEntry = entry end end
 h:Fire("MiniMenuEntrySelected", { entry = withdrawEntry })
-assert(tour.withdrawObject == 385)
+assert(tour.withdrawn)
 h:Tick(5)
 assert(tour.step == 7, "the native withdrawal action advances without waiting on a leased snapshot")
 assert(app:MoveTagToFolder("tutorial tag", "existing"))

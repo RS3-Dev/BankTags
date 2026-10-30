@@ -15,11 +15,10 @@ local app = h:App()
 local session, layout = h:OpenBank()
 h:Tick(2)
 
-local key = require("banktags/tags/item_identity").LayoutKey
 assert(app.store:CreateTag("melee"))
 assert(app.store:CreateTag("ranged"))
-assert(app.store:AddTag("melee", 4151, key(4151, 1)))
-assert(app.store:AddTag("ranged", 385, key(385, 1)))
+assert(app.store:AddTag("melee", 4151))
+assert(app.store:AddTag("ranged", 385))
 app:Changed()
 
 -- Left-click a tag row, which also runs the menu's default
@@ -37,39 +36,37 @@ local function clickRow(tag)
 end
 
 clickRow("melee")
-assert(app.shownTag == "melee" and layout.shownPage.key == "tag:melee")
+assert(app:ShownTag() == "melee" and layout.shownPage.title == "Melee")
 -- The shown tag again returns to the bank's own view
 clickRow("melee")
-assert(app.shownTag == nil and layout.shownPage == nil)
+assert(app:ShownTag() == nil and layout.shownPage == nil)
 -- Another tag replaces the shown one, and choosing it again leaves it
 clickRow("melee")
 clickRow("ranged")
-assert(app.shownTag == "ranged" and layout.shownPage.key == "tag:ranged")
+assert(app:ShownTag() == "ranged" and layout.shownPage.title == "Ranged")
 clickRow("ranged")
-assert(app.shownTag == nil and layout.shownPage == nil)
+assert(app:ShownTag() == nil and layout.shownPage == nil)
 
 -- A native tab leaves the shown tag; All Items lets it open again
 clickRow("melee")
 layout:SetNativeViewAll(false)
 h:Tick(2)
-assert(app.shownTag == nil and layout.shownPage == nil)
+assert(app:ShownTag() == nil and layout.shownPage == nil)
 layout:SetNativeViewAll(true)
 h:Tick(2)
 clickRow("melee")
-assert(app.shownTag == "melee")
+assert(app:ShownTag() == "melee")
 
--- Another extension's tab leaves the shown tag and unmounts the Tags tab
-local other = assert(session.publicAPI.RegisterExtension("other", "Other"))
-assert(other:RegisterTab("notes", { label = "Notes", icon = "STAR", mount = { mount = function() end } }))
+-- Another extension's column unmounts the Tags tab and leaves the shown tag alone
+assert(session.publicAPI.Register({ id = "other", name = "Other", icon = "STAR",
+    column = { mount = function() end } }))
 h:Tick(2)
-layout:SetSidebarMode("__bankutils_ext_tab:other/notes")
+layout:SetSidebarMode("__bankutils_ext_tab:other")
 h:Tick(2)
-assert(app.shownTag == nil and layout.shownPage == nil and app.tab.controls == nil)
-layout:SetSidebarMode("__bankutils_ext_tab:banktags/tags")
+assert(app:ShownTag() == "melee" and app.tab.controls == nil)
+layout:SetSidebarMode("__bankutils_ext_tab:banktags")
 h:Tick(2)
-assert(app.tab.controls ~= nil)
-clickRow("melee")
-assert(app.shownTag == "melee")
+assert(app.tab.controls ~= nil and app:ShownTag() == "melee")
 
 -- Select mode from the shown tag leaves it and picks with plain left clicks
 local row = app.tab:RowFor("ranged")
@@ -77,28 +74,28 @@ app.tab.controls.list.list.scrollY = row.root.y
 h:PointAt(row.root, 20, 10 - row.root.y)
 Harness.Choose(h:ContentMenu(), "Select items <col=f2c66d>Ranged</col>")
 h:Tick(2)
-assert(app.select:Tag() == "ranged" and app.handle:GetState().highlighted)
-assert(app.shownTag == nil and layout.shownPage == nil)
--- Consecutive left clicks on native items add each copy and withdraw nothing
-local function pickItem(slot)
+assert(app.select:Tag() == "ranged")
+assert(app:ShownTag() == nil and layout.shownPage == nil)
+-- Consecutive left clicks on native items add a slot each and withdraw nothing
+local function pickItem(slot, name)
     local default = Harness.LeftClick(h:MenuFor(host.items[slot]))
-    assert(default == "Add to Ranged <col=f2c66d>Item</col>", tostring(default))
+    assert(default == "Add to Ranged <col=f2c66d>" .. name .. "</col>", tostring(default))
     h:Tick(2)
 end
-pickItem(1)
-pickItem(2)
-assert(app.store:HasTag("ranged", key(4151, 1)) and app.store:HasTag("ranged", key(4151, 2)))
+pickItem(1, "Abyssal whip")
+pickItem(2, "Abyssal whip")
+assert(h:Saved("ranged") == "385 4151 4151", h:Saved("ranged"))
 -- After the bank rebuilds its items, clicks keep tagging
 host:Rebuild()
 layout:HandleInventoryUpdate()
 h:Tick(2)
 assert(app.select:Tag() == "ranged")
-pickItem(3)
-assert(app.store:HasTag("ranged", key(385, 1)) and app.status == nil)
+pickItem(3, "Shark")
+assert(h:Saved("ranged") == "385 4151 4151 385" and app.status == nil)
 -- Done ends it; a left click on an item is the bank's own again
 Harness.Find(h:TabParent(), "Done").hooks.pressed()
 h:Tick(2)
-assert(app.select:Tag() == nil and not app.handle:GetState().highlighted)
+assert(app.select:Tag() == nil)
 assert(Harness.LeftClick(h:MenuFor(host.items[1])) == "Withdraw-1")
 
 print("bank_clicks_test: ok")

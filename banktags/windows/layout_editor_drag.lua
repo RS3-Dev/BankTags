@@ -146,13 +146,9 @@ function LayoutEditorDrag:CreateDragSurfaces()
 end
 
 -- Create an item sprite that follows the drag
-function LayoutEditorDrag:CreateDragGhost(
-    objectID, x, y, layoutKey, absentIsPlaceholder
-)
+function LayoutEditorDrag:CreateDragGhost(objectID, x, y, absentIsPlaceholder)
     local ghost = ui.Sprite.new(self.content)
-    local width, height = self:ApplyRuntimeObjectSprite(
-        ghost, objectID, layoutKey, absentIsPlaceholder
-    )
+    local width, height = self:ApplyRuntimeObjectSprite(ghost, objectID, absentIsPlaceholder)
     ghost.alpha = 0.88
     ghost:SetPos(
         (tonumber(x) or 0) - math.floor(width / 2),
@@ -223,9 +219,7 @@ function LayoutEditorDrag:BeginCenterDrag(pane, index, hit, x, y)
         return self:BeginGroupDrag(slot, pane, hit, pointX, pointY)
     end
     self:SelectOnly(slot.layoutKey)
-    local ghost, ghostWidth, ghostHeight = self:CreateDragGhost(
-        slot.objectID, pointX, pointY, slot.layoutKey, true
-    )
+    local ghost, ghostWidth, ghostHeight = self:CreateDragGhost(slot.objectID, pointX, pointY, true)
     self.drag = {
         kind = "layout",
         objectID = slot.objectID,
@@ -294,9 +288,7 @@ function LayoutEditorDrag:BeginSearchDrag(result, hit, x, y)
         pointX, pointY = self:SearchPointer(hit, x, y)
     end
     if pointX == nil then return false end
-    local ghost, ghostWidth, ghostHeight = self:CreateDragGhost(
-        result.objectId, pointX, pointY, nil, false
-    )
+    local ghost, ghostWidth, ghostHeight = self:CreateDragGhost(result.objectId, pointX, pointY, false)
     self.drag = {
         kind = "search",
         result = result,

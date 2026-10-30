@@ -1,6 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Change Bank Tags' preferences in Bank Core's settings window
+-- Change Bank Tags' preferences on its own plugin panel
 -- Each saves under Bank Tags' key, applies at once, and reverts if refused
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
@@ -10,31 +10,19 @@ h.bankHost:SetItems({ { 4151, 1, "Abyssal whip" }, { 385, 20, "Shark" } })
 h:LoadCore()
 h:LoadTags()
 local app = h:App()
-local session, layout = h:OpenBank()
+h:OpenBank()
 h:Tick(2)
 local SETTINGS_KEY = "banktags:settings:v1"
 
--- Open the settings window from the gear and choose Bank Tags' section
-local function openSection()
-    if not session.bankSettings:IsOpen() then layout.tabRail.settingsButton.root.hooks.pressed() end
-    assert(session.bankSettings.window.nav:Click("banktags"))
-    return assert(app.settingsSection)
+-- Draw Bank Tags' plugin panel as the host does
+local function openPanel()
+    local parent = ui.Layer.new(nil)
+    parent:SetSize(300, 400)
+    h.hostSubscriptions.ContentLayerReady.banktags_content({ component = parent })
+    return assert(app.settingsSection), parent
 end
 
--- List the settings window's section labels
-local function sectionLabels()
-    local labels = {}
-    for _, row in ipairs(session.bankSettings.window.nav.rows) do labels[#labels + 1] = row.entry.label end
-    return table.concat(labels, " | ")
-end
-
--- Bank Tags has no plugin panel; Import/Share opens from the Tags tab
-local manifest = assert(io.open(h.tagsFolder .. "/plugin.json", "rb"))
-assert(string.find(manifest:read("a"), '"hasRibbonIcon": false', 1, true))
-manifest:close()
-for _, subscription in ipairs(h.host:SubscriptionsOf("banktags")) do
-    assert(string.sub(subscription, 1, 18) ~= "ContentLayerReady.", subscription .. " is a plugin panel")
-end
+-- Import/Share opens from the Tags tab
 assert(app.windows.importShare == nil)
 for _, control in ipairs(app.tab.controls.owned) do
     if control.spriteName == "EXPORT" then control.action(control, false) end
@@ -42,12 +30,9 @@ end
 assert(app.windows.importShare ~= nil)
 app.windows:Close("importShare")
 
--- Bank Tags has one section, after Core's, under its owner label
-layout.tabRail.settingsButton.root.hooks.pressed()
-assert(sectionLabels() == "Bank Core | Bank Tags", sectionLabels())
+-- The panel shows Bank Tags' preferences under its name
 assert(app.settingsSection == nil)
-local section = openSection()
-local parent = session.bankSettings.shown.values.parent
+local section, parent = openPanel()
 assert(Harness.Find(parent, "Bank Tags") ~= nil)
 
 -- Each preference saves under Bank Tags' key and applies at once
@@ -82,38 +67,31 @@ h.host.rejectWrites = false
 section.controls.showTagSprites:SetSelected("showTagSprites", true, true)
 assert(app.settings.showTagSprites and section.status.hidden)
 
--- Reopening the section shows the saved values in new controls
-session.bankSettings:Close("closed")
-assert(app.settingsSection == nil)
-section = openSection()
+-- A new panel replaces the old one and shows the saved values in new controls
+local previous = section
+section = openPanel()
+assert(previous.destroyed and section ~= previous)
 assert(section.controls.showTagSprites:IsSelected("showTagSprites") and section.placement:GetSelectedID() == "fill")
 assert(section.controls.enableDebug:IsSelected("enableDebug"))
 assert(section.controls.arrowKeyMovement:IsSelected("arrowKeyMovement"))
 
--- Bank Core unloads, closing the section; it returns on reload
+-- The panel needs no Bank Core: it stays and still saves while Core is gone
 h.host:Unload("bankcore")
-assert(app.settingsSection == nil and section.destroyed)
+assert(app.settingsSection == section and not section.destroyed)
+section.controls.showTagSprites:SetSelected("showTagSprites", false, true)
+assert(h.databases.banktags[SETTINGS_KEY].showTagSprites == false)
+section.controls.showTagSprites:SetSelected("showTagSprites", true, true)
 h:LoadCore()
-assert(app:IsConnected())
-session, layout = h:OpenBank()
-h:Tick(2)
-section = openSection()
-assert(section.controls.showTagSprites:IsSelected("showTagSprites"))
+assert(h:Connected())
 
-assert(section.controls.arrowKeyMovement:IsSelected("arrowKeyMovement"))
-
--- Reloading Bank Tags reads the saved choice back
+-- Bank Tags unloads, destroying the panel; a reload reads the saved choice back
 h.host:Unload("banktags")
+assert(section.destroyed and app.settingsSection == nil)
+assert(h.hostSubscriptions.ContentLayerReady.banktags_content == nil)
 h:LoadTags()
 app = h:App()
 assert(app.settings.arrowKeyMovement == true)
-h:Tick(2)
-section = openSection()
+section = openPanel()
 assert(section.controls.arrowKeyMovement:IsSelected("arrowKeyMovement"))
-
--- Bank Tags unloads, so the window falls back to Core's section
-h.host:Unload("banktags")
-assert(section.destroyed and app.settingsSection == nil)
-assert(sectionLabels() == "Bank Core" and session.coreSettings ~= nil)
 
 print("bank_settings_test: ok")

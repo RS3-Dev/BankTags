@@ -127,7 +127,6 @@ prettyui = {
 }
 
 local ImportAPI = require("banktags/imports/import_api")
-local ItemIdentity = require("banktags/tags/item_identity")
 local ImportProviders = require("banktags/imports/import_providers")
 local TagData = require("banktags/tags/tag_data")
 local TagStore = require("banktags/tags/tag_store")
@@ -307,9 +306,11 @@ assert(writes == 1 and commits == 1 and listenerCount() == 0)
 settings.importButton:Press()
 assert(writes == 2 and commits == 2)
 assert(store:GetTagFolder("rotation gear") == "guides")
-assert(store:HasTag("rotation gear", ItemIdentity.LayoutKey(101, 1)))
-assert(store:HasTag("rotation gear", ItemIdentity.LayoutKey(101, 2)))
-assert(store:HasTag("rotation gear", ItemIdentity.LayoutKey(104, 1)))
+-- A repeated object keeps a slot for each time it is listed
+local imported = {}
+for _, slot in ipairs(store:GetTaggedItems("rotation gear")) do imported[#imported + 1] = slot.objectID end
+table.sort(imported)
+assert(table.concat(imported, " ") == "101 101 104", table.concat(imported, " "))
 assert(store:GetLabel("rotation gear", 0, 10) == "Bars")
 assert(string.find(TagData.Encode(store.data, "rotation gear"), "mystery_item", 1, true))
 assert(settings.importStatus.content == "Imported 1 tag.")

@@ -1,4 +1,4 @@
--- Convert between object IDs, saved references, and copy keys
+-- Convert between object IDs and the references saved data names them by
 
 local ObjectConfig = require("banktags/core/object_config")
 
@@ -10,20 +10,6 @@ local ID_PREFIX = "#"
 
 local namesByID = {}
 local idsByName = {}
-
--- Identify one copy of an object among the bank's stacks
-function ItemIdentity.LayoutKey(objectID, copy)
-    objectID = math.tointeger(tonumber(objectID))
-    copy = math.tointeger(tonumber(copy)) or 1
-    if objectID == nil then return nil end
-    return "object:" .. tostring(objectID) .. ":" .. tostring(copy)
-end
-
--- Read the object ID and copy number back out of a copy key
-function ItemIdentity.ParseKey(layoutKey)
-    local objectID, copy = string.match(tostring(layoutKey or ""), "^object:(%d+):(%d+)$")
-    return math.tointeger(tonumber(objectID)), math.tointeger(tonumber(copy))
-end
 
 -- Return the saved reference for an object ID
 function ItemIdentity.Reference(objectID)

@@ -1,10 +1,9 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Drive Bank Tags' item menus, drops, select mode, and bank bankItems
+-- Drive Bank Tags' item menus, select mode, and bank items
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
-local Geometry = require("banktags/ui/geometry")
 local h = Harness.new("tag_actions")
 local host = h.bankHost
 host:SetItems({ { 4151, 1, "Abyssal whip" }, { 4151, 1, "Abyssal whip" }, { 385, 20, "Shark" },
@@ -17,25 +16,16 @@ local app = h:App()
 local session, layout = h:OpenBank()
 h:Tick(2)
 
-local ItemIdentity = require("banktags/tags/item_identity")
-local key = ItemIdentity.LayoutKey
+local TagLayouts = h:TagsModule("banktags/tags/tag_layouts")
 -- Save a tag's rows directly, as a past session would
-local function item(objectID, copy, source)
-    return { kind = "item", objectID = objectID, layoutKey = key(objectID, copy),
-        sourceLayoutKey = source ~= nil and key(objectID, source) or nil }
-end
+local melee = { TagLayouts.Item(4151), { kind = "blank" }, TagLayouts.Item(4151), TagLayouts.Item(4151) }
 assert(app.store:CreateTag("melee"))
 assert(app.store:CreateTag("ranged"))
-app.store.data.tags.melee.rows = { { kind = "row", slots = {
-    item(4151, 1), item(4151, 3, 1), item(4151, 2), item(999, 1) } } }
+app.store.data.tags.melee.rows = { { kind = "label", text = "Weapons" }, { kind = "row", slots = melee } }
+app.store.data.tags.melee.unsorted = { TagLayouts.Item(999) }
 assert(app.store:Save())
 app:Changed()
 
--- Point at a content position in the bank's item area
-local function pointAt(x, y)
-    local left, top = Geometry.absolutePosition(host.viewport)
-    host.mouse = { x = left + x + 5, y = top + y + 5 }
-end
 -- Point at a tag row in the Tags tab
 local function pointAtRow(tag)
     local row = app.tab:RowFor(tag)
@@ -56,183 +46,139 @@ end
 
 -- Item menus over the shown tag ----------------------------------------------------
 
+-- The page lists object IDs: whip twice for its two stacks, a third whip as a ghost, then Unsorted
 assert(app:ShowTag("melee"))
 h:Tick(2)
-assert(layout.shownPage.key == "tag:melee")
+assert(app:ShownTag() == "melee")
+local sections = layout.pageState:GetLayoutSections()
+assert(sections[1].label == "Melee" and sections[2].label == "Weapons" and sections[3].label == "Unsorted")
+assert(#app.pageKeys == 5 and app.pageKeys[2] == false and app.pageKeys[4] == melee[4].layoutKey)
 
--- A ghost removes its own copy, not the stack beneath
-pointAt(52, 4)
-h:Tick()
-assert(layout.itemHover:HasHoveredBankStack())
-local menu = h:MenuFor(host.items[1])
-Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
-assert(app.store:HasTag("melee", key(4151, 3)))
-h:Tick(2)
-assert(not app.store:HasTag("melee", key(4151, 3)) and app.store:HasTag("melee", key(4151, 1)))
--- The page shows the ghost's slot as blank
-local rows = app.store.data.tags.melee.rows[1].slots
-assert(rows[2].kind == "blank" and rows[3].layoutKey == key(4151, 2))
-
--- A stack removes its own copy
-pointAt(96, 4)
-h:Tick()
-menu = h:MenuFor(host.items[2])
-Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
-h:Tick(2)
-assert(not app.store:HasTag("melee", key(4151, 2)) and app.store:HasTag("melee", key(4151, 1)))
-
--- A slot with no stack answers too; Cancel stays its left click
-pointAt(140, 4)
-h:Tick()
-menu = h:ContentMenu()
+-- A ghost removes its own slot; Cancel stays its left click
+h:PointAtSlot(4)
+local menu = h:SlotMenu()
 assert(menu.entries[menu.entryCount].verbText == "Cancel")
 Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
+assert(h:Saved("melee") == "4151 0 4151 4151 999")
 h:Tick(2)
-assert(not app.store:HasTag("melee", key(999, 1)))
+-- Saving trims the row's trailing blank
+assert(h:Saved("melee") == "4151 0 4151 999", h:Saved("melee"))
 
--- An entry offered before the shown tag changed is dropped
-pointAt(8, 4)
-h:Tick()
-menu = h:MenuFor(host.items[1])
+-- A stack removes the slot it was clicked in, counting the blank before it
+h:PointAtSlot(3)
+assert(layout.itemHover:HasHoveredBankStack())
+menu = h:SlotMenu()
+Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
+h:Tick(2)
+assert(h:Saved("melee") == "4151 999", h:Saved("melee"))
+
+-- Unsorted slots count after the rows
+h:PointAtSlot(2)
+menu = h:SlotMenu()
+Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
+h:Tick(2)
+assert(h:Saved("melee") == "4151", h:Saved("melee"))
+
+-- An entry offered before the page was set again is dropped
+h:PointAtSlot(1)
+menu = h:SlotMenu()
+assert(app:ShowTag("melee"))
+Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
+h:Tick(2)
+assert(h:Saved("melee") == "4151", "the stale entry did not run")
+-- So is one offered before another tag was shown
+h:PointAtSlot(1)
+menu = h:SlotMenu()
 assert(app:ShowTag("ranged"))
 Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
 h:Tick(2)
-assert(app.store:HasTag("melee", key(4151, 1)), "the stale entry did not run")
-assert(app.handle:LeavePage())
+assert(h:Saved("melee") == "4151", "the stale entry did not run")
+-- While the shown tag's new page waits to be drawn, a menu names no slot, so Remove from is not offered
+assert(app:ShowTag("melee"))
+h:Tick(2)
+h:PointAtSlot(1)
+assert(app:AddItemToTag("melee", 385))
+assert(tagEntries(h:SlotMenu()) == 0)
+h:Tick(2)
+h:PointAtSlot(1)
+assert(tagEntries(h:SlotMenu()) == 1)
+assert(app.ext:Close())
 h:Tick(2)
 
 -- Outside select mode, native items carry no Bank Tags entries
 menu = h:MenuFor(host.items[3])
 assert(tagEntries(menu) == 0)
 
--- Drops -------------------------------------------------------------------------------
-
--- A native item dropped on a tag row joins that tag as the copy it is
-assert(host.items[2].hooks.dragcomplete ~= nil)
-pointAtRow("ranged")
-local dropRow = app.tab:RowFor("ranged").root
-host.mouse = { x = -1000, y = -1000 }
-host.items[2].hooks.dragcomplete(host.items[2], dropRow)
-h:Tick(2)
-assert(app.store:HasTag("ranged", key(4151, 2)) and not app.store:HasTag("ranged", key(4151, 1)))
-
--- A drop on New Tag creates a tag holding the item and opens it for naming
-local newTag = Harness.Find(h:TabParent(), "New Tag")
-local left, top = Geometry.absolutePosition(newTag)
-h:PointAt(newTag, 10, 10)
-host.items[3].hooks.dragcomplete()
-h:Tick(2)
-assert(app.store:HasTag("placeholder 1", key(385, 1)))
-assert(app.windows.tagSettingsEditor ~= nil and app.windows.tagSettingsEditor.originalTag == "placeholder 1")
-app.windows:Close("tagSettingsEditor")
-
--- Browsing a numbered tab is not an error, so the tab shows no warning
-layout.nativeViewAll = false
-local detect = layout.DetectNativeViewAll
-layout.DetectNativeViewAll = function() return false end
-h:Session().pluginPages:Notify()
-h:Tick(2)
-assert(app.status == nil, tostring(app.status))
-layout:SetNativeViewAll(false)
-h:Tick(2)
-assert(app.status == nil, tostring(app.status))
--- Numbered tabs carry no copy, so a drop tags copy 1
-assert(app.store:CreateTag("tabbed"))
-app:Changed()
-pointAtRow("tabbed")
-host.items[2].hooks.dragcomplete()
-h:Tick(2)
-assert(app.store:HasTag("tabbed", key(4151, 1)) and not app.store:HasTag("tabbed", key(4151, 2)))
-assert(app.status == nil)
--- New Tag takes a numbered tab's drop the same way
-newTag = Harness.Find(h:TabParent(), "New Tag")
-left, top = Geometry.absolutePosition(newTag)
-h:PointAt(newTag, 10, 10)
-host.items[3].hooks.dragcomplete()
-h:Tick(2)
-assert(app.store:HasTag("placeholder 2", key(385, 1)))
-app.windows:Close("tagSettingsEditor")
--- A drop queued before another numbered tab is chosen is refused
-pointAtRow("tabbed")
-host.items[3].hooks.dragcomplete()
-layout:SetNativeViewAll(false)
-h:Tick(2)
-assert(not app.store:HasTag("tabbed", key(385, 1)))
--- A drop queued before the bank closes is refused
-host.items[3].hooks.dragcomplete()
-local dropHook = host.items[3].hooks.dragcomplete
-session:CloseBank()
-h:Tick(2)
-assert(not app.store:HasTag("tabbed", key(385, 1)))
-session, layout = h:OpenBank()
-h:Tick(2)
-dropHook()
-h:Tick(2)
-assert(not app.store:HasTag("tabbed", key(385, 1)))
-assert(app.store:DeleteTag("tabbed") and app.store:DeleteTag("placeholder 2"))
-app:Changed()
--- Only a drop may leave a copy unnumbered
-assert(not app:AddItemToTag("ranged", 4151, nil) and not app.store:HasTag("ranged", key(4151, 1)))
-layout.nativeViewAll, layout.DetectNativeViewAll = true, detect
+-- An oversized tag is not shown; the Tags tab says why
+assert(app.store:CreateTag("huge"))
+local huge = {}
+for index = 1, 10001 do huge[index] = { kind = "blank" } end
+app.store.data.tags.huge.rows = { { kind = "row", slots = huge } }
+assert(not app:ShowTag("huge") and app:ShownTag() == nil and layout.shownPage == nil)
+assert(string.find(app.status, "10002", 1, true) and Harness.Find(h:TabParent(), app.status) ~= nil)
+app.store.data.tags.huge = nil
+app.store.data.order[#app.store.data.order] = nil
 app:ShowStatus(nil)
-h:Session().pluginPages:Notify()
-h:Tick(2)
-assert(app.status == nil)
 
 -- Select mode -------------------------------------------------------------------------
 
--- Select items starts select mode, outlining members and showing the panel
+-- Select items starts select mode and shows the panel
 pointAtRow("ranged")
 menu = h:ContentMenu()
 Harness.Choose(menu, "Select items <col=f2c66d>Ranged</col>")
 h:Tick()
-assert(app.select:Tag() == "ranged" and app.handle:GetState().highlighted and app.status == nil)
-assert((host.items[2].outlineWidth or 0) > 0 and (host.items[1].outlineWidth or 0) == 0)
+assert(app.select:Tag() == "ranged" and app.status == nil)
 assert(Harness.Find(h:TabParent(), "Select mode") ~= nil)
-assert(Harness.Find(h:TabParent(), "Items already in this tag have a gold outline.") ~= nil)
 -- The selected row pulses on its own logic subscription
 h:Tick(30)
 local row = app.tab:RowFor("ranged")
 assert(row.background.alpha ~= nil and row.background.alpha < 1)
 
--- Clicking an item adds that copy and outlines it
+-- Clicking an item adds its object
 menu = h:MenuFor(host.items[1])
 local pickLabel = menu.entries[menu.entryCount].verbText
-assert(pickLabel == "Add to Ranged <col=f2c66d>Item</col>", pickLabel)
+assert(pickLabel == "Add to Ranged <col=f2c66d>Abyssal whip</col>", pickLabel)
 Harness.Choose(menu, pickLabel)
 h:Tick(2)
-assert(app.store:HasTag("ranged", key(4151, 1)) and (host.items[1].outlineWidth or 0) > 0)
+assert(h:Saved("ranged") == "4151")
+-- Clicking the same object again adds a second slot, for its second stack
+Harness.Choose(h:MenuFor(host.items[2]), pickLabel)
+h:Tick(2)
+assert(h:Saved("ranged") == "4151 4151")
 
--- Done ends it, restoring outlines and the column
+-- Outside All Items it still adds objects
+layout.nativeViewAll = false
+local detect = layout.DetectNativeViewAll
+layout.DetectNativeViewAll = function() return false end
+layout:SetNativeViewAll(false)
+h:Tick(2)
+assert(app.select:Tag() == "ranged" and app.status == nil)
+menu = h:MenuFor(host.items[3])
+Harness.Choose(menu, menu.entries[menu.entryCount].verbText)
+h:Tick(2)
+assert(h:Saved("ranged") == "4151 4151 385", h:Saved("ranged"))
+layout.nativeViewAll, layout.DetectNativeViewAll = true, detect
+
+-- Done ends it and restores the column
 Harness.Find(h:TabParent(), "Done").hooks.pressed()
 h:Tick(2)
-assert(app.select:Tag() == nil and not app.handle:GetState().highlighted)
-assert((host.items[1].outlineWidth or 0) == 0 and Harness.Find(h:TabParent(), "Select mode") == nil)
+assert(app.select:Tag() == nil)
+assert(Harness.Find(h:TabParent(), "Select mode") == nil)
 
 -- Opening a tag ends select mode quietly
 assert(app.select:Toggle("ranged"))
 h:ClickRow("melee")
 h:Tick(2)
-assert(app.select:Tag() == nil and app.shownTag == "melee" and app.status == nil)
+assert(app.select:Tag() == nil and app:ShownTag() == "melee" and app.status == nil)
 -- Starting select mode while a tag is shown leaves the tag first
 assert(app.select:Toggle("ranged"))
 h:Tick(2)
-assert(app.shownTag == nil and layout.shownPage == nil and app.select:Tag() == "ranged")
--- A native tab ends it and the tab says why
-layout.DetectNativeViewAll = function() return false end
-layout:SetNativeViewAll(false)
-h:Tick(2)
-assert(app.select:Tag() == nil and app.status == 'Select "All Items" before choosing items for a tag.')
--- It cannot start outside All Items
-assert(not app.select:Toggle("ranged") and not app.handle:GetState().highlighted)
-layout.nativeViewAll, layout.DetectNativeViewAll = true, detect
+assert(app:ShownTag() == nil and layout.shownPage == nil and app.select:Tag() == "ranged")
 -- Deleting the tag being filled ends select mode
-app:ShowStatus(nil)
-assert(app.select:Toggle("ranged"))
 assert(app.store:DeleteTag("ranged"))
 app:Changed()
 h:Tick(2)
-assert(app.select:Tag() == nil and not app.handle:GetState().highlighted)
+assert(app.select:Tag() == nil)
 -- Renaming it keeps the session under the new name
 assert(app.select:Toggle("melee"))
 local renamed = app.windows
@@ -241,32 +187,33 @@ renamed.tagSettingsEditor.field:SetText("Fighting")
 renamed.tagSettingsEditor.saveButton.root.hooks.click()
 h:Tick(2)
 assert(app.select:Tag() == "fighting" and app.select:Label() == "Add to Fighting")
-assert(app.handle:GetState().highlighted and app.select:Stop())
+assert(app.select:Stop())
 h:Tick(2)
 
--- Bank bankItems ---------------------------------------------------------------------
+-- Bank items ---------------------------------------------------------------------------
 
--- The editor and search keep the last good snapshot while Core rereads
-assert(app.bankItems ~= nil)
-local before = app.bankItems.generation
-assert(app:ShowTag("fighting"))
-h:Tick(2)
-pointAt(8, 4)
-h:Tick()
-assert(layout.itemHover:HasHoveredBankStack())
+-- Bank items are object IDs and quantities, read when Bank Core says they changed
+local items = app:BankItems()
+assert(#items == 4 and items[1].objectID == 4151 and items[4].quantity == 0 and items[1].copy == nil)
 host:Rebuild(function(specs) specs[3][2] = 99 end)
 layout:HandleInventoryUpdate()
-h:Tick(2)
-assert(select(2, app.handle:GetBankItems()) == "building")
-assert(app.bankItems.generation == before)
--- Once the pointer leaves and Core reads the bank, the fresh items arrive
-host.mouse = { x = -500, y = -500 }
 for _ = 1, 4 do h:Tick() end
-assert(app.bankItems.generation ~= before)
 local shark = nil
-for _, entry in ipairs(app.bankItems.items) do
+for _, entry in ipairs(app:BankItems()) do
     if entry.objectID == 385 then shark = entry end
 end
 assert(shark.quantity == 99)
+
+-- Losing the bank inventory ends select mode while the window is still mounted
+assert(app.select:Toggle("fighting"))
+h:Tick(2)
+h:Fire("InventoryRemoved", { inv = { id = 95 } })
+h:Tick(2)
+assert(app.select:Tag() == nil, "select mode outlived the bank closing")
+-- Reopening the bank starts without it
+host:UnmountBankWindow()
+session, layout = h:OpenBank()
+h:Tick(2)
+assert(app.select:Tag() == nil)
 
 print("tag_actions_test: ok")

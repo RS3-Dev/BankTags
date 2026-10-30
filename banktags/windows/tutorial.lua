@@ -12,7 +12,7 @@ local EVENT = "banktags_tutorial"
 local WIDTH, HEIGHT = 521, 144
 local STEPS = {
     { title = "Create a tag", text = "Click New Tag, give it a name, then Save. Tags group bank items without moving them out of your bank." },
-    { title = "Add bank items", text = "In All Items, drag an item you have in your bank onto the new tag in the sidebar. The item stays in your bank." },
+    { title = "Add bank items", text = "Right-click your tag and choose Select items, then click an item in your bank. The item stays in your bank." },
     { title = "Open your tag", text = "Click your tag to see its items. Select the bank's All Items tab first if you are viewing a numbered bank tab." },
     { title = "Edit the layout", text = "Right-click your tag and choose Edit. Drag your item from Unsorted into Layout. Changes save automatically." },
     { title = "Return to your bank", text = "Click Close to leave the editor and return to your tag. Your layout is saved." },
@@ -70,17 +70,11 @@ function Tutorial.new(app)
     return setmetatable({ app = app, active = false, offered = false }, Tutorial)
 end
 
--- Offer the first tour only to an empty store
-function Tutorial:Offer(state)
+-- Offer the first tour only to an empty store, once the Tags tab shows
+function Tutorial:Offer()
     if not self.active and not self.offered and not self.app.settings.tutorialSeen
-        and self.app.tab.controls ~= nil
-        and state ~= nil and state.bounds ~= nil and self.app.store.loadError == nil
+        and self.app.tab.controls ~= nil and self.app.store.loadError == nil
         and #self.app.store:AllTags() == 0 then self:Start() end
-end
-
--- Reuse the offer after a sidebar mount
-function Tutorial:Mounted()
-    self:Offer(self.app.state)
 end
 
 -- Open the guide without creating tutorial data
@@ -89,9 +83,9 @@ function Tutorial:Start()
     if self.app.tab.controls == nil then return end
     local parent = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__GAME_AREA)
         or ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__BANK_LAYER)
-    if parent == nil or self.app.state == nil or self.app.state.bounds == nil then return end
+    if parent == nil or self.app.windows:BankBounds() == nil then return end
     self.active, self.offered, self.parent, self.ticks = true, true, parent, 0
-    self.tag = self.app.shownTag or self.app.store:AllTags()[1]
+    self.tag = self.app:ShownTag() or self.app.store:AllTags()[1]
     self.window = prettyui.Window.new(parent, {
         title = "Bank Tags Help", width = WIDTH, height = HEIGHT,
         minWidth = WIDTH, maxWidth = WIDTH, minHeight = HEIGHT, maxHeight = HEIGHT,
@@ -170,16 +164,11 @@ function Tutorial:Start()
     Event.MiniMenuEntrySelected.Subscribe(EVENT, function(event) self:ObserveWithdrawal(event.entry) end)
 end
 
--- Observe a native withdrawal from this tag
+-- Observe a native withdrawal while this tag is shown
 function Tutorial:ObserveWithdrawal(entry)
-    if not self.active or self.step ~= 6 or self.app.handle == nil or entry == nil then return end
+    if not self.active or self.step ~= 6 or entry == nil or self.app:ShownTag() ~= self.tag then return end
     local verb = tostring(entry.verbText or ""):gsub("<[^>]*>", ""):lower()
-    if not verb:match("^withdraw") then return end
-    local item = self.app.handle:GetMenuItem(entry)
-    if item == nil or item.view ~= "page" or item.key == nil or self.app.shownTag ~= self.tag then return end
-    for _, tagged in ipairs(self.app.store:GetTaggedItems(self.tag)) do
-        if tagged.objectID == item.objectID then self.withdrawObject = item.objectID; return end
-    end
+    if verb:match("^withdraw") then self.withdrawn = true end
 end
 
 -- Remove only the guide's share-field observer
@@ -221,10 +210,10 @@ function Tutorial:Go(step)
         for _, tag in ipairs(self.app.store:AllTags()) do self.initialTags[tag] = true end
     end
     self.itemsBefore = self.tag ~= nil and #self.app.store:GetTaggedItems(self.tag) or 0
-    self.shownBefore = self.app.shownTag
+    self.shownBefore = self.app:ShownTag()
     self.layoutBefore = self.tag ~= nil and Json.encode(self.app.store:LayoutState(self.tag)) or nil
     self.hadEditor = self.app.windows.layoutEditor ~= nil
-    self.withdrawObject = nil
+    self.withdrawn = false
     self.foldersBefore = {}
     for _, folder in ipairs(self.app.store:GetFolders()) do self.foldersBefore[folder.key] = true end
     self.folderBefore = self.tag ~= nil and self.app.store:GetTagFolder(self.tag) or nil
@@ -244,7 +233,6 @@ end
 function Tutorial:Target()
     local app, step = self.app, self.step
     local controls, editor = app.tab.controls, app.windows.layoutEditor
-    local state = app.handle ~= nil and app.handle:GetState() or {}
     if controls == nil then return nil end
     if step == 1 then
         local settings = app.windows.tagSettingsEditor
@@ -267,8 +255,6 @@ function Tutorial:Target()
         return editor.panes.sorted.view.root
     elseif step == 5 then
         return editor ~= nil and editor.closeButton.root or nil
-    elseif step == 6 then
-        return state.pageBounds
     elseif step == 8 then
         local window = app.windows.importShare
         if window == nil then return controls.importShareButton.root end
@@ -283,7 +269,7 @@ end
 function Tutorial:Check()
     local app, step = self.app, self.step
     if self.tag ~= nil and app.store.data.tags[self.tag] == nil then
-        self.tag = app.shownTag or app.store:AllTags()[1]
+        self.tag = app:ShownTag() or app.store:AllTags()[1]
     end
     local complete = false
     if step == 1 then
@@ -293,8 +279,9 @@ function Tutorial:Check()
     elseif step == 2 then
         complete = self.tag ~= nil and #app.store:GetTaggedItems(self.tag) > self.itemsBefore
     elseif step == 3 then
-        if app.shownTag ~= self.tag then self.shownBefore = app.shownTag end
-        complete = self.tag ~= nil and app.shownTag == self.tag and app.shownTag ~= self.shownBefore
+        local shown = app:ShownTag()
+        if shown ~= self.tag then self.shownBefore = shown end
+        complete = self.tag ~= nil and shown == self.tag and shown ~= self.shownBefore
     elseif step == 4 then
         local arranged = false
         local record = self.tag ~= nil and app.store.data.tags[self.tag] or nil
@@ -307,7 +294,7 @@ function Tutorial:Check()
         if app.windows.layoutEditor ~= nil then self.hadEditor = true end
         complete = self.hadEditor and app.windows.layoutEditor == nil
     elseif step == 6 then
-        complete = self.withdrawObject ~= nil
+        complete = self.withdrawn
     elseif step == 7 then
         local folder = self.tag ~= nil and app.store:GetTagFolder(self.tag) or nil
         complete = folder ~= nil and folder ~= self.folderBefore and not self.foldersBefore[folder]
@@ -325,7 +312,7 @@ function Tutorial:Position()
     local x, y, width, height = bounds(target)
     local parentX, parentY = Geometry.absolutePosition(self.parent)
     local screenWidth, screenHeight = self.parent.width, self.parent.height
-    local bank = self.app.state ~= nil and self.app.state.bounds or nil
+    local bank = self.app.windows:BankBounds()
     local panelX = bank ~= nil and bank.x - parentX or 8
     local panelY = bank ~= nil and bank.y - parentY - HEIGHT - 8 or 8
     if panelY < 8 then

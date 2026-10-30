@@ -9,7 +9,7 @@ local trim = require("banktags/core/text").trim
 local TagData = {}
 
 local FORMAT = "bankutilities-tags"
-local VERSION = 3
+local VERSION = 4
 local MAX_TEXT_LENGTH = 1000000
 local MAX_TAGS = 1000
 local MAX_FOLDERS = 200
@@ -26,34 +26,18 @@ function TagData.Empty()
     return { order = {}, folders = {}, tags = {} }
 end
 
--- Read the copy number at the end of a layout key
-function TagData.CopyNumber(layoutKey)
-    return math.tointeger(tonumber(string.match(tostring(layoutKey or ""), ":(%d+)$")))
-end
-
--- Write a slot as its reference with copy suffixes, or "" when blank
+-- Write a slot as its item's reference, or "" when blank
 local function slotText(slot)
     if slot.kind ~= "item" then return slot.dormant or "" end
-    local copy = TagData.CopyNumber(slot.layoutKey) or 1
-    local text = ItemIdentity.Reference(slot.objectID) .. (copy > 1 and (":" .. copy) or "")
-    local source = TagData.CopyNumber(slot.sourceLayoutKey)
-    return source ~= nil and (text .. "<" .. source) or text
+    return ItemIdentity.Reference(slot.objectID)
 end
 
 -- Read one saved slot, keeping unresolved items as blanks
 local function readSlot(text)
     if type(text) ~= "string" or text == "" then return { kind = "blank" } end
-    local item, source = string.match(text, "^(.-)<(%d+)$")
-    item = item or text
-    local reference, copy = string.match(item, "^(.-):(%d+)$")
-    local objectID = ItemIdentity.ObjectID(reference or item)
+    local objectID = ItemIdentity.ObjectID(text)
     if objectID == nil then return { kind = "blank", dormant = text } end
-    return {
-        kind = "item",
-        objectID = objectID,
-        layoutKey = ItemIdentity.LayoutKey(objectID, math.max(1, tonumber(copy) or 1)),
-        sourceLayoutKey = source ~= nil and ItemIdentity.LayoutKey(objectID, source) or nil,
-    }
+    return TagLayouts.Item(objectID)
 end
 
 -- Encode every tag, or only the named one, as JSON
@@ -90,20 +74,18 @@ function TagData.EntryCount(tag)
     return count
 end
 
--- Read one saved tag, dropping invalid entries and repeated copies
+-- Read one saved tag, dropping invalid entries
 local function readTag(value, entryLimit)
     local tag = {
         icon = type(value.icon) == "string" and value.icon or nil,
         rows = {},
         unsorted = {},
     }
-    local seen, count = {}, 0
-    -- Keep a slot unless it repeats a copy already in this tag
+    local count = 0
+    -- Keep a slot, or a blank only where blanks are kept
     local function add(list, text, keepBlank)
         count = count + 1
         local slot = readSlot(text)
-        if slot.kind == "item" and seen[slot.layoutKey] then slot = { kind = "blank" } end
-        if slot.kind == "item" then seen[slot.layoutKey] = true end
         if slot.kind == "item" or keepBlank or slot.dormant ~= nil then list[#list + 1] = slot end
     end
     for _, entry in ipairs(type(value.rows) == "table" and value.rows or {}) do

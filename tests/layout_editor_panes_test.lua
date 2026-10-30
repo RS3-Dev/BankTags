@@ -19,8 +19,14 @@ local app = h:App()
 h:OpenBank()
 h:Tick(12)
 
-local key = require("banktags/tags/item_identity").LayoutKey
 local store = app.store
+-- Find the key of gear's slot for an object, each object being in it once
+local function key(objectID)
+    for _, slot in ipairs(store:GetTaggedItems("gear")) do
+        if slot.objectID == objectID then return slot.layoutKey end
+    end
+    return nil
+end
 -- Sorted: a label, then 195 items wrapping onto twenty rows, with one blank
 -- Unsorted: 135 items, fifteen rows at nine columns
 assert(store:CreateTag("gear") and store:CreateTag("food"))
@@ -234,7 +240,7 @@ assert(sorted.view.scrollY == 132 and unsorted.view.scrollY == unsortedMost - 44
 -- Unsorted row 10, column 2 is item 2093; sorted row 5, column 4 is the blank
 drag("unsorted", 2, 10, "sorted", 4, 5)
 assert(gear().rows[2].slots[45].layoutKey == key(2093) and unsortedIndex(key(2093)) == nil)
-assert(#gear().unsorted == 134 and store:HasTag("gear", key(2093)) and changes == 1)
+assert(#gear().unsorted == 134 and key(2093) ~= nil and changes == 1)
 assert(sorted.slots[55].layoutKey == key(2093) and editor.selectedLayoutKey == key(2093) and outlines() == 1)
 -- Its neighbours, the label, and the scroll of each grid are unchanged
 assert(gear().rows[1].kind == "label" and gear().rows[1].text == "Weapons")
@@ -245,7 +251,7 @@ assert(sorted.view.scrollY == 132 and unsorted.view.scrollY == unsortedMost - 44
 -- Sorted row 6, column 0 is item 1051
 drag("sorted", 0, 6, "unsorted", 3, 4)
 assert(gear().rows[2].slots[51].kind == "blank" and unsortedIndex(key(1051)) == 135)
-assert(store:HasTag("gear", key(1051)) and changes == 2 and editor.selectedLayoutKey == key(1051))
+assert(key(1051) ~= nil and changes == 2 and editor.selectedLayoutKey == key(1051))
 assert(unsorted.slots[135].layoutKey == key(1051) and outlines() == 1)
 assert(sorted.view.scrollY == 132 and unsorted.view.scrollY == unsortedMost - 44)
 
@@ -327,8 +333,9 @@ local third = editor.searchResults[3].objectId
 -- Dropped on the scrolled sorted grid's drop row, it lands in that cell
 pointAt("sorted", 2, 21)
 editor.searchDragSurface.hooks.release()
-assert(sorted.slots[21 * 10 + 3].layoutKey == key(third, 1) and changes == 3)
-assert(editor.selectedLayoutKey == key(third, 1) and outlines() == 1)
+local placed = sorted.slots[21 * 10 + 3]
+assert(placed.objectID == third and changes == 3)
+assert(editor.selectedLayoutKey == placed.layoutKey and outlines() == 1)
 -- The sorted grid grows a new drop row and keeps its scroll
 assert(sorted.view.content.height == 4 + 23 * 44 and sorted.view.scrollY == 4 + 22 * 44 - sorted.height)
 -- Over the right column, where Unsorted is hidden, a result adds nothing

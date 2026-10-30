@@ -5,7 +5,6 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
-local Geometry = require("banktags/ui/geometry")
 local h = Harness.new("menu_orders")
 local host = h.bankHost
 host:SetItems({ { 4151, 1, "Abyssal whip" }, { 4151, 1, "Abyssal whip" }, { 385, 20, "Shark" } })
@@ -17,17 +16,14 @@ local session, layout = h:OpenBank()
 h:Tick(2)
 assert(h.menuSubscriptions.banktags_menu ~= nil and h.menuSubscriptions.bankcore_menu ~= nil)
 
-local key = require("banktags/tags/item_identity").LayoutKey
-local presetOpen = false
-local other = assert(session.publicAPI.RegisterExtension("other", "Other"))
-assert(other:RegisterTab("notes", { label = "Notes", icon = "STAR", mount = { mount = function() end } }))
+local TagLayouts = h:TagsModule("banktags/tags/tag_layouts")
+assert(session.publicAPI.Register({ id = "other", name = "Other", icon = "STAR",
+    column = { mount = function() end } }))
 h:Tick(2)
-layout.IsPresetViewOpen = function() return presetOpen end
-
--- Point at a content position in the bank's item area
-local function pointAt(x, y)
-    local left, top = Geometry.absolutePosition(host.viewport)
-    host.mouse = { x = left + x + 5, y = top + y + 5 }
+-- Select mode's left click names the clicked item
+local NAMES = { "Abyssal whip", "Abyssal whip", "Shark" }
+local function addLabel(slot)
+    return "Add to Ranged <col=f2c66d>" .. NAMES[slot] .. "</col>"
 end
 -- Point at a tag row in the Tags tab
 local function pointAtRow(tag)
@@ -35,18 +31,14 @@ local function pointAtRow(tag)
     app.tab.controls.list.list.scrollY = row.root.y
     h:PointAt(row.root, 20, 10 - row.root.y)
 end
--- Give melee two bank stacks, a reused stack, and an item missing from the bank
+-- Give melee both whip stacks, a third whip with no stack left, and an item missing from the bank
 local function resetTags()
     for _, tag in ipairs({ "melee", "ranged" }) do
         if app.store.data.tags[tag] ~= nil then assert(app.store:DeleteTag(tag)) end
         assert(app.store:CreateTag(tag))
     end
-    local function item(objectID, copy, source)
-        return { kind = "item", objectID = objectID, layoutKey = key(objectID, copy),
-            sourceLayoutKey = source ~= nil and key(objectID, source) or nil }
-    end
     app.store.data.tags.melee.rows = { { kind = "row", slots = {
-        item(4151, 1), item(4151, 3, 1), item(4151, 2), item(999, 1) } } }
+        TagLayouts.Item(4151), TagLayouts.Item(4151), TagLayouts.Item(4151), TagLayouts.Item(999) } } }
     assert(app.store:Save())
     app:Changed()
     h:Tick(2)
@@ -137,7 +129,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         h:Tick(2)
         assert(app.store:GetTagFolder("ranged") == "archery" and app:ToggleTag("ranged"), where)
         h:Tick(2)
-        assert(app.shownTag == nil, where)
+        assert(app:ShownTag() == nil, where)
         pointAtRow("ranged")
         menu = h:ContentMenu()
         Harness.ChooseChild(menu, moveRanged, "Combat")
@@ -147,9 +139,9 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         assert(app.store:CreateFolder("Combat", "melee"))
         pointAtRow("ranged")
         menu = h:ContentMenu()
-        layout:SetSidebarMode("__bankutils_ext_tab:other/notes")
+        layout:SetSidebarMode("__bankutils_ext_tab:other")
         h:Tick(2)
-        layout:SetSidebarMode("__bankutils_ext_tab:banktags/tags")
+        layout:SetSidebarMode("__bankutils_ext_tab:banktags")
         h:Tick(2)
         Harness.ChooseChild(menu, moveRanged, "Combat")
         h:Tick(2)
@@ -205,8 +197,8 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         assert(leftClickRow(folderRow) == "Collapse <col=f2c66d>Combat</col>"
             and app.store:GetFolder("combat").collapsed, where)
         assert(leftClickRow(folderRow) == "Expand <col=f2c66d>Combat</col>", where)
-        assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == "ranged", where)
-        assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app.shownTag == nil, where)
+        assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app:ShownTag() == "ranged", where)
+        assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app:ShownTag() == nil, where)
         -- The row may hear the click first, with the default from that menu or one rebuilt after it
         local function rowThenMenu(id, rebuilt)
             pointAtRow(id)
@@ -222,9 +214,9 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         end
         for _, rebuilt in ipairs({ false, true }) do
             rowThenMenu("ranged", rebuilt)
-            assert(app.shownTag == "ranged", where)
+            assert(app:ShownTag() == "ranged", where)
             rowThenMenu("ranged", rebuilt)
-            assert(app.shownTag == nil, where)
+            assert(app:ShownTag() == nil, where)
             rowThenMenu(folderRow, rebuilt)
             assert(app.store:GetFolder("combat").collapsed, where)
             rowThenMenu(folderRow, rebuilt)
@@ -242,9 +234,9 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
             h:Tick(2)
         end
         menuThenLateRow("ranged", 1)
-        assert(app.shownTag == "ranged", where)
+        assert(app:ShownTag() == "ranged", where)
         menuThenLateRow("ranged", 2)
-        assert(app.shownTag == nil, where)
+        assert(app:ShownTag() == nil, where)
         menuThenLateRow(folderRow, 2)
         assert(app.store:GetFolder("combat").collapsed, where)
         menuThenLateRow(folderRow, 1)
@@ -259,19 +251,19 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
             pointAtRow("ranged")
             leftClick(h:ContentMenu())
             h:Tick()
-            assert(app.shownTag == (count % 2 == 1 and "ranged" or nil), count .. where)
+            assert(app:ShownTag() == (count % 2 == 1 and "ranged" or nil), count .. where)
         end
         -- The row answers the left click, so the default alone does nothing
         local pages = session.pluginPages
-        local leave, leaves = pages.LeavePage, 0
-        pages.LeavePage = function(...)
+        local leave, leaves = pages.ClosePage, 0
+        pages.ClosePage = function(...)
             leaves = leaves + 1
             return leave(...)
         end
         pointAtRow("ranged")
         assert(leftClick(h:ContentMenu()) == "Select <col=f2c66d>Ranged</col>", where)
         h:Tick(4)
-        assert(app.shownTag == nil and leaves == 0, where)
+        assert(app:ShownTag() == nil and leaves == 0, where)
         -- Select chosen from the opened menu toggles once, even if heard twice
         local function chooseSelect(id, label)
             pointAtRow(id)
@@ -281,23 +273,23 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
             h:Tick(4)
         end
         chooseSelect("ranged", "Select <col=f2c66d>Ranged</col>")
-        assert(app.shownTag == "ranged" and leaves == 0, where)
+        assert(app:ShownTag() == "ranged" and leaves == 0, where)
         chooseSelect("ranged", "Select <col=f2c66d>Ranged</col>")
-        assert(app.shownTag == nil and layout.shownPage == nil and leaves == 1, where)
+        assert(app:ShownTag() == nil and layout.shownPage == nil and leaves == 1, where)
         chooseSelect(folderRow, "Collapse <col=f2c66d>Combat</col>")
         assert(app.store:GetFolder("combat").collapsed, where)
         chooseSelect(folderRow, "Expand <col=f2c66d>Combat</col>")
         assert(not app.store:GetFolder("combat").collapsed, where)
-        pages.LeavePage = nil
+        pages.ClosePage = nil
         -- Row clicks alone still toggle
         click("melee")
-        assert(app.shownTag == "melee", where)
+        assert(app:ShownTag() == "melee", where)
         click("melee")
-        assert(app.shownTag == nil, where)
+        assert(app:ShownTag() == nil, where)
         click("melee")
-        assert(app.shownTag == "melee", where)
+        assert(app:ShownTag() == "melee", where)
         click("melee")
-        assert(app.shownTag == nil, where)
+        assert(app:ShownTag() == nil, where)
         h:Tick(2)
         -- An entry chosen after a row click, or from a rebuilt tab, does nothing
         pointAtRow("ranged")
@@ -305,110 +297,66 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         h:ClickRow("melee")
         Harness.Choose(menu, "Edit <col=f2c66d>Ranged</col>")
         h:Tick(2)
-        assert(app.shownTag == "melee" and app.windows.tagSettingsEditor == nil, where)
-        assert(app:ToggleTag("melee") and app.shownTag == nil)
+        assert(app:ShownTag() == "melee" and app.windows.tagSettingsEditor == nil, where)
+        assert(app:ToggleTag("melee") and app:ShownTag() == nil)
         h:Tick(2)
         pointAtRow("ranged")
         menu = h:ContentMenu()
-        layout:SetSidebarMode("__bankutils_ext_tab:other/notes")
+        layout:SetSidebarMode("__bankutils_ext_tab:other")
         h:Tick(2)
-        layout:SetSidebarMode("__bankutils_ext_tab:banktags/tags")
+        layout:SetSidebarMode("__bankutils_ext_tab:banktags")
         h:Tick(2)
         Harness.Choose(menu, "Select <col=f2c66d>Ranged</col>")
         h:Tick(2)
-        assert(app.shownTag == nil and app.tab.controls ~= nil, where)
+        assert(app:ShownTag() == nil and app.tab.controls ~= nil, where)
         -- An unreported entry cannot be placed, so Cancel is the left click
         pointAtRow("ranged")
         assert(leftClick(h:ContentMenu(true)) == "Cancel", where)
 
-        -- Remove targets each slot's own copy; Withdraw stays a stack's left click
+        -- Remove takes the clicked slot; Withdraw stays a stack's left click and Cancel a ghost's
         assert(app:ShowTag("melee"))
         h:Tick(2)
-        pointAt(52, 4)
-        h:Tick()
-        assert(layout.itemHover:HasHoveredBankStack(), where)
-        menu = h:MenuFor(host.items[1])
-        assert(leftClick(menu) == "Withdraw-1", table.concat(Harness.Labels(menu), "|") .. where)
-        Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
-        h:Tick(2)
-        assert(not app.store:HasTag("melee", key(4151, 3)) and app.store:HasTag("melee", key(4151, 1)), where)
-        pointAt(96, 4)
-        h:Tick()
-        Harness.Choose(h:MenuFor(host.items[2]), "Remove from <col=f2c66d>Melee</col>")
-        h:Tick(2)
-        assert(not app.store:HasTag("melee", key(4151, 2)) and app.store:HasTag("melee", key(4151, 1)), where)
-        pointAt(140, 4)
-        h:Tick()
-        menu = h:ContentMenu()
+        h:PointAtSlot(3)
+        menu = h:SlotMenu()
         assert(leftClick(menu) == "Cancel", table.concat(Harness.Labels(menu), "|") .. where)
         Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
         h:Tick(2)
-        assert(not app.store:HasTag("melee", key(999, 1)), where)
-
-        -- A Remove offered, or chosen, before the bank view changed writes nothing
-        pointAt(8, 4)
-        h:Tick()
-        menu = h:MenuFor(host.items[1])
-        host:Rebuild()
-        layout:HandleInventoryUpdate()
+        assert(h:Saved("melee") == "4151 4151 0 999", h:Saved("melee") .. where)
+        h:PointAtSlot(2)
+        assert(layout.itemHover:HasHoveredBankStack(), where)
+        menu = h:SlotMenu()
+        assert(leftClick(menu) == "Withdraw-1", table.concat(Harness.Labels(menu), "|") .. where)
         Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
-        h:Tick(4)
-        assert(app.store:HasTag("melee", key(4151, 1)), "stale after rebuild" .. where)
-        pointAt(8, 4)
-        h:Tick()
-        menu = h:MenuFor(host.items[1])
-        Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
-        assert(app.handle:LeavePage() and app:ShowTag("melee"))
         h:Tick(2)
-        assert(app.store:HasTag("melee", key(4151, 1)), "stale after reopening" .. where)
+        assert(h:Saved("melee") == "4151 0 0 999", h:Saved("melee") .. where)
+        h:PointAtSlot(4)
+        menu = h:SlotMenu()
+        assert(leftClick(menu) == "Cancel", table.concat(Harness.Labels(menu), "|") .. where)
+        Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
+        h:Tick(2)
+        assert(h:Saved("melee") == "4151", h:Saved("melee") .. where)
+
+        -- A Remove chosen before the tag was shown again writes nothing
+        h:PointAtSlot(1)
+        menu = h:SlotMenu()
+        Harness.Choose(menu, "Remove from <col=f2c66d>Melee</col>")
+        assert(app.ext:Close() and app:ShowTag("melee"))
+        h:Tick(2)
+        assert(h:Saved("melee") == "4151", "stale after reopening" .. where)
 
         -- Select mode leaves the shown tag; left clicks tag, never withdraw
         pointAtRow("ranged")
         Harness.Choose(h:ContentMenu(), "Select items <col=f2c66d>Ranged</col>")
         h:Tick(2)
-        assert(app.select:Tag() == "ranged" and app.shownTag == nil and layout.shownPage == nil, where)
+        assert(app.select:Tag() == "ranged" and app:ShownTag() == nil and layout.shownPage == nil, where)
         for slot = 1, 3 do
             menu = h:MenuFor(host.items[slot])
-            assert(leftClick(menu) == "Add to Ranged <col=f2c66d>Item</col>",
-                table.concat(Harness.Labels(menu), "|") .. where)
+            assert(leftClick(menu) == addLabel(slot), table.concat(Harness.Labels(menu), "|") .. where)
             h:Tick(2)
         end
-        assert(app.store:HasTag("ranged", key(4151, 1)) and app.store:HasTag("ranged", key(4151, 2))
-            and app.store:HasTag("ranged", key(385, 1)), where)
+        assert(h:Saved("ranged") == "4151 4151 385", h:Saved("ranged") .. where)
         -- An entry the host does not report leaves Cancel the left click
         assert(leftClick(h:MenuFor(host.items[1], true)) == "Cancel", where)
-        -- A preset view ends select mode; native clicks pause until Bank Tags notices
-        presetOpen = true
-        layout:Changed(false)
-        assert((host.items[2].outlineWidth or 0) == 0 and leftClick(h:MenuFor(host.items[1])) == "Cancel", where)
-        h:Tick(2)
-        assert(app.select:Tag() == nil and app.status == 'Select "Return to Bank" before choosing items for a tag.', where)
-        presetOpen = false
-        layout:Changed(false)
-        assert(leftClick(h:MenuFor(host.items[1])) == "Withdraw-1", where)
-        -- An Add offered before a preset view opens writes nothing
-        assert(app.store:RemoveTag("ranged", key(4151, 1)) and app.select:Toggle("ranged"))
-        h:Tick(2)
-        assert(host.items[2].outlineWidth == 2, where)
-        menu = h:MenuFor(host.items[1])
-        presetOpen = true
-        layout:Changed(false)
-        presetOpen = false
-        layout:Changed(false)
-        leftClick(menu)
-        h:Tick(2)
-        assert(not app.store:HasTag("ranged", key(4151, 1)) and app.select:Tag() == nil, "stale add after preset" .. where)
-        assert((host.items[2].outlineWidth or 0) == 0, where)
-        assert(app.select:Toggle("ranged"))
-        h:Tick(2)
-        -- An Add chosen before the bank rebuilt writes nothing
-        assert(app.store:RemoveTag("ranged", key(4151, 1)))
-        menu = h:MenuFor(host.items[1])
-        leftClick(menu)
-        host:Rebuild()
-        layout:HandleInventoryUpdate()
-        h:Tick(2)
-        assert(not app.store:HasTag("ranged", key(4151, 1)), "stale add" .. where)
         -- Done returns the left click to the bank
         Harness.Find(h:TabParent(), "Done").hooks.pressed()
         h:Tick(2)
@@ -416,44 +364,30 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
     end
 end
 
--- Start select mode before Core records All Items, then switch tabs
+-- Select mode keeps adding objects in a numbered tab
 h.menuOrder, h.placement = "core_first", "above_cancel"
 resetTags()
-layout.nativeViewAll = false
 local detect = layout.DetectNativeViewAll
-layout.DetectNativeViewAll = function() return true end
-assert(app.select:Toggle("ranged") and layout.nativeViewAll)
-h:Tick(2)
-assert(app.select:Tag() == "ranged" and leftClick(h:MenuFor(host.items[3])) == "Add to Ranged <col=f2c66d>Item</col>")
-h:Tick(2)
-assert(app.store:HasTag("ranged", key(385, 1)))
 layout.DetectNativeViewAll = function() return false end
 layout:SetNativeViewAll(false)
--- Until Bank Tags hears the change, a native click is paused
-assert(leftClick(h:MenuFor(host.items[1])) == "Cancel")
-h:Tick(2)
-assert(app.select:Tag() == nil and app.status == 'Select "All Items" before choosing items for a tag.')
-assert(leftClick(h:MenuFor(host.items[1])) == "Withdraw-1")
-layout.DetectNativeViewAll = function() return true end
-layout:SetNativeViewAll(true)
 h:Tick(2)
 assert(app.select:Toggle("ranged"))
+assert(leftClick(h:MenuFor(host.items[3])) == addLabel(3))
 h:Tick(2)
-assert(leftClick(h:MenuFor(host.items[2])) == "Add to Ranged <col=f2c66d>Item</col>")
-h:Tick(2)
-assert(app.store:HasTag("ranged", key(4151, 2)) and app.select:Stop())
+assert(h:Saved("ranged") == "385" and app.select:Stop())
 layout.DetectNativeViewAll = detect
+layout:SetNativeViewAll(true)
+h:Tick(2)
 
 -- The layout editor covers the bank, so rows and items beneath it get no entries
 resetTags()
 local removeRanged = "Remove <col=f2c66d>Ranged</col>"
-local addItem = "Add to Ranged <col=f2c66d>Item</col>"
+local addItem = addLabel(1)
 pointAtRow("ranged")
 local before = h:ContentMenu()
 Harness.Open(before)
 assert(app.select:Toggle("ranged"))
 h:Tick(2)
-assert(app.store:RemoveTag("ranged", key(4151, 1)))
 local itemBefore = h:MenuFor(host.items[1])
 assert(Harness.Has(itemBefore, addItem))
 app.windows:OpenLayoutEditor("ranged")
@@ -467,7 +401,7 @@ assert(not Harness.Has(h:MenuFor(host.items[1]), addItem))
 Harness.Choose(before, removeRanged)
 leftClick(itemBefore)
 h:Tick(2)
-assert(app.windows.tagDeleteConfirm == nil and not app.store:HasTag("ranged", key(4151, 1)))
+assert(app.windows.tagDeleteConfirm == nil and h:Saved("ranged") == "")
 -- Closing the editor brings the entries back at once
 app.windows.layoutEditor.window:Close()
 assert(app.windows.layoutEditor == nil)

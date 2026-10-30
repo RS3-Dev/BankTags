@@ -19,25 +19,38 @@ local app = h:App()
 h:OpenBank()
 h:Tick(12)
 
-local key = require("banktags/tags/item_identity").LayoutKey
 local TagLayouts = h:TagsModule("banktags/tags/tag_layouts")
 local editorSize = h:TagsModule("banktags/windows/layout_editor_parts").size
 local store = app.store
-local function item(objectID, copy, source)
-    return { kind = "item", objectID = objectID, layoutKey = key(objectID, copy),
-        sourceLayoutKey = source ~= nil and key(objectID, source) or nil }
+local item = TagLayouts.Item
+-- The slot keys of the gear resetGear saves, by name
+local keys = {}
+-- Report whether gear still has a slot
+local function has(layoutKey)
+    for _, slot in ipairs(store:GetTaggedItems("gear")) do
+        if slot.layoutKey == layoutKey then return true end
+    end
+    return false
 end
--- Lines: 0 Weapons, 1 an axe, its copy, and a sword, 2 a helm; boots in Unsorted
+-- Report whether Unsorted holds only the boots
+local function onlyBoots()
+    local unsorted = store.data.tags.gear.unsorted
+    return #unsorted == 1 and unsorted[1].layoutKey == keys.boots
+end
+-- Lines: 0 Weapons, 1 an axe, a second axe, and a sword, 2 a helm; boots in Unsorted
 local function resetGear()
     if store.data.tags.gear ~= nil then assert(store:DeleteTag("gear")) end
     assert(store:CreateTag("gear"))
     if store.data.tags.food == nil then assert(store:CreateTag("food")) end
+    local axe, axe2, sword, helm, boots = item(3001), item(3001), item(3002), item(3003), item(3004)
+    keys = { axe = axe.layoutKey, axe2 = axe2.layoutKey, sword = sword.layoutKey, helm = helm.layoutKey,
+        boots = boots.layoutKey }
     store.data.tags.gear.rows = {
         { kind = "label", text = "Weapons" },
-        { kind = "row", slots = { item(3001, 1), item(3001, 2, 1), { kind = "blank" }, item(3002, 1) } },
-        { kind = "row", slots = { item(3003, 1) } },
+        { kind = "row", slots = { axe, axe2, { kind = "blank" }, sword } },
+        { kind = "row", slots = { helm } },
     }
-    store.data.tags.gear.unsorted = { item(3004, 1) }
+    store.data.tags.gear.unsorted = { boots }
     assert(store:Save())
     app:Changed()
 end
@@ -172,11 +185,10 @@ choose(menu, BELOW)
 assert(saved() == before, "the insert waits for the next tick")
 h:Tick(2)
 assert(lines() == "Weapons 3001 - 3003", lines())
-assert(changes == 1 and Json.encode(store.data.tags.gear.unsorted) == Json.encode({ item(3004, 1) }))
-local copy = TagLayouts.Render(store.data.tags.gear.rows, 10).slots[12]
-assert(copy.layoutKey == key(3001, 2) and copy.sourceLayoutKey == key(3001, 1))
+assert(changes == 1 and onlyBoots())
+assert(TagLayouts.Render(store.data.tags.gear.rows, 10).slots[12].layoutKey == keys.axe2)
 -- The editor redraws at once: the helm's row is now the last one, then the drop row
-assert(editor.usedRows == 4 and sorted.slots[31].layoutKey == key(3003, 1) and sorted.slots[21].kind == "blank")
+assert(editor.usedRows == 4 and sorted.slots[31].layoutKey == keys.helm and sorted.slots[21].kind == "blank")
 -- The same menu's entries act only once
 before = saved()
 choose(menu, BELOW)
@@ -202,7 +214,7 @@ h:Tick(2)
 assert(app.windows.rowRemoveConfirm == nil)
 assert(lines() == "- Weapons 3001 3003", lines())
 assert(changes == 3 and editor.usedRows == 4)
-assert(TagLayouts.Render(store.data.tags.gear.rows, 10).slots[22].sourceLayoutKey == key(3001, 1))
+assert(TagLayouts.Render(store.data.tags.gear.rows, 10).slots[22].layoutKey == keys.axe2)
 pointAt("sorted", 0, 0)
 choose(h:ContentMenu(), REMOVE)
 h:Tick(2)
@@ -233,9 +245,9 @@ assert(confirm().window.root.hidden and saved() == before and changes == 4)
 askToRemove(2, 1).confirmButton.root.hooks.click()
 assert(lines() == "Weapons 3003", lines())
 assert(changes == 5 and confirm().window.root.hidden)
-for _, gone in ipairs({ key(3001, 1), key(3001, 2), key(3002, 1) }) do assert(not store:HasTag("gear", gone)) end
-assert(store:HasTag("gear", key(3003, 1)) and Json.encode(store.data.tags.gear.unsorted) == Json.encode({ item(3004, 1) }))
--- Undo puts back every item, copy, and blank; redo removes them again
+for _, gone in ipairs({ keys.axe, keys.axe2, keys.sword }) do assert(not has(gone)) end
+assert(has(keys.helm) and onlyBoots())
+-- Undo puts back every item and blank; redo removes them again
 assert(editor:Undo() and saved() == before and changes == 6)
 assert(editor:Redo() and lines() == "Weapons 3003")
 assert(editor:Undo() and saved() == before)
@@ -244,7 +256,7 @@ askToRemove(5, 0)
 assert(string.find(confirm().message.content, "the label <col=ffcb05>\"Weapons\"", 1, true), confirm().message.content)
 confirm().confirmButton.root.hooks.click()
 assert(lines() == "3001 3003", lines())
-assert(store:HasTag("gear", key(3001, 2)) and editor.centerLabels[1] == nil)
+assert(has(keys.axe2) and editor.centerLabels[1] == nil)
 assert(editor:Undo() and saved() == before)
 
 -- A confirmation goes stale after any save or another tag, and then removes nothing
@@ -287,7 +299,8 @@ app:Changed()
 -- One line of a wrapped row goes alone, and a reserved blank keeps its line
 local long = store.data.tags.gear.rows[2].slots
 for position = #long + 1, 20 do long[position] = { kind = "blank" } end
-long[21] = item(3002, 2, 1)
+long[21] = item(3002)
+local sword2 = long[21].layoutKey
 store.data.tags.gear.rows[3].slots = { { kind = "blank" }, { kind = "blank", dormant = "Old item" } }
 assert(store:Save())
 app:Changed()
@@ -299,7 +312,7 @@ choose(h:ContentMenu(), REMOVE)
 h:Tick(2)
 assert(lines() == "Weapons 3001 3002 -", lines())
 local wrapped = store.data.tags.gear.rows[2].slots
-assert(#wrapped == 11 and wrapped[11].layoutKey == key(3002, 2) and wrapped[2].layoutKey == key(3001, 2))
+assert(#wrapped == 11 and wrapped[11].layoutKey == sword2 and wrapped[2].layoutKey == keys.axe2)
 assert(store.data.tags.gear.rows[3].slots[2].dormant == "Old item")
 -- A reserved slot counts as content, so its line asks first
 askToRemove(0, 3)
@@ -308,7 +321,7 @@ confirm().cancelButton.root.hooks.click()
 -- Removing a wrapped row's item line takes only that line's items
 askToRemove(0, 2).confirmButton.root.hooks.click()
 assert(lines() == "Weapons 3001 -", lines())
-assert(#store.data.tags.gear.rows[2].slots == 4 and not store:HasTag("gear", key(3002, 2)))
+assert(#store.data.tags.gear.rows[2].slots == 4 and not has(sword2))
 assert(store.data.tags.gear.rows[3].slots[2].dormant == "Old item")
 -- Back to the rows the next checks start from
 resetGear()
@@ -317,17 +330,17 @@ app:Changed()
 assert(lines() == "- Weapons 3001 - 3003", lines())
 
 -- The row comes from the pointer, not the selected item
-editor.selectedLayoutKey = key(3003, 1)
+editor.selectedLayoutKey = keys.helm
 pointAt("sorted", 1, 2)
 choose(h:ContentMenu(), BELOW)
 h:Tick(2)
 assert(lines() == "- Weapons 3001 - - 3003", lines())
-assert(editor.selectedLayoutKey == key(3003, 1))
+assert(editor.selectedLayoutKey == keys.helm)
 
 -- Scrolled rows count the scroll
 resetGear()
 for objectID = 1, 20 do store.data.tags.gear.rows[#store.data.tags.gear.rows + 1] =
-    { kind = "row", slots = { item(4000 + objectID, 1) } } end
+    { kind = "row", slots = { item(4000 + objectID) } } end
 assert(store:Save())
 app:Changed()
 editor.panes.sorted.surface.hooks.wheel(nil, 3)
@@ -394,10 +407,10 @@ editor.window:Close()
 assert(app.windows.layoutEditor == nil)
 assert(children(h:ContentMenu()) == nil)
 
--- Item actions use the clicked copy, not a different selection or group
+-- Item actions use the clicked slot, not a different selection or group
 resetGear()
 openEditor()
-editor:SelectItems({ key(3001, 1), key(3002, 1) })
+editor:SelectItems({ keys.axe, keys.sword })
 pointAt("sorted", 1, 1)
 menu = h:ContentMenu()
 assert(shown(menu) == ITEM_OFFERED)
@@ -407,24 +420,23 @@ h:Tick(2)
 assert(saved() == before, "a plain left click never runs the menu action")
 Harness.Choose(menu, "Move to Unsorted")
 h:Tick(2)
-assert(changes == 1 and store:HasTag("gear", key(3001, 2)))
-local unsortedCopy = store.data.tags.gear.unsorted[2]
-assert(unsortedCopy.layoutKey == key(3001, 2) and unsortedCopy.sourceLayoutKey == key(3001, 1))
-assert(store:HasTag("gear", key(3001, 1)) and store:HasTag("gear", key(3002, 1)))
+assert(changes == 1 and has(keys.axe2))
+assert(store.data.tags.gear.unsorted[2].layoutKey == keys.axe2)
+assert(has(keys.axe) and has(keys.sword))
 Harness.Choose(menu, "Remove from Tag")
 h:Tick(2)
 assert(changes == 1, "the same menu only acts once")
 assert(editor:Undo())
 assert(saved() == before, "moving to Unsorted is undoable")
 
-editor:SelectOnly(key(3001, 1))
+editor:SelectOnly(keys.axe)
 pointAt("sorted", 3, 1)
 menu = h:ContentMenu()
 Harness.Choose(menu, "Remove from Tag")
 h:Tick(2)
-assert(not store:HasTag("gear", key(3002, 1)) and store:HasTag("gear", key(3001, 1)))
+assert(not has(keys.sword) and has(keys.axe))
 assert(#host.items == 4, "removing a tag never removes bank items")
-assert(editor:Undo() and store:HasTag("gear", key(3002, 1)))
+assert(editor:Undo() and has(keys.sword))
 
 -- Another edit after building an item menu invalidates its actions
 pointAt("sorted", 0, 1)

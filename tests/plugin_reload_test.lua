@@ -11,7 +11,7 @@ h.bankHost:SetItems({ { 1944, 3, "Egg" }, { 1927, 1, "Milk" } })
 -- Bank Tags loads without Bank Core and waits for it
 local tags = h:LoadTags()
 local app = h:App()
-assert(app ~= nil and not app:IsConnected())
+assert(app ~= nil and app.ext == nil)
 assert(type(rawget(tags.env, "PluginDependencyUpdate")) == "function")
 assert(rawget(tags.env, "PluginOptionalDependencyChanged") == nil)
 local api = tags.result
@@ -29,25 +29,26 @@ end
 
 -- Core arrives late, and the dependency update connects Bank Tags
 local core = h:LoadCore()
-assert(app:IsConnected() and app.bank == core.result)
+assert(h:Connected())
 local session, layout = h:OpenBank()
 h:Tick(2)
 local tabParent = h:TabParent()
 assert(tabParent ~= nil and Harness.Find(tabParent, "New Tag") ~= nil)
--- The listener reported Core's state, columns, and bounds
-assert(app.state ~= nil and app.state.columns ~= nil and app.state.bounds ~= nil)
+-- Core reports the open bank's bounds and columns
+local bounds = app.windows:BankBounds()
+assert(bounds ~= nil and bounds.columns ~= nil and bounds.width ~= nil)
 
 -- Bank Tags saves under its own keys in its own saved data
 assert(app.store:CreateTag("melee"))
-assert(h.databases.banktags["banktags:tags:v3:manifest"] ~= nil)
-assert(h.databases.bankcore == nil or h.databases.bankcore["banktags:tags:v3:manifest"] == nil)
+assert(h.databases.banktags["banktags:tags:v4:manifest"] ~= nil)
+assert(h.databases.bankcore == nil or h.databases.bankcore["banktags:tags:v4:manifest"] == nil)
 for key in pairs(h.databases.banktags) do assert(string.sub(key, 1, 9) == "banktags:", key) end
 
 -- Core reloads, and Bank Tags reconnects to the new API
 local oldAPI = core.result
 h.host:Reload("bankcore", { shutdown = true, notify = true, reinject = true })
-assert(tabParent.destroyed and not oldAPI.GetState().running)
-assert(app:IsConnected() and app.bank == core.result and app.bank ~= oldAPI)
+assert(tabParent.destroyed and select(2, oldAPI.Register({ id = "late", name = "Late" })) == "stopped")
+assert(h:Connected() and core.result ~= oldAPI)
 session, layout = h:OpenBank()
 h:Tick(2)
 tabParent = h:TabParent()
@@ -57,17 +58,17 @@ assert(tabParent ~= nil and not tabParent.destroyed and Harness.Find(tabParent, 
 h.host:Reload("bankcore", { shutdown = true })
 h.host.exports.bankcore = require("tools/test_support/fake_plugin_host").Clone(core.result)
 h.host:Notify("bankcore", true, true)
-assert(app:IsConnected() and app.bank == h.host.exports.bankcore)
+assert(h:Connected())
 session, layout = h:OpenBank()
 h:Tick(2)
 assert(h:TabParent() ~= nil)
 
 -- Core unloads; Bank Tags lets go and its tags stay saved
 h.host:Unload("bankcore")
-assert(not app:IsConnected() and app.handle == nil)
+assert(app.ext == nil)
 assert(app.store.data.tags.melee ~= nil)
 h:LoadCore()
-assert(app:IsConnected())
+assert(h:Connected())
 session, layout = h:OpenBank()
 h:Tick(2)
 tabParent = h:TabParent()
@@ -75,7 +76,7 @@ tabParent = h:TabParent()
 -- Bank Tags reloads in the same Lua state, taking the owner ID back
 h.host:Reload("banktags", { freshEnvironment = true })
 local reloaded = h:App()
-assert(reloaded ~= app and app.shutDown and reloaded:IsConnected())
+assert(reloaded ~= app and app.shutDown and app.ext == nil and h:Connected())
 -- The old import API closed; plugins register again
 assert(not importer:GetState().live and not api.GetState().running)
 assert(select(2, importer:RegisterImportProvider("again", { label = "Guide", input = "text",
@@ -87,13 +88,13 @@ h:Tick(2)
 assert(h:TabParent() ~= nil and Harness.Find(h:TabParent(), "Melee") ~= nil)
 -- Told Core loaded again, the old copy stays shut down
 rawget(tags.env, "PluginDependencyUpdate")({ pluginIdentifier = "bankcore", enabled = true })
-assert(reloaded:IsConnected() and not app:IsConnected())
+assert(h:Connected() and app.ext == nil)
 
 -- A reload that keeps the module cache still runs the new modules
 local cachedApp = h:TagsModule("banktags/app")
 h.host:Reload("banktags")
 local hotReloaded = h:App()
-assert(hotReloaded ~= reloaded and reloaded.shutDown and hotReloaded:IsConnected())
+assert(hotReloaded ~= reloaded and reloaded.shutDown and h:Connected())
 assert(h:TagsModule("banktags/app") ~= cachedApp and getmetatable(hotReloaded) ~= getmetatable(reloaded))
 assert(h:TagsModule("banktags/core/debug_log") ~= nil)
 reloaded = hotReloaded
@@ -106,25 +107,15 @@ assert(h:TabParent() == nil)
 for _, subscription in ipairs(h.host:SubscriptionsOf("banktags")) do
     error("Bank Tags left " .. subscription .. " subscribed")
 end
-assert(not reloaded:IsConnected() and reloaded.imports.closed)
+assert(reloaded.ext == nil and reloaded.imports.closed)
 h.host:Unload("bankcore")
 
--- Across separate Lua states, the replaced copy stays idle
+-- In its own Lua state, Bank Tags connects as before
 local split = Harness.new("plugin_reload_split", { separateGlobals = true })
 split.bankHost:SetItems({ { 1944, 3, "Egg" } })
 split:LoadCore()
 local first = split:LoadTags()
-local firstApp = rawget(first.env, "__banktags_session")
-assert(firstApp:IsConnected())
-local second = split.host:Load("banktags_copy", split.tagsFolder,
-    { name = "banktags", dependencies = {}, optional = { bankcore = true, runeql = true } })
-local secondApp = rawget(second.env, "__banktags_session")
-assert(secondApp:IsConnected() and not firstApp:IsConnected())
-rawget(first.env, "PluginDependencyUpdate")({ pluginIdentifier = "bankcore", enabled = true })
-assert(firstApp.retired and not firstApp:IsConnected() and secondApp:IsConnected())
-rawget(second.env, "PluginDependencyUpdate")({ pluginIdentifier = "bankcore", enabled = true })
-assert(secondApp:IsConnected())
-assert(not firstApp:IsConnected() and select(2, firstApp:Connect()) == "replaced")
+assert(split:Connected())
 
 -- Without RuneQL the catalog is limited; with it RuneQL is searched
 local Catalog = split.tags.env.package.loaded["banktags/tags/catalog"]

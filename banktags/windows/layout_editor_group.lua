@@ -117,7 +117,7 @@ function LayoutEditorGroup:BeginGroupDrag(slot, pane, hit, pointX, pointY)
     ghost:SetSize(Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE)
     ghost.clickthrough = true
     local sprite = ui.Sprite.new(ghost)
-    local width, height = self:ApplyRuntimeObjectSprite(sprite, slot.objectID, slot.layoutKey, true)
+    local width, height = self:ApplyRuntimeObjectSprite(sprite, slot.objectID, true)
     sprite:SetPos(0, 0)
     -- The count sits on the item's corner so the whole group is named
     prettyui.Text.new(ghost, {

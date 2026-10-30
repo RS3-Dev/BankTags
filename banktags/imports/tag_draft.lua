@@ -37,17 +37,15 @@ local function readReference(entry)
     return ItemIdentity.ObjectID(entry), entry
 end
 
--- Turn one item entry into a slot; a repeated object takes its next copy
-local function readSlot(entry, copies)
+-- Turn one item entry into a slot
+local function readSlot(entry)
     local objectID, name = readReference(entry)
     if objectID == nil then
         -- An unknown config name stays saved by name
         if name ~= nil then return { kind = "blank", dormant = name } end
         return nil
     end
-    local copy = (copies[objectID] or 0) + 1
-    copies[objectID] = copy
-    return { kind = "item", objectID = objectID, layoutKey = ItemIdentity.LayoutKey(objectID, copy) }
+    return { kind = "item", objectID = objectID }
 end
 
 -- Read one draft tag into tag data, spending entries from the shared budget
@@ -80,7 +78,6 @@ local function readTag(input, index, budget, data)
         tag.folder = key
     end
 
-    local copies = {}
     -- Copy a list of items into slots, with false as a blank where blanks are allowed
     local function readSlots(list, target, allowBlank, label)
         local entries = isPlain(list) and PlainData.Array(list, budget.left) or nil
@@ -88,7 +85,7 @@ local function readTag(input, index, budget, data)
         budget.left = budget.left - #entries
         for slotIndex, entry in ipairs(entries) do
             local slot = (entry == false and allowBlank) and { kind = "blank" } or nil
-            if slot == nil then slot = readSlot(entry, copies) end
+            if slot == nil then slot = readSlot(entry) end
             if slot == nil then
                 return prefix .. " " .. label .. " entry " .. slotIndex .. " is not an object ID or config name"
             end

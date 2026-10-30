@@ -39,7 +39,7 @@ function TagStore.new()
     local saved = ChunkedStringStore.Read(TEXT_STORE)
     local data, reason = nil, nil
     if saved ~= nil then data, reason = TagData.Decode(saved, true) end
-    local store = setmetatable({ data = data or TagData.Empty(), members = {} }, TagStore)
+    local store = setmetatable({ data = data or TagData.Empty() }, TagStore)
     if saved ~= nil and data == nil then
         store.loadError = "The saved tags could not be read (" .. tostring(reason)
             .. "). Nothing will be saved until they are fixed or removed."
@@ -72,7 +72,7 @@ function TagStore:Commit(nextData, failureMessage)
     end
     -- Edits saved together are written once at the end
     if self.holdSave then
-        self.data, self.members = nextData, {}
+        self.data = nextData
         return true, nil
     end
     if PersistentDB == nil or PersistentDB.SetString == nil then
@@ -86,7 +86,7 @@ function TagStore:Commit(nextData, failureMessage)
         end
         return false, failureMessage .. " " .. tostring(failure.reason or "")
     end
-    self.data, self.members = nextData, {}
+    self.data = nextData
     return true, nil
 end
 
@@ -106,45 +106,21 @@ function TagStore:SaveTogether(edit)
     if ran and done and self.data ~= before then
         done, reason = self:Commit(self.data, "Could not save the tags.")
     end
-    if not (ran and done) then self.data, self.members = before, {} end
+    if not (ran and done) then self.data = before end
     if not ran then error(done, 0) end
     return done == true, reason
 end
 
--- Return the set of item copies in a tag, or nil when the tag does not exist
-function TagStore:Members(tag)
-    local record = self.data.tags[tag]
-    if record == nil then return nil end
-    local members = self.members[tag]
-    if members == nil then
-        members = {}
-        for _, slots in ipairs({ TagLayouts.RowSlots(record.rows), record.unsorted }) do
-            for _, slot in ipairs(slots) do
-                if slot.kind == "item" then members[slot.layoutKey] = true end
-            end
-        end
-        self.members[tag] = members
-    end
-    return members
-end
-
--- Report whether a tag lists an item copy
-function TagStore:HasTag(tag, layoutKey)
-    local members = self:Members(tag)
-    return members ~= nil and members[layoutKey] == true
-end
-
--- Add an item copy to a tag's layout or Unsorted list
-function TagStore:AddTag(tag, objectID, layoutKey)
+-- Add a slot for an object to a tag's layout or Unsorted list, returning the slot's key
+-- An object already in the tag gets another slot, which shows its next stack
+function TagStore:AddTag(tag, objectID)
     objectID = math.tointeger(tonumber(objectID))
-    layoutKey = layoutKey or ItemIdentity.LayoutKey(objectID, 1)
-    if self.data.tags[tag] == nil or objectID == nil or layoutKey == nil then
-        return false, "The tag or item is invalid.", false
+    if self.data.tags[tag] == nil or objectID == nil or objectID < 0 then
+        return false, "The tag or item is invalid.", nil
     end
-    if self:HasTag(tag, layoutKey) then return true, nil, false end
     local nextData = copy(self.data)
     local record = nextData.tags[tag]
-    local slot = { kind = "item", objectID = objectID, layoutKey = layoutKey }
+    local slot = TagLayouts.Item(objectID)
     if self.preserveTagLayout == false then
         local index, position = TagLayouts.FirstOpenSlot(record.rows)
         if index ~= nil then
@@ -156,10 +132,10 @@ function TagStore:AddTag(tag, objectID, layoutKey)
         record.unsorted[#record.unsorted + 1] = slot
     end
     local saved, reason = self:Commit(nextData, "Could not save the tag.")
-    return saved, reason, saved
+    return saved, reason, saved and slot.layoutKey or nil
 end
 
--- Take a copy out of a tag, leaving a blank in its row
+-- Take a slot out of a tag, leaving a blank in its row
 function TagStore.TakeSlot(record, layoutKey)
     for _, entry in ipairs(record.rows) do
         for position, slot in ipairs(entry.slots or {}) do
@@ -177,11 +153,11 @@ function TagStore.TakeSlot(record, layoutKey)
     return nil
 end
 
--- Remove one item copy from a tag
+-- Remove one slot from a tag
 function TagStore:RemoveTag(tag, layoutKey)
-    if not self:HasTag(tag, layoutKey) then return true, nil, false end
+    if self.data.tags[tag] == nil then return true, nil, false end
     local nextData = copy(self.data)
-    TagStore.TakeSlot(nextData.tags[tag], layoutKey)
+    if TagStore.TakeSlot(nextData.tags[tag], layoutKey) == nil then return true, nil, false end
     local saved, reason = self:Commit(nextData, "Could not remove the tag.")
     return saved, reason, saved
 end

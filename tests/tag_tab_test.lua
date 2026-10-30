@@ -58,8 +58,8 @@ assert(tagRows() == 72, "every tag has a row: " .. tagRows())
 
 -- Searching filters only the tab's own list and never touches the page
 local pagesPut = 0
-local putPage = app.CreateTagPage
-app.CreateTagPage = function(...)
+local putPage = app.SetTagPage
+app.SetTagPage = function(...)
     pagesPut = pagesPut + 1
     return putPage(...)
 end
@@ -109,13 +109,12 @@ for _, spriteName in ipairs({ "SWAP", "ARROW_UP", "ARROW_DOWN" }) do
     end
 end
 
--- Choosing a tag shows it through Bank Tags' one page, keyed by the tag
+-- Choosing a tag sets Bank Tags' page to it and opens it
 h:ClickRow("melee")
 h:Tick(2)
-assert(app.shownTag == "melee" and layout.shownPage.key == "tag:melee")
+assert(app:ShownTag() == "melee" and app.ext:IsOpen())
+assert(layout.pageState:GetLayoutSections()[1].label == "Melee")
 checkButtons(true)
-local state = app.handle:GetState()
-assert(state.pageVisible and state.pageKey == "tag:melee")
 local entries = layout:BuildPageItems()
 assert(#entries == 1 and entries[1].objectID == 4151)
 -- The footer offers the layout editor only while a tag is shown
@@ -127,26 +126,57 @@ local function hasEditButton()
 end
 assert(hasEditButton())
 list = tab.controls.list
--- Another tag updates the same page with a new key; the shown tag again leaves it
+-- Another tag sets and opens the page again; the shown tag again closes it
 h:ClickRow("ranged")
 h:Tick(2)
-assert(app.shownTag == "ranged" and layout.shownPage.key == "tag:ranged")
-assert(app.handle:GetState().pageVisible)
+assert(app:ShownTag() == "ranged" and layout.pageState:GetLayoutSections()[1].label == "Ranged")
+-- The footer stays, and its Edit opens the tag shown now, not the one shown when it was built
+for _, control in ipairs(tab.controls.owned) do
+    if control.spriteName == "PENCIL" then control.root.hooks.pressed() end
+end
+assert(app.windows.layoutEditor ~= nil and app.windows.layoutEditor.selectedTag == "ranged")
+app.windows:Close("layoutEditor")
 list = tab.controls.list
 h:ClickRow("ranged")
 h:Tick(2)
-assert(app.shownTag == nil and layout.shownPage == nil and not hasEditButton())
+assert(app:ShownTag() == nil and layout.shownPage == nil and not hasEditButton())
 
--- Outside All Items Tags supplies the warning text
+-- Outside All Items the Tags tab says why; showing a tag clears it
 layout.nativeViewAll = false
 local detect = layout.DetectNativeViewAll
 layout.DetectNativeViewAll = function() return false end
 list = tab.controls.list
 h:ClickRow("melee")
 h:Tick(2)
-assert(app.shownTag == nil and layout.shownPage == nil and layout.warningPanel.children[3].content == 'Select "All Items" to view this tag.')
+assert(app:ShownTag() == nil and layout.shownPage == nil and app.status == 'Select "All Items" to view this tag.')
 layout.nativeViewAll, layout.DetectNativeViewAll = true, detect
-layout:StopWarning()
+-- With the preset selector open it says to close it
+local presetOpen = layout.IsPresetViewOpen
+layout.IsPresetViewOpen = function() return true end
+list = tab.controls.list
+h:ClickRow("melee")
+h:Tick(2)
+assert(app:ShownTag() == nil and layout.shownPage == nil and app.status == 'Close the preset selector to view this tag.')
+layout.IsPresetViewOpen = presetOpen
+list = tab.controls.list
+h:ClickRow("melee")
+h:Tick(2)
+assert(app:ShownTag() == "melee" and app.status == nil)
+list = tab.controls.list
+h:ClickRow("melee")
+h:Tick(2)
+assert(app:ShownTag() == nil and layout.shownPage == nil)
+-- Another extension's page replacing the tag clears the row's highlight once Bank Core says so
+h:ClickRow("melee")
+h:Tick(2)
+assert(tab.controls.list:RowFor("melee").selectionFrame ~= nil)
+local other = assert(h:Session().publicAPI.Register({ id = "other", name = "Other" }))
+assert(other:SetPage({ title = "Other", rows = { { slots = { 385 } } } }) and other:Open())
+assert(app:ShownTag() == nil)
+h:Tick(2)
+assert(tab.controls.list:RowFor("melee").selectionFrame == nil)
+assert(other:Dispose())
+h:Tick(2)
 
 -- Scroll a row to the top of the list and point at it
 local function pointAtRow(entryID)
@@ -179,10 +209,10 @@ for _, labelText in ipairs({ "Select", "Edit", "Rename", "Select items", "Remove
     assert(found, labelText .. " is offered: " .. table.concat(Harness.Labels(menu), " | "))
 end
 Harness.Choose(menu, "Select <col=f2c66d>Melee</col>")
-assert(app.shownTag == nil)
+assert(app:ShownTag() == nil)
 h:Tick(2)
-assert(app.shownTag == "melee" and layout.shownPage.key == "tag:melee")
-assert(app.handle:LeavePage())
+assert(app:ShownTag() == "melee")
+assert(app.ext:Close())
 h:Tick(2)
 
 -- The folder submenu files the tag under another folder; Remove from folder files it under none
@@ -275,8 +305,9 @@ local function iconRows()
 end
 tab.controls.list.search.root.hooks.contentchanged(nil, "change", "iconic")
 assert(iconRows() == 1)
-layout.tabRail.settingsButton.root.hooks.pressed()
-assert(session.bankSettings.window.nav:Click("banktags"))
+local panel = ui.Layer.new(nil)
+panel:SetSize(300, 400)
+h.hostSubscriptions.ContentLayerReady.banktags_content({ component = panel })
 app.settingsSection.controls.showTagSprites:SetSelected("showTagSprites", false, true)
 assert(app.settings.showTagSprites == false and iconRows() == 0)
 tab.controls.list.search.root.hooks.contentchanged(nil, "change", "combat")

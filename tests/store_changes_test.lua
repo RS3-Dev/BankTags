@@ -15,15 +15,21 @@ local app = h:App()
 h:OpenBank()
 h:Tick(12)
 
-local key = require("banktags/tags/item_identity").LayoutKey
+local TagLayouts = h:TagsModule("banktags/tags/tag_layouts")
 local store = app.store
 local App = getmetatable(app)
 local Size = h:TagsModule("banktags/windows/layout_editor_parts").size
 local COLUMNS = Size.CENTER_COLUMNS
-local function item(objectID, copy)
-    return { kind = "item", objectID = objectID, layoutKey = key(objectID, copy or 1) }
-end
+local item = TagLayouts.Item
 local function row(...) return { kind = "row", slots = { ... } } end
+-- Count a tag's slots for an object
+local function count(tag, objectID)
+    local total = 0
+    for _, slot in ipairs(store:GetTaggedItems(tag)) do
+        if slot.objectID == objectID then total = total + 1 end
+    end
+    return total
+end
 -- Line 0 holds 1 and 2, line 1 is a label, line 2 holds 5
 for _, tag in ipairs({ "gear", "food" }) do assert(store:CreateTag(tag)) end
 store.data.tags.gear.rows = { row(item(1), item(2)), { kind = "label", text = "Mid" }, row(item(5)) }
@@ -33,14 +39,14 @@ app:Changed()
 -- Count every redraw and save from here on
 local counts
 local function reset()
-    counts = { center = 0, rail = 0, tab = 0, pages = {}, select = 0, exports = 0, writes = 0 }
+    counts = { center = 0, rail = 0, tab = 0, pages = {}, exports = 0, writes = 0 }
 end
 reset()
 local tabRefresh = app.tab.Refresh
 app.tab.Refresh = function(tab) counts.tab = counts.tab + 1; return tabRefresh(tab) end
-app.CreateTagPage = function(self, tag)
+app.SetTagPage = function(self, tag)
     counts.pages[#counts.pages + 1] = tag
-    return App.CreateTagPage(self, tag)
+    return App.SetTagPage(self, tag)
 end
 local Chunks = h:TagsModule("banktags/core/chunked_string_store")
 local write = Chunks.Write
@@ -127,23 +133,18 @@ assert(counts.center == 1 and #counts.pages == 0 and counts.exports == 0 and cou
 
 -- Outside changes reach only what shows them --------------------------------------
 
--- Another tag's items leave the editor, page, and select mode alone
--- Select mode's outline is counted, not drawn, since the page is shown
-app.select.session = { tag = "gear" }
-app.select.Refresh = function() counts.select = counts.select + 1 end
+-- Another tag's items leave the editor and page alone
 reset()
-assert(app:AddItemToTag("food", 385, 1))
+assert(app:AddItemToTag("food", 385))
 assert(counts.center == 0 and counts.rail == 0 and counts.tab == 0 and #counts.pages == 0)
-assert(counts.select == 0 and counts.exports == 1)
+assert(counts.exports == 1)
 
 -- The open tag's items redraw its grids once and forget its undo steps
 assert(editor.history ~= nil)
 reset()
-assert(app:AddItemToTag("gear", 4151, 1))
-assert(counts.center == 1 and counts.rail == 0 and counts.tab == 0 and counts.select == 1)
+assert(app:AddItemToTag("gear", 4151))
+assert(counts.center == 1 and counts.rail == 0 and counts.tab == 0)
 assert(#counts.pages == 1 and editor.history == nil)
-app.select.Refresh = nil
-app.select:Forget()
 
 -- A new tag shows in the Tags tab and the rail
 reset()
@@ -155,7 +156,7 @@ assert(counts.tab == 1 and counts.rail == 1 and counts.center == 1 and #counts.p
 
 local before = store.data
 local function unchanged(where)
-    assert(store.data == before and not store:HasTag("gear", key(385, 1)), where .. ": the data changed")
+    assert(store.data == before and count("gear", 385) == 0, where .. ": the data changed")
     assert(editor.history == nil, where .. ": an undo step was kept")
     assert(counts.center == 0 and counts.exports == 0, where .. ": something redrew")
 end
@@ -176,65 +177,56 @@ assert(counts.writes == 1)
 
 reset()
 assert(editor:AddCatalogResult({ objectId = 385 }, 3))
-assert(counts.writes == 1 and store.data.tags.gear.rows[1].slots[3].layoutKey == key(385, 1))
-assert(editor.selectedLayoutKey == key(385, 1))
+local added = store.data.tags.gear.rows[1].slots[3]
+assert(counts.writes == 1 and added.objectID == 385)
+assert(editor.selectedLayoutKey == added.layoutKey)
 editedOnce("search add")
 assert(#editor.history.states == 2)
 
--- An item already in the tag gets a placed copy the same way
+-- An item already in the tag gets another placed slot the same way
 reset()
 assert(editor:AddCatalogResult({ objectId = 385 }, 5))
-assert(counts.writes == 1 and store.data.tags.gear.rows[1].slots[5].layoutKey == key(385, 2))
+local again = store.data.tags.gear.rows[1].slots[5]
+assert(counts.writes == 1 and again.objectID == 385 and again.layoutKey ~= added.layoutKey)
 
 reset()
 assert(editor:Undo() and editor:Undo())
-assert(not store:HasTag("gear", key(385, 1)) and not store:HasTag("gear", key(385, 2)))
+assert(count("gear", 385) == 0)
 assert(counts.writes == 2 and counts.center == 2)
 
 -- An edit that errors keeps the old data and lets later saves write
 before = store.data
 local ok = pcall(store.SaveTogether, store, function()
-    assert(store:AddTag("food", 4151, key(4151, 1)))
+    assert(store:AddTag("food", 4151))
     error("broken edit")
 end)
 assert(not ok and store.data == before and not store.holdSave)
-
--- A dropped item makes its tag in one save, or no tag at all
-reset()
-assert(app:CreateTagWithItem(385, 1))
-assert(counts.writes == 1 and store:HasTag("placeholder 1", key(385, 1)))
-app.windows:Close("tagSettingsEditor")
-failWrites = true
-reset()
-assert(not app:CreateTagWithItem(385, 1))
-failWrites = false
-assert(counts.writes == 1 and store.data.tags["placeholder 2"] == nil)
 
 -- A renamed shown tag is put once, under its new name
 reset()
 local saved, name = store:UpdateTag("gear", "kit")
 assert(saved and name == "kit")
 app:Renamed("gear", "kit")
-assert(#counts.pages == 1 and counts.pages[1] == "kit" and app.shownTag == "kit")
+assert(#counts.pages == 1 and counts.pages[1] == "kit" and app:ShownTag() == "kit")
 assert(editor.selectedTag == "kit" and counts.center == 1)
 
 -- A change to the shown tag never takes the bank from another plugin's page,
--- even before Bank Tags hears that its page went; the player's click shows the tag again
+-- even before Bank Core says its page closed; the player's click shows the tag again
 local layout = h:Session().layout
-local other = assert(core.result.RegisterExtension("test.other", "Other"))
-assert(other:CreatePage({ title = "Other", key = "other", layout = { { slots = { 385 } } } }))
+local other = assert(core.result.Register({ id = "test.other", name = "Other" }))
+assert(other:SetPage({ title = "Other", rows = { { slots = { 385 } } } }) and other:Open())
 reset()
-assert(app.shownTag == "kit" and app:AddItemToTag("kit", 385, 2))
+assert(app:AddItemToTag("kit", 385))
 assert(#counts.pages == 0 and layout.shownPage.title == "Other")
 h:Tick(2)
-assert(app.shownTag == nil and layout.shownPage.title == "Other")
-assert(app:ShowTag("kit") and layout.shownPage.key == "tag:kit" and app.shownTag == "kit")
+assert(app:ShownTag() == nil and layout.shownPage.title == "Other")
+assert(app:ShowTag("kit") and layout.shownPage.title == "Kit" and app:ShownTag() == "kit")
 -- Once the player picks a native tab, a change to the tag shows nothing
 layout:SetNativeViewAll(false)
 reset()
-assert(app:AddItemToTag("kit", 385, 3))
+assert(app:AddItemToTag("kit", 385))
 h:Tick(2)
-assert(#counts.pages == 0 and layout.shownPage == nil and app.shownTag == nil)
+assert(#counts.pages == 0 and layout.shownPage == nil and app:ShownTag() == nil)
 layout:SetNativeViewAll(true)
 assert(other:Dispose())
 

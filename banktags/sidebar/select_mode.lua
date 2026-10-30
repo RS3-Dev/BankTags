@@ -1,8 +1,7 @@
 -- Run select mode, where left-clicking bank items adds them to a tag
--- Bank Core only draws the gold outline; Bank Tags runs the rest
+-- It runs over the bank's own view and ends when a tag is shown or the bank closes
 
 local Config = require("banktags/core/config")
-local ItemIdentity = require("banktags/tags/item_identity")
 local Text = require("banktags/core/text")
 local debugLog = require("banktags/core/debug_log").Write
 
@@ -11,21 +10,6 @@ SelectMode.__index = SelectMode
 
 local PULSE_EVENT = Config.PLUGIN_REF .. "_select_pulse"
 local PULSE_PERIOD = 100
-
--- Messages for when select mode cannot start or ends early
-local REFUSALS = {
-    not_all_items = 'Select "All Items" before choosing items for a tag.',
-    preset_open = 'Select "Return to Bank" before choosing items for a tag.',
-    bank_closed = "Open your bank to choose items for a tag.",
-    building = "The bank is still updating. Try again.",
-    transition = "The bank is still updating. Try again.",
-    page_open = "Close the shown tag before choosing items.",
-}
-
--- Explain why select mode could not start or ended early
-function SelectMode.Explain(reason)
-    return REFUSALS[reason] or ("Select mode is unavailable (" .. tostring(reason) .. ").")
-end
 
 -- Create select mode for an app; no session runs until Start
 function SelectMode.new(app)
@@ -42,43 +26,18 @@ function SelectMode:Label()
     return "Add to " .. Text.plain(Text.titleCase(self.session.tag))
 end
 
--- Check whether Bank Core still shows the outline
-function SelectMode:IsShown()
-    local handle = self.app.handle
-    return self.session ~= nil and handle ~= nil and handle:GetState().highlighted == true
-end
-
--- List a tag's members as the copies Bank Core outlines
-local function highlight(store, tag)
-    local keys = {}
-    for key in pairs(store:Members(tag) or {}) do keys[#keys + 1] = key end
-    table.sort(keys)
-    local copies = {}
-    for _, key in ipairs(keys) do
-        local objectID, copy = ItemIdentity.ParseKey(key)
-        if objectID ~= nil then copies[#copies + 1] = { item = objectID, copy = copy } end
-    end
-    return copies
-end
-
 -- Start choosing items for a tag, or stop if already choosing
 function SelectMode:Toggle(tag)
     if self:Tag() == tag then return self:Stop() end
     return self:Start(tag)
 end
 
--- Outline the tag's members in the bank's own view and start the session
+-- Start the session over the bank's own view, leaving a shown tag
 function SelectMode:Start(tag)
     local app = self.app
-    local handle = app.handle
-    if handle == nil then return false end
-    -- Select mode needs the bank's own view
-    if handle:GetState().pageVisible then handle:LeavePage() end
-    local started, reason = handle:SetItemHighlight(highlight(app.store, tag))
-    if not started then
-        app:ShowStatus(SelectMode.Explain(reason))
-        return false
-    end
+    local ext = app.ext
+    if ext == nil then return false end
+    if ext:IsOpen() and not ext:Close() then return false end
     self.session = { tag = tag }
     app:ShowStatus(nil)
     self:StartPulse()
@@ -87,52 +46,30 @@ function SelectMode:Start(tag)
     return true
 end
 
--- Add a picked item's copy to the session's tag and outline it
-function SelectMode:Picked(session, item)
+-- Add a picked item to the session's tag
+function SelectMode:Picked(session, objectID)
     if self.session ~= session then return end
-    -- Adding the item outlines it through the app's change
-    self.app:AddItemToTag(session.tag, item.objectID, item.copy)
+    self.app:AddItemToTag(session.tag, objectID)
 end
 
--- End the session once Bank Core drops its outline
-function SelectMode:Follow(state)
-    if self.session == nil or state.highlighted then return end
-    self.session = nil
-    self:StopPulse()
-    if state.reason ~= nil then self.app:ShowStatus(SelectMode.Explain(state.reason)) end
-    self.app.tab:Refresh()
-end
-
--- End select mode now; Bank Core restores the items' own outlines
+-- End select mode now
 function SelectMode:Stop()
     if self.session == nil then return false end
     self.session = nil
     self:StopPulse()
-    if self.app.handle ~= nil then self.app.handle:SetItemHighlight(nil) end
     self.app.tab:Refresh()
     return true
 end
 
--- Drop the session without asking Bank Core, which has already gone
+-- Drop the session without redrawing the Tags tab
 function SelectMode:Forget()
     self.session = nil
     self:StopPulse()
 end
 
 -- Follow a renamed tag, keeping the session running under its new name
--- The rename's app change outlines its items again
 function SelectMode:Rename(oldTag, newTag)
     if self:Tag() == oldTag then self.session.tag = newTag end
-end
-
--- Outline the tag's members again, or end a cleared session
-function SelectMode:Refresh()
-    local handle = self.app.handle
-    if self.session == nil or handle == nil then return end
-    local state = handle:GetState()
-    if not state.highlighted then return self:Follow(state) end
-    local updated, reason = handle:SetItemHighlight(highlight(self.app.store, self.session.tag))
-    if not updated then debugLog("Bank Tags could not update select mode: ", tostring(reason)) end
 end
 
 -- Pulse the tag's row while the session runs

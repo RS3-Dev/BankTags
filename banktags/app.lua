@@ -3,7 +3,6 @@
 local Config = require("banktags/core/config")
 local DebugLog = require("banktags/core/debug_log")
 local ImportAPI = require("banktags/imports/import_api")
-local ItemIdentity = require("banktags/tags/item_identity")
 local SelectMode = require("banktags/sidebar/select_mode")
 local Settings = require("banktags/core/settings")
 local SettingsSection = require("banktags/windows/settings_section")
@@ -19,24 +18,20 @@ local debugLog = DebugLog.Write
 local App = {}
 App.__index = App
 
-local TAB_ID = "tags"
-local NEEDS_ALL_ITEMS = 'Select "All Items" before adding items to tags.'
-local NEEDS_NEWER_CORE = "Bank Tags needs a newer Bank Core. Update Bank Core to show tags."
--- Reasons Bank Core gives for a page it cannot show, rather than for the bank's view
-local PAGE_REFUSALS = { invalid_page = true, unknown_item = true, duplicate_slot = true, too_large = true }
+-- What the Tags tab says when Bank Core cannot show a tag now
+local OPEN_REFUSALS = {
+    not_all_items = 'Select "All Items" to view this tag.',
+    preset_open = 'Close the preset selector to view this tag.',
+    bank_closed = "Open your bank to view this tag.",
+    busy = "The bank is still updating. Try again.",
+}
+-- Bank Tags' preferences draw on its own plugin panel
+local CONTENT_EVENT = Config.PLUGIN_REF .. "_content"
 
--- Find a running Bank Core API, trying the one passed in before the global copy
+-- Find Bank Core's API, trying the one passed in before the global copy
 local function findBank()
-    -- Loop by index since either one may be missing
-    local candidates = { bankcore, rawget(_G, Config.CORE_API_KEY) }
-    for index = 1, 2 do
-        local candidate = candidates[index]
-        if type(candidate) == "table" and type(candidate.RegisterExtension) == "function"
-            and type(candidate.GetState) == "function" and candidate.GetState().running then
-            return candidate
-        end
-    end
-    return nil
+    local api = bankcore or rawget(_G, Config.CORE_API_KEY)
+    return type(api) == "table" and type(api.Register) == "function" and api or nil
 end
 
 -- Build the store, windows, tab, and import API before connecting to Bank Core
@@ -48,18 +43,17 @@ function App.new()
     local app = setmetatable({
         store = store,
         settings = settings,
-        -- Bank Core's API and this plugin's owner handle
-        bank = nil,
-        handle = nil,
-        -- What Bank Core last reported, and the tag whose page it shows
-        state = nil,
-        shownTag = nil,
+        -- This plugin's extension with Bank Core
+        ext = nil,
+        -- The tag whose page was set last, counted by revision, with each page slot's layout key
+        pageTag = nil,
+        revision = 0,
+        pageKeys = {},
         bankItems = nil,
         -- A notice the Tags tab shows
         status = nil,
-        -- Preferences shown while their settings section is open
+        -- Preferences drawn on the plugin panel
         settingsSection = nil,
-        retired = false,
         started = false,
         shutDown = false,
     }, App)
@@ -73,122 +67,78 @@ function App.new()
     app.menus = TagMenus.new(app)
     app.tab = TagTab.new(app)
     app.tutorial = Tutorial.new(app)
-    -- Explain a tag too large for Bank Core to show
-    app.noticeMount = { mount = function(ctx) app:DrawNotice(ctx) end }
-    -- Bank Tags' section of Bank Core's settings window
-    app.settingsMount = {
-        mount = function(ctx) app:MountSettings(ctx.parent) end,
-        unmount = function() app:DestroySettings() end,
-    }
     if store.loadError ~= nil then app.status = store.loadError end
     return app
 end
 
--- Connect to Bank Core if it runs
+-- Draw preferences on the plugin panel and connect to Bank Core if it runs
 function App:Start()
     if self.shutDown or self.started then return end
     self.started = true
+    Event.ContentLayerReady.Subscribe(CONTENT_EVENT, function(event) self:MountSettings(event.component) end)
     self:Connect()
 end
 
--- Report whether this plugin's owner is registered with a running Bank Core
-function App:IsConnected()
-    return self.handle ~= nil and self.handle:GetState().live == true
-end
-
--- Register the tab, listener, and settings with Bank Core
+-- Register with Bank Core, replacing any earlier registration
 function App:Connect()
     if self.shutDown then return false, "stopped" end
-    if self:IsConnected() then return true end
-    -- A newer load owns the ID now, so leave it
-    if self.handle ~= nil and self.bank.GetState().running then
-        self.handle, self.bank, self.retired = nil, nil, true
-        self:Disconnect()
-    end
-    if self.retired then return false, "replaced" end
     self:Disconnect()
     local api = findBank()
     if api == nil then return false, "unavailable" end
-    local handle, reason = api.RegisterExtension(Config.PLUGIN_REF, Config.OWNER_LABEL)
-    if handle == nil then
-        debugLog("Bank Tags could not register with Bank Core: ", tostring(reason))
+    local ext, reason, detail = api.Register({
+        id = Config.PLUGIN_REF,
+        name = Config.OWNER_LABEL,
+        icon = "LIST_LAYOUT",
+        column = self.tab.callbacks,
+        onClose = function() self.tab:Refresh() end,
+        onBankItems = function() self:OnBankItems() end,
+        onBankClose = function()
+            self.tutorial:Stop(false)
+            self.select:Stop()
+            self.windows:CloseBankWindows()
+        end,
+    })
+    if ext == nil then
+        debugLog("Bank Tags could not register with Bank Core: ", tostring(reason), " ", tostring(detail))
         return false, reason
     end
-    -- An older Bank Core shows pages another way, so it needs updating first
-    if type(handle.CreatePage) ~= "function" then
-        handle:Dispose()
-        log(NEEDS_NEWER_CORE)
-        return false, "bankcore_outdated"
-    end
-    self.bank, self.handle = api, handle
-    local ok, failure = handle:RegisterTab(TAB_ID, {
-        label = "Tags", icon = "LIST_LAYOUT", tooltip = "Bank tags", mount = self.tab.callbacks,
-    })
-    if ok then
-        ok, failure = handle:SetListener({
-            onState = function(state) self:OnState(state) end,
-            onPage = function(pageID, key) self:OnPage(pageID, key) end,
-            onBankItems = function() self:OnBankItems() end,
-            onBankClose = function()
-                self.tutorial:Stop(false)
-                self.windows:CloseBankWindows()
-            end,
-        })
-    end
-    if ok then ok, failure = handle:SetSettings({ mount = self.settingsMount }) end
-    if not ok then
-        debugLog("Bank Tags could not register its tab: ", tostring(failure))
-        self:Disconnect()
-        return false, failure
-    end
+    self.ext = ext
     self.menus:Start()
     debugLog("Bank Tags connected to Bank Core")
     return true
 end
 
--- Drop the owner handle and everything that needs Bank Core
+-- Drop the extension and everything that needs Bank Core
 function App:Disconnect()
     self.tutorial:Stop(false)
     self.windows:CloseBankWindows()
     self.menus:Stop()
     self.select:Forget()
-    local handle = self.handle
-    self.handle, self.bank = nil, nil
-    self.state, self.shownTag, self.bankItems = nil, nil, nil
-    if handle ~= nil then pcall(function() handle:Dispose() end) end
+    local ext = self.ext
+    self.ext, self.pageTag, self.pageKeys, self.bankItems = nil, nil, {}, nil
+    if ext ~= nil then pcall(function() ext:Dispose() end) end
 end
 
--- Follow Bank Core's state; bank windows close on onBankClose
-function App:OnState(state)
-    self.state = state
-    self.tutorial:Offer(state)
-    self.select:Follow(state)
-    self.windows:BankStateChanged(state)
+-- Return the tag the bank shows now, or nil
+function App:ShownTag()
+    return self.ext ~= nil and self.ext:IsOpen() and self.pageTag or nil
 end
 
--- Remember which tag Bank Core shows, if any
-function App:OnPage(visible, key)
-    self.shownTag = visible and TagPage.TagFromKey(key) or nil
-    self.tab:Refresh()
-end
-
--- Report whether Bank Core shows this plugin's page now, whatever the last notice said
-function App:PageVisible()
-    return self.handle ~= nil and self.handle:GetState().pageVisible == true
-end
-
--- Read bank items, keeping the last good copy while loading
+-- Read bank items, keeping the last good copy while Bank Core cannot read them
 function App:OnBankItems()
-    if self.handle == nil then return end
-    local snapshot = self.handle:GetBankItems()
-    if snapshot == nil then return end
-    self.bankItems = snapshot
-    self.windows:BankItemsChanged()
+    if self.ext == nil then return end
+    local items = self.ext:GetBankItems()
+    if items ~= nil then
+        self.bankItems = items
+        self.windows:BankItemsChanged()
+    end
+    self.windows:CheckBankBounds()
+    self.tutorial:Offer()
 end
 
 -- Return the bank's items as last read, or an empty list
 function App:BankItems()
-    return self.bankItems ~= nil and self.bankItems.items or {}
+    return self.bankItems or {}
 end
 
 -- Show a short notice in the Tags tab, or clear it with nil
@@ -198,43 +148,43 @@ function App:ShowStatus(text)
     self.tab:Refresh()
 end
 
--- Show a tag's page in the bank, through the Tags tab while it is mounted
-function App:CreateTagPage(tag)
-    local page, notice = TagPage.Build(self.store, tag, self.noticeMount)
-    if page == nil then return false, notice end
-    self.notice = notice
-    local ctx = self.tab.ctx
-    local ok, reason, detail
-    if ctx ~= nil then
-        ok, reason, detail = ctx:CreatePage(page)
-    else
-        ok, reason, detail = self.handle:CreatePage(page)
+-- Give Bank Core a tag's page, or explain why it cannot be shown
+-- Each page set is a new revision, so menu entries offered over the old one are dropped
+function App:SetTagPage(tag)
+    local page, keys = TagPage.Build(self.store, tag)
+    if page == nil then return false, keys end
+    local ok, reason, detail = self.ext:SetPage(page)
+    if not ok then
+        debugLog("Bank Core refused the page for ", tag, ": ", tostring(reason), " ", tostring(detail))
+        return false, "This tag could not be shown (" .. tostring(reason) .. ")."
     end
-    if not ok then debugLog("Bank Core did not show the page for ", tag, ": ", tostring(reason), " ", tostring(detail)) end
-    return ok, reason
+    self.pageTag, self.pageKeys = tag, keys
+    self.revision = self.revision + 1
+    return true, nil
 end
 
--- Show a tag, only from the bank's All Items view
+-- Show a tag in place of whatever the bank shows, explaining a refusal in the Tags tab
 function App:ShowTag(tag)
-    if self.handle == nil or self.store.data.tags[tag] == nil then return false end
-    local shown, reason = self:CreateTagPage(tag)
-    if reason == "not_all_items" then
-        self.handle:ShowWarning('Select "All Items" to view this tag.')
-    elseif reason == "preset_open" then
-        self.handle:ShowWarning('Close the preset selector to view this tag.')
-    elseif PAGE_REFUSALS[reason] then
-        self:ShowStatus("This tag could not be shown (" .. tostring(reason) .. ").")
+    if self.ext == nil or self.store.data.tags[tag] == nil then return false end
+    local shown, problem = self:SetTagPage(tag)
+    if shown then
+        local reason
+        shown, reason = self.ext:Open()
+        if not shown then
+            problem = OPEN_REFUSALS[reason] or ("This tag could not be shown (" .. tostring(reason) .. ").")
+        end
     end
-    if shown then self.shownTag = tag end
+    -- Select mode works over the bank's own view, so a shown tag ends it
+    if shown then self.select:Stop() end
+    self:ShowStatus(problem)
     self.tab:Refresh()
-    return shown, reason
+    return shown
 end
 
 -- Show a tag, or return to the bank's own view when that tag is already shown
 function App:ToggleTag(tag)
-    if self.shownTag == tag and self.handle ~= nil then
-        local left = self.handle:LeavePage()
-        if left then self.shownTag = nil end
+    if self:ShownTag() == tag then
+        local left = self.ext:Close()
         self.tab:Refresh()
         return left
     end
@@ -247,48 +197,42 @@ function App:Changed(tag)
     -- The Tags tab shows only tag names and folders
     if tag == nil then self.tab:Refresh() end
     self.windows:StoreChanged(tag)
-    local shown = self.shownTag
-    -- Redraw only while Bank Core still shows the tag; another page may have taken the bank
-    if shown ~= nil and (tag == nil or tag == shown) and self:PageVisible() then
-        if self.store.data.tags[shown] ~= nil then
-            self:CreateTagPage(shown)
-        else
-            self.handle:LeavePage()
+    local shown = self:ShownTag()
+    -- Redraw the shown tag in place, or leave it once it is gone or too large to show
+    if shown ~= nil and (tag == nil or tag == shown) then
+        local set, problem = false, nil
+        if self.store.data.tags[shown] ~= nil then set, problem = self:SetTagPage(shown) end
+        if not set then
+            self.ext:Close()
+            if problem ~= nil then self:ShowStatus(problem) end
+            self.tab:Refresh()
         end
     end
     local selecting = self.select:Tag()
-    if selecting ~= nil and self.store.data.tags[selecting] == nil then
-        self.select:Stop()
-    elseif tag == nil or tag == selecting then
-        self.select:Refresh()
-    end
+    if selecting ~= nil and self.store.data.tags[selecting] == nil then self.select:Stop() end
 end
 
 -- Follow a renamed tag before showing the change
 function App:Renamed(oldTag, newTag)
     self.select:Rename(oldTag, newTag)
     self.windows:TagRenamed(oldTag, newTag)
-    if self.shownTag == oldTag then self.shownTag = newTag end
+    if self.pageTag == oldTag then self.pageTag = newTag end
     self:Changed()
 end
 
--- Add one bank copy of an item to a tag
-function App:AddItemToTag(tag, objectID, copy)
-    if copy == nil then
-        self:ShowStatus(NEEDS_ALL_ITEMS)
-        return false
-    end
-    local saved, reason, added = self.store:AddTag(tag, objectID, ItemIdentity.LayoutKey(objectID, copy))
+-- Add a slot for an object to a tag
+function App:AddItemToTag(tag, objectID)
+    local saved, reason = self.store:AddTag(tag, objectID)
     if not saved then
         self:ShowStatus(tostring(reason))
         return false
     end
     self:ShowStatus(nil)
-    if added then self:Changed(tag) end
+    self:Changed(tag)
     return true
 end
 
--- Remove one copy from a tag
+-- Remove one slot from a tag
 function App:RemoveFromTag(tag, layoutKey)
     local saved, reason, removed = self.store:RemoveTag(tag, layoutKey)
     if not saved then
@@ -296,29 +240,6 @@ function App:RemoveFromTag(tag, layoutKey)
         return false
     end
     if removed then self:Changed(tag) end
-    return true
-end
-
--- Create a tag holding a dropped item, then open it for naming
-function App:CreateTagWithItem(objectID, copy)
-    if copy == nil then
-        self:ShowStatus(NEEDS_ALL_ITEMS)
-        return false
-    end
-    local tag
-    local saved, reason = self.store:SaveTogether(function()
-        local created, createdTag, createReason = self.store:CreatePlaceholderTag()
-        if not created then return false, createReason end
-        tag = createdTag
-        return self.store:AddTag(tag, objectID, ItemIdentity.LayoutKey(objectID, copy))
-    end)
-    if not saved then
-        self:ShowStatus(tostring(reason))
-        return false
-    end
-    self:ShowStatus(nil)
-    self:Changed()
-    self.windows:OpenTagSettings(tag, false)
     return true
 end
 
@@ -366,18 +287,6 @@ function App:DeleteFolder(folderKey)
     return true
 end
 
--- Explain a tag page too large for Bank Core to show, at the top of its empty page
-function App:DrawNotice(ctx)
-    local text = ui.Text.new(ctx.parent)
-    text:SetPos(12, 8)
-    text:SetSize(ctx:GetBounds().width - 24, 64)
-    text.content = tostring(self.notice or "")
-    text.font = id.Font.MUSEO_SANS_11PT_REGULAR
-    text.rgba = 0xE7D7B0FF
-    text.maxLines = 4
-    text.clickthrough = true
-end
-
 -- Save one preference and apply it at once
 function App:SetSetting(key, value)
     if self.shutDown then return false, "Bank Tags is not running." end
@@ -394,7 +303,7 @@ function App:SetSetting(key, value)
     return true
 end
 
--- Draw preferences in Bank Core's settings window
+-- Draw preferences on the plugin panel
 function App:MountSettings(parent)
     self:DestroySettings()
     self.settingsSection = SettingsSection.new(parent, {
@@ -403,7 +312,7 @@ function App:MountSettings(parent)
     })
 end
 
--- Release the settings section's controls when Bank Core closes it
+-- Release the preferences' controls
 function App:DestroySettings()
     if self.settingsSection ~= nil then self.settingsSection:Destroy() end
     self.settingsSection = nil
@@ -418,9 +327,10 @@ function App:Shutdown()
         local ok, message = pcall(action)
         if not ok then debugLog("Bank Tags shutdown could not clean ", label, ": ", message) end
     end
-    cleanup("select mode", function()
-        if self.handle ~= nil and self.select:Tag() ~= nil then self.handle:SetItemHighlight(nil) end
-        self.select:Forget()
+    cleanup("select mode", function() self.select:Forget() end)
+    cleanup("settings", function()
+        Event.ContentLayerReady.Unsubscribe(CONTENT_EVENT)
+        self:DestroySettings()
     end)
     cleanup("windows", function() self.windows:CloseAll() end)
     cleanup("Bank Core registration", function() self:Disconnect() end)

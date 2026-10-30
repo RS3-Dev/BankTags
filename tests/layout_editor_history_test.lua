@@ -16,24 +16,30 @@ h:OpenBank()
 h:Tick(12)
 
 local Json = require("banktags/core/json")
-local TagLayouts = require("banktags/tags/tag_layouts")
-local key = require("banktags/tags/item_identity").LayoutKey
+-- Bank Tags' own module, so these slots' keys never repeat ones it gives out
+local TagLayouts = h:TagsModule("banktags/tags/tag_layouts")
 local store = app.store
-local function item(objectID, copy, source)
-    return { kind = "item", objectID = objectID, layoutKey = key(objectID, copy or 1),
-        sourceLayoutKey = source ~= nil and key(objectID, source) or nil }
+-- Each object's first slot key, and the second slot of object 1
+local keys, secondOne = {}, nil
+local function item(objectID)
+    local slot = TagLayouts.Item(objectID)
+    keys[objectID] = keys[objectID] or slot.layoutKey
+    return slot
 end
 local function row(...) return { kind = "row", slots = { ... } } end
--- Line 0 holds 1 2 3 4, line 1 is a label, line 2 holds 5 and a copy of 1; 99 is unsorted
+-- Line 0 holds 1 2 3 4, line 1 is a label, line 2 holds 5 and a second 1; 99 is unsorted
 local function resetGear()
     for _, tag in ipairs({ "gear", "food" }) do
         if store.data.tags[tag] ~= nil then assert(store:DeleteTag(tag)) end
         assert(store:CreateTag(tag))
     end
+    keys = {}
+    local second = TagLayouts.Item(1)
+    secondOne = second.layoutKey
     store.data.tags.gear.rows = {
         row(item(1), item(2), item(3), item(4)),
         { kind = "label", text = "Mid" },
-        row(item(5), item(1, 2, 1)),
+        row(item(5), second),
     }
     store.data.tags.gear.unsorted = { item(99) }
     assert(store:Save())
@@ -147,13 +153,13 @@ local function grouped(...)
     local wanted = { ... }
     if editor:GroupCount() ~= #wanted then return false end
     for _, objectID in ipairs(wanted) do
-        if not editor.groupKeys[key(objectID, 1)] then return false end
+        if not editor.groupKeys[keys[objectID]] then return false end
     end
     return true
 end
 
 -- Before the grid is pressed, arrows and Ctrl+Z do nothing
-editor.selectedLayoutKey = key(1, 1)
+editor.selectedLayoutKey = keys[1]
 tap(RIGHT)
 undo()
 assert(lines() == "1 2 3 4 | Mid | 5 1 / 99" and changes == 0)
@@ -163,7 +169,7 @@ click("sorted", 0, 0)
 local before = saved()
 tap(RIGHT)
 assert(lines() == "2 1 3 4 | Mid | 5 1 / 99", lines())
-assert(changes == 1 and editor.selectedLayoutKey == key(1, 1) and editor.errorBanner == nil)
+assert(changes == 1 and editor.selectedLayoutKey == keys[1] and editor.errorBanner == nil)
 -- Holding the key moves only once, through the OS's repeats
 press(LEFT)
 press(LEFT, NONE, true)
@@ -189,13 +195,13 @@ for _ = 1, COLUMNS - 1 do tap(LEFT) end
 assert(lines() == "1 2 3 4 | Mid | 5 1 / 99", lines())
 changes = 0
 
--- Down past the last line adds a row; a copy keeps the item it opens
+-- Down past the last line adds a row; the moved slot keeps its key
 click("sorted", 1, 2)
-assert(editor.selectedLayoutKey == key(1, 2))
+assert(editor.selectedLayoutKey == secondOne)
 tap(DOWN)
 assert(lines() == "1 2 3 4 | Mid | 5 | . 1 / 99", lines())
-local copy = TagLayouts.Render(store.data.tags.gear.rows, COLUMNS).slots[3 * COLUMNS + 2]
-assert(copy.layoutKey == key(1, 2) and copy.sourceLayoutKey == key(1, 1))
+local moved = TagLayouts.Render(store.data.tags.gear.rows, COLUMNS).slots[3 * COLUMNS + 2]
+assert(moved.layoutKey == secondOne and editor.selectedLayoutKey == secondOne)
 tap(UP)
 assert(lines() == "1 2 3 4 | Mid | 5 1 / 99" and changes == 2)
 
@@ -214,7 +220,7 @@ assert(changes == 4 and editor.errorBanner == nil)
 
 -- Unsorted items, an empty selection, and the search field's keys do not move
 click("unsorted", 0, 0)
-assert(editor.selectedLayoutKey == key(99, 1))
+assert(editor.selectedLayoutKey == keys[99])
 before = saved()
 for _, arrow in ipairs({ LEFT, RIGHT, UP, DOWN }) do tap(arrow) end
 click("sorted", 7, 0)
@@ -294,7 +300,7 @@ local last = #states
 assert(#names == 15)
 
 -- Other tags, folders, the tag's icon, and settings are never undone
-assert(store:AddTag("food", 385, key(385, 1)))
+assert(store:AddTag("food", 385))
 assert(store:CreateFolder("Kit", "gear"))
 local _, iconName = store:UpdateTag("gear", "gear", 4151)
 assert(iconName == "gear")
@@ -356,21 +362,29 @@ redo()
 assert(gearState() == states[last - 1])
 
 -- An outside change to the open tag ends its steps instead of overwriting it
-assert(store:AddTag("gear", 385, key(385, 9)))
+local _, _, outside = store:AddTag("gear", 385)
+-- Report whether gear still holds that outside slot
+local function hasOutside()
+    for _, slot in ipairs(store:GetTaggedItems("gear")) do
+        if slot.layoutKey == outside then return true end
+    end
+    return false
+end
+assert(hasOutside())
 app:Changed()
 before = saved()
 click("sorted", 9, 5)
 undo()
 redo()
-assert(saved() == before and store:HasTag("gear", key(385, 9)))
+assert(saved() == before and hasOutside())
 -- Even one the editor was not told about
 click("sorted", 0, 0)
 tap(RIGHT)
 local edited = gearState()
-assert(store:RemoveTag("gear", key(385, 9)))
+assert(store:RemoveTag("gear", outside))
 before = saved()
 undo()
-assert(saved() == before and editor.errorBanner ~= nil and not store:HasTag("gear", key(385, 9)))
+assert(saved() == before and editor.errorBanner ~= nil and not hasOutside())
 editor:HideError()
 assert(gearState() ~= edited)
 app:Changed()

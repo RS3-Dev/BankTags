@@ -1,7 +1,6 @@
 -- Search items and add results to the layout editor's tag
 
 local Catalog = require("banktags/tags/catalog")
-local ItemIdentity = require("banktags/tags/item_identity")
 local debugLog = require("banktags/core/debug_log").Write
 local Text = require("banktags/core/text")
 local Theme = require("banktags/ui/theme")
@@ -107,21 +106,12 @@ function LayoutEditorSearch:AddCatalogResult(result, destination)
     local tag = self.selectedTag
     local objectID = math.tointeger(tonumber(result.objectId))
     if tag == nil or objectID == nil then return false end
-    local source = nil
-    for _, item in ipairs(self.store:GetTaggedItems(tag)) do
-        if item.objectID == objectID then source = source or item end
-    end
     local layoutKey
     local saved, reason = self:RecordEdit(tag, function()
         return self.store:SaveTogether(function()
+            -- An item already in the tag gets another slot, which shows its next stack
             local added, addReason
-            -- An item already in the tag gets a ghost copy
-            if source == nil then
-                layoutKey = ItemIdentity.LayoutKey(objectID, 1)
-                added, addReason = self.store:AddTag(tag, objectID, layoutKey)
-            else
-                added, layoutKey, addReason = self.store:DuplicateLayoutItem(tag, source.layoutKey)
-            end
+            added, addReason, layoutKey = self.store:AddTag(tag, objectID)
             if not added then return false, addReason end
             return self.store:MoveLayoutItem(tag, layoutKey, destination, Size.CENTER_COLUMNS)
         end)

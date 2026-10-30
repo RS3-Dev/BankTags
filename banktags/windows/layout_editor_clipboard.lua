@@ -1,4 +1,4 @@
--- Copy the selected items and paste new copies of them into empty cells
+-- Copy the selected items and paste more slots for the same objects into empty cells
 
 local Parts = require("banktags/windows/layout_editor_parts")
 local Size = Parts.size
@@ -6,7 +6,7 @@ local Size = Parts.size
 local LayoutEditorClipboard = {}
 
 -- Copy the selected item or group, keeping each one's offset from the group's top-left cell
--- Nothing is saved; each paste adds new copies of the same bank stacks
+-- Nothing is saved; each paste adds more slots for the same objects
 function LayoutEditorClipboard:CopySelected()
     local entry = self:SelectedEntry()
     if entry == nil or self.selectedTag == nil then
@@ -33,8 +33,6 @@ function LayoutEditorClipboard:CopySelected()
     for _, item in ipairs(picked) do
         items[#items + 1] = {
             objectID = item.slot.objectID,
-            -- A copy of a copy opens the same stack as the first
-            sourceLayoutKey = item.slot.sourceLayoutKey or item.slot.layoutKey,
             line = item.line - top,
             column = item.column - left,
         }
@@ -45,7 +43,7 @@ function LayoutEditorClipboard:CopySelected()
     return true
 end
 
--- Paste new copies with the copied top-left item at the outlined empty cell
+-- Paste the copied objects with the top-left one at the outlined empty cell
 -- Every cell they take must be empty, or nothing is pasted
 function LayoutEditorClipboard:PasteClipboard()
     local clipboard = self.clipboard

@@ -8,8 +8,8 @@ local Config = {
     CORE_API_KEY = "__bankcore_api",
     RUNEQL_API_KEY = "__runeql_api",
     -- The tag save, written as chunked share-code text
-    TAGS_TEXT_MANIFEST_KEY = "banktags:tags:v3:manifest",
-    TAGS_TEXT_CHUNK_PREFIX = "banktags:tags:v3:",
+    TAGS_TEXT_MANIFEST_KEY = "banktags:tags:v4:manifest",
+    TAGS_TEXT_CHUNK_PREFIX = "banktags:tags:v4:",
     -- The preferences shown in Bank Core's settings window
     SETTINGS_KEY = "banktags:settings:v1",
     -- The longest text a share-code field accepts

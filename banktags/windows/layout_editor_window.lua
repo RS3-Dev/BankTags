@@ -5,7 +5,6 @@ local NativeUi = require("banktags/ui/native_ui")
 local BankControls = require("banktags/ui/bank_controls")
 local BankGrid = require("banktags/ui/bank_grid")
 local Geometry = require("banktags/ui/geometry")
-local ItemIdentity = require("banktags/tags/item_identity")
 local TagRail = require("banktags/windows/layout_editor_rail")
 local Parts = require("banktags/windows/layout_editor_parts")
 local Size = Parts.size
@@ -44,6 +43,8 @@ local GRID_SLOT_SPRITE = id.Sprite.RS3_ICON_SLOT_40PX_1
 local LABEL_TEXT_COLOUR = Theme.HEADING_TEXT
 local LABEL_LINE_COLOUR = Theme.HEADING_LINE
 local DRAG_EVENT = Config.PLUGIN_REF .. "_layout_editor"
+-- Core reports no bank move, so the editor asks for the bank's bounds this often
+local BANK_CHECK_TICKS = 10
 -- The sorted grid, then the Unsorted grid in the right column
 local PANE_NAMES = { "sorted", "unsorted" }
 -- Right-column tabs, left to right; Unsorted shows first
@@ -59,6 +60,8 @@ function LayoutEditorWindow.new(parent, options)
         bounds = options.bounds,
         onChanged = options.onChanged,
         onClose = options.onClose,
+        onBankCheck = options.onBankCheck,
+        bankCheckTicks = 0,
         onPromptLabel = options.onPromptLabel,
         onConfirmRemoveRow = options.onConfirmRemoveRow,
         overlayWindows = {},
@@ -76,11 +79,11 @@ function LayoutEditorWindow.new(parent, options)
             copyButton = "Copy the selected item or group (Ctrl+C)",
             pasteButton = "Click an empty cell, then paste the copied items there (Ctrl+V)",
             removeButton = "Remove the selected item (Delete). Ctrl+Z undoes and Ctrl+Y redoes;"
-                .. " arrow keys move the selection when turned on in Bank settings",
+                .. " arrow keys move the selection when turned on in Bank Tags' settings",
             unsortButton = "Leave the selected item unsorted, or drag it to Unsorted",
         },
         drag = nil,
-        styles = { byKey = {}, byObject = {} },
+        styles = {},
     }, LayoutEditorWindow)
 
     self:SetBankItems(options.bankItems)
@@ -110,6 +113,7 @@ function LayoutEditorWindow.new(parent, options)
             local onClose = self.onClose
             self.onClose = nil
             self.onChanged = nil
+            self.onBankCheck = nil
             self.onPromptLabel = nil
             self.onConfirmRemoveRow = nil
             self.clipboard = nil
@@ -145,19 +149,18 @@ function LayoutEditorWindow:MoveTo(bounds)
     self:KeepOnTop()
 end
 
--- Remember copy quantities and each object's best stack
+-- Remember each object's best stack
 function LayoutEditorWindow:SetBankItems(items)
-    local byKey, byObject = {}, {}
+    local styles = {}
     for _, item in ipairs(items) do
-        local style = { quantity = item.quantity, placeholder = item.placeholder }
-        byKey[ItemIdentity.LayoutKey(item.objectID, item.copy)] = style
-        local existing = byObject[item.objectID]
+        local style = { quantity = item.quantity, placeholder = item.quantity <= 0 }
+        local existing = styles[item.objectID]
         -- A real stack beats a placeholder for the same object
         if existing == nil or (existing.placeholder and not style.placeholder) then
-            byObject[item.objectID] = style
+            styles[item.objectID] = style
         end
     end
-    self.styles = { byKey = byKey, byObject = byObject }
+    self.styles = styles
     self.bankItemList = items
     if self.panes ~= nil then self:RefreshCenter() end
 end
@@ -184,21 +187,14 @@ function LayoutEditorWindow:Panel(x, width)
     return panel
 end
 
--- Prefer the exact copy's quantity over the object's best stack
-function LayoutEditorWindow:RuntimeStyle(objectID, layoutKey)
-    local byLayout = type(layoutKey) == "string" and self.styles.byKey[layoutKey] or nil
-    if byLayout ~= nil then return byLayout end
-    objectID = math.tointeger(tonumber(objectID))
-    return objectID ~= nil and self.styles.byObject[objectID] or nil
-end
-
--- Draw an item with its client sprite and bank quantity
+-- Draw an item with its client sprite and its best stack's quantity
 -- Placeholders and absent entries are faded
-function LayoutEditorWindow:ApplyRuntimeObjectSprite(sprite, objectID, layoutKey, absentIsPlaceholder)
-    local style = self:RuntimeStyle(objectID, layoutKey)
+function LayoutEditorWindow:ApplyRuntimeObjectSprite(sprite, objectID, absentIsPlaceholder)
+    objectID = math.tointeger(tonumber(objectID))
+    local style = objectID ~= nil and self.styles[objectID] or nil
     sprite:SetSize(ITEM_WIDTH, ITEM_HEIGHT)
     -- Only the live object sprite matches the native bank look
-    sprite:SetAssociatedObject(math.tointeger(tonumber(objectID)))
+    sprite:SetAssociatedObject(objectID)
     if style ~= nil then
         sprite.associatedObjectQuantity = style.quantity
         sprite.associatedObjectQuantityMode = style.placeholder and PLACEHOLDER_QUANTITY_MODE
@@ -611,9 +607,7 @@ function LayoutEditorWindow:CreateGridCell(parent, x, y, slot)
     local objectID = math.tointeger(tonumber(slot.objectID))
     if objectID ~= nil then
         local sprite = ui.Sprite.new(parent)
-        local width, height = self:ApplyRuntimeObjectSprite(
-            sprite, objectID, slot.layoutKey, true
-        )
+        local width, height = self:ApplyRuntimeObjectSprite(sprite, objectID, true)
         sprite:SetPos(
             x + math.floor((Size.GRID_SLOT_SIZE - width) / 2),
             y + math.floor((Size.GRID_SLOT_SIZE - height) / 2)
@@ -828,11 +822,14 @@ function LayoutEditorWindow:PaneAt(x, y)
     return nil
 end
 
--- Keep the editor above native bank redraws and name the hovered item
+-- Keep the editor above native bank redraws, name the hovered item, and follow the bank
+-- The bank check runs last, since it may close this editor and open another
 function LayoutEditorWindow:PollDrag()
     self:KeepOnTop()
     self:TickError()
     self:UpdateItemName()
+    self.bankCheckTicks = self.bankCheckTicks + 1
+    if self.bankCheckTicks % BANK_CHECK_TICKS == 0 and self.onBankCheck ~= nil then self.onBankCheck() end
 end
 
 -- Stop the listener that keeps the editor on top
@@ -968,6 +965,7 @@ function LayoutEditorWindow:Destroy()
     self.content = nil
     self.onChanged = nil
     self.onClose = nil
+    self.onBankCheck = nil
     self.onPromptLabel = nil
     self.overlayWindows = {}
 end

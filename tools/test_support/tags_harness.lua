@@ -36,12 +36,10 @@ function Harness.CoreRoot()
     if not exists(root .. "/main.lua") then
         error("Bank Core was not found at " .. root .. "; set BANKCORE_ROOT to a bank-utilities checkout", 0)
     end
-    local contract = readText(root .. "/HOST_CONTRACT.md") or ""
-    for _, needed in ipairs({ "PluginDependencyUpdate(event)", "GetMenuItem", "SetItemHighlight", "`columns`",
-        "the root is a plain table", "SetSettings", "onBankClose(reason)",
-        "unless a plugin entry is already the left click" }) do
-        if not string.find(contract, needed, 1, true) then
-            error("Bank Core at " .. root .. " lacks " .. needed .. " in its contract; set BANKCORE_ROOT "
+    local spec = readText(root .. "/docs/API.md") or ""
+    for _, needed in ipairs({ "bankcore.Register(spec)", "ext:GetBankBounds()", "`slot`" }) do
+        if not string.find(spec, needed, 1, true) then
+            error("Bank Core at " .. root .. " lacks " .. needed .. " in its API reference; set BANKCORE_ROOT "
                 .. "to a checkout with the extension API Bank Tags uses", 0)
         end
     end
@@ -339,6 +337,12 @@ function Harness:Session()
     return rawget(self.core.env._G, "__bankcore_session")
 end
 
+-- Report whether Bank Tags holds an extension registered with the running Core session
+function Harness:Connected()
+    local session = self:Session()
+    return self:App().ext ~= nil and session ~= nil and session.pluginPages.owners.banktags ~= nil
+end
+
 -- Open the bank in View All for the running Core session
 function Harness:OpenBank(width, height)
     if self.bankHost.window == nil then
@@ -532,6 +536,43 @@ function Harness:ClickRow(entryID)
     local list = self:App().tab.controls.list
     assert(list.list:Click(entryID), tostring(entryID) .. " has no row")
     list:RowFor(entryID).root.hooks.release()
+end
+
+-- Point at the shown page's slot at a position among its slots, counting blanks, and let Core hover it
+function Harness:PointAtSlot(position)
+    local layout = self:Session().layout
+    local key = nil
+    for _, slot in ipairs(layout.pageState.view.slots) do
+        if slot.position == position then key = slot.layoutKey end
+    end
+    local drawn = nil
+    for _, entry in ipairs(layout.itemHover.drawnPageItems) do
+        if entry.layoutKey == key then drawn = entry end
+    end
+    assert(drawn ~= nil, "slot " .. position .. " is not drawn")
+    local Geometry = require("banktags/ui/geometry")
+    local values = layout.pageDisplay.pageArea
+    local insetX, insetY = layout.pageDisplay:GridCellInset()
+    local left, top = Geometry.absolutePosition(layout.itemHover.pageInputBlocker)
+    self.bankHost.mouse = { x = left + values.contentX + drawn.x - insetX + 5,
+        y = top + values.contentY + drawn.y - values.scrollY - insetY + 5 }
+    self:Tick()
+end
+
+-- Open the menu for the page slot under the pointer: its stack's, or none for a ghost
+function Harness:SlotMenu()
+    local hover = self:Session().layout.itemHover.hoveredBankStack
+    return hover ~= nil and self:MenuFor(hover.item) or self:ContentMenu()
+end
+
+-- List a tag's saved slots in page order as object IDs, 0 for a blank
+function Harness:Saved(tag)
+    local record, values = self:App().store.data.tags[tag], {}
+    for _, entry in ipairs(record.rows) do
+        for _, slot in ipairs(entry.slots or {}) do values[#values + 1] = slot.objectID or 0 end
+    end
+    for _, slot in ipairs(record.unsorted) do values[#values + 1] = slot.objectID or 0 end
+    return table.concat(values, " ")
 end
 
 -- Point the mouse at a position relative to a component

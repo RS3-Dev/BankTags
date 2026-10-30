@@ -16,9 +16,15 @@ h:OpenBank()
 h:Tick(12)
 
 local Json = require("banktags/core/json")
-local TagLayouts = require("banktags/tags/tag_layouts")
-local key = require("banktags/tags/item_identity").LayoutKey
-local function item(objectID) return { kind = "item", objectID = objectID, layoutKey = key(objectID, 1) } end
+local TagLayouts = h:TagsModule("banktags/tags/tag_layouts")
+-- Each object appears once here, so its slot's key names it
+local keys = {}
+local function item(objectID)
+    local slot = TagLayouts.Item(objectID)
+    keys[objectID] = slot.layoutKey
+    return slot
+end
+local function key(objectID) return keys[objectID] end
 local function row(...) return { kind = "row", slots = { ... } } end
 assert(app.store:CreateTag("gear"))
 assert(app.store:CreateTag("food"))
@@ -102,14 +108,14 @@ local function grouped(...)
     local wanted = { ... }
     if editor:GroupCount() ~= #wanted then return false end
     for _, objectID in ipairs(wanted) do
-        if not editor.groupKeys[key(objectID, 1)] then return false end
+        if not editor.groupKeys[key(objectID)] then return false end
     end
     return true
 end
 
 -- A plain click selects one item; Shift-click adds sorted items without dragging
 click("sorted", 0, 0)
-assert(editor.selectedLayoutKey == key(1, 1) and editor.groupKeys == nil and outlines() == 1)
+assert(editor.selectedLayoutKey == key(1) and editor.groupKeys == nil and outlines() == 1)
 host.shiftDown = true
 press("sorted", 1, 0)
 assert(editor.drag == nil, "a Shift press never drags")
@@ -117,7 +123,7 @@ release()
 press("sorted", 2, 0)
 release()
 host.shiftDown = false
-assert(grouped(1, 2, 3) and editor.selectedLayoutKey == key(3, 1) and outlines() == 3)
+assert(grouped(1, 2, 3) and editor.selectedLayoutKey == key(3) and outlines() == 3)
 -- Shift-click again takes an item out, and puts it back
 shiftClick("sorted", 1, 0)
 assert(grouped(1, 3) and outlines() == 2)
@@ -134,7 +140,7 @@ assert(editor.unsortButton.tooltipText == "Select one item to move it to Unsorte
 -- A plain click on a group item keeps the group and saves nothing
 local before = Json.encode(app.store.data)
 click("sorted", 0, 0)
-assert(grouped(1, 2, 3) and editor.selectedLayoutKey == key(1, 1) and editor.drag == nil)
+assert(grouped(1, 2, 3) and editor.selectedLayoutKey == key(1) and editor.drag == nil)
 assert(changes == 0 and Json.encode(app.store.data) == before)
 
 -- Dragging shows every cell it would take, gold where it fits
@@ -213,7 +219,7 @@ assert(editor:DefaultLabelRow() == 0)
 
 -- A plain click on an unselected item selects only it, and a single drag still works
 click("sorted", 0, 0)
-assert(editor.groupKeys == nil and editor.selectedLayoutKey == key(4, 1) and outlines() == 1)
+assert(editor.groupKeys == nil and editor.selectedLayoutKey == key(4) and outlines() == 1)
 assert(editor.copyButton.tooltipText == "Copy the selected item or group (Ctrl+C)")
 press("sorted", 0, 0)
 assert(editor.drag.kind == "layout")
@@ -226,21 +232,21 @@ shiftClick("sorted", 1, 0)
 shiftClick("sorted", 2, 0)
 assert(grouped(4, 1, 2))
 shiftClick("unsorted", 0, 0)
-assert(editor.groupKeys == nil and editor.selectedLayoutKey == key(99, 1))
+assert(editor.groupKeys == nil and editor.selectedLayoutKey == key(99))
 -- A Shift-click joins only the sorted item to the Unsorted selection
 shiftClick("sorted", 1, 0)
-assert(editor.groupKeys == nil and editor.selectedLayoutKey == key(1, 1) and outlines() == 1)
+assert(editor.groupKeys == nil and editor.selectedLayoutKey == key(1) and outlines() == 1)
 
 -- Removing group items elsewhere prunes them; one left is a plain selection
 shiftClick("sorted", 2, 0)
 shiftClick("sorted", 3, 0)
 assert(grouped(1, 2, 3))
-assert(app.store:RemoveTag("gear", key(2, 1)))
+assert(app.store:RemoveTag("gear", key(2)))
 editor:StoreChanged()
 assert(grouped(1, 3) and outlines() == 2)
-assert(app.store:UnarrangeLayoutItem("gear", key(3, 1)))
+assert(app.store:UnarrangeLayoutItem("gear", key(3)))
 editor:StoreChanged()
-assert(editor.groupKeys == nil and editor.selectedLayoutKey == key(1, 1) and outlines() == 1)
+assert(editor.groupKeys == nil and editor.selectedLayoutKey == key(1) and outlines() == 1)
 -- Another tag clears the group
 shiftClick("sorted", 5, 0)
 assert(grouped(1, 4))
@@ -267,8 +273,8 @@ dragOver("sorted", 3, 10)
 assert(#editor.drag.preview == 2 and editor.drag.preview[1].y == 4 + 10 * 44)
 release()
 local view = TagLayouts.Render(app.store.data.tags.gear.rows, COLUMNS)
-assert(view.slots[10 * COLUMNS + 4].layoutKey == key(21, 1) and view.slots[11 * COLUMNS + 5].layoutKey == key(23, 1))
-assert(view.slots[12 * COLUMNS + 2].layoutKey == key(22, 1) and grouped(21, 23))
+assert(view.slots[10 * COLUMNS + 4].layoutKey == key(21) and view.slots[11 * COLUMNS + 5].layoutKey == key(23))
+assert(view.slots[12 * COLUMNS + 2].layoutKey == key(22) and grouped(21, 23))
 
 -- Closing mid-drag removes the preview with the editor
 press("sorted", 3, 10)

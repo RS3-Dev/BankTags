@@ -149,11 +149,17 @@ function Windows:OpenPageLabelPrompt(options)
     self:SyncEditorOverlays()
 end
 
+-- Return the open bank's bounds and grid columns, or nil
+function Windows:BankBounds()
+    local ext = self.app.ext
+    return ext ~= nil and ext:GetBankBounds() or nil
+end
+
 -- Open the layout editor sized to the bank
 function Windows:OpenLayoutEditor(tag)
     local app = self.app
-    local state = app.state
-    if type(tag) ~= "string" or tag == "" or state == nil or state.bounds == nil then return end
+    local bounds = self:BankBounds()
+    if type(tag) ~= "string" or tag == "" or bounds == nil then return end
     self:Close("layoutEditor")
     local parent = parentFor("the layout editor")
     if parent == nil then return end
@@ -162,10 +168,11 @@ function Windows:OpenLayoutEditor(tag)
         store = app.store,
         settings = function() return app.settings end,
         tag = tag,
-        columns = state.columns,
-        bounds = state.bounds,
+        columns = bounds.columns,
+        bounds = bounds,
         bankItems = app:BankItems(),
         onChanged = function(changedTag) app:Changed(changedTag) end,
+        onBankCheck = function() self:CheckBankBounds() end,
         onPromptLabel = function(options) self:OpenPageLabelPrompt(options) end,
         onConfirmRemoveRow = function(options) self:OpenRowRemoveConfirm(options) end,
         onClose = function(value)
@@ -188,11 +195,13 @@ function Windows:TagRenamed(oldTag, newTag)
 end
 
 -- Move the editor with the bank, reopening it after a resize
-function Windows:BankStateChanged(state)
+-- The open editor calls this every few ticks, since Core reports no bank move
+function Windows:CheckBankBounds()
     local editor = self.layoutEditor
-    if editor == nil or state.bounds == nil then return end
-    if editor:FitsBank(state.columns, state.bounds) then
-        editor:MoveTo(state.bounds)
+    local bounds = editor ~= nil and self:BankBounds() or nil
+    if bounds == nil then return end
+    if editor:FitsBank(bounds.columns, bounds) then
+        editor:MoveTo(bounds)
     else
         self:OpenLayoutEditor(editor.selectedTag)
     end

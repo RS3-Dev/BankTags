@@ -19,21 +19,17 @@ local app = h:App()
 h:OpenBank()
 h:Tick(12)
 
-local key = require("banktags/tags/item_identity").LayoutKey
-local function item(objectID, copy, source)
-    return { kind = "item", objectID = objectID, layoutKey = key(objectID, copy),
-        sourceLayoutKey = source ~= nil and key(objectID, source) or nil }
-end
+-- Bank Tags' own module, so these slots' keys never repeat ones it gives out
+local item = h:TagsModule("banktags/tags/tag_layouts").Item
 assert(app.store:CreateTag("melee"))
--- A stack, a source copy, a ghost, a placeholder, a copy of a doubled stack, and an unnamed item;
+-- A stack, a second stack, a ghost, a placeholder, a whip with no stack left, and an unnamed item;
 -- then a label and a shark, with another shark in Unsorted
 app.store.data.tags.melee.rows = {
-    { kind = "row", slots = { item(4151, 1), item(4151, 3, 1), item(536, 1), item(1944, 1),
-        item(4151, 4), item(777, 1) } },
+    { kind = "row", slots = { item(4151), item(4151), item(536), item(1944), item(4151), item(777) } },
     { kind = "label", text = "Food" },
-    { kind = "row", slots = { item(385, 2) } },
+    { kind = "row", slots = { item(385) } },
 }
-app.store.data.tags.melee.unsorted = { item(385, 1) }
+app.store.data.tags.melee.unsorted = { item(385) }
 assert(app.store:Save())
 app:Changed()
 

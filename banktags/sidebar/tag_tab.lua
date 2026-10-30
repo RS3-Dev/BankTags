@@ -29,9 +29,12 @@ function TagTab.new(app)
             self.ctx = ctx
             self:Build()
         end,
-        resize = function() self:Build() end,
+        -- Bank Core keeps the column mounted, so the search keeps its focus
+        resize = function()
+            self:Build()
+            app.windows:CheckBankBounds()
+        end,
         unmount = function() self:Unmount() end,
-        onItemDrop = function(item) self:Drop(item) end,
     }
     return self
 end
@@ -44,7 +47,7 @@ end
 -- Describe the column's arrangement so refreshes rebuild only on change
 function TagTab:Arrangement()
     return tostring(self.app.select:Tag()) .. "\n" .. tostring(self.app.status) .. "\n"
-        .. tostring(self.app.shownTag ~= nil)
+        .. tostring(self.app:ShownTag() ~= nil)
 end
 
 -- Destroy the column's controls; Bank Core destroys the layers they sit in
@@ -117,8 +120,6 @@ function TagTab:BuildSelectPanel(controls, top, width)
     addText(panel, Text.titleCase(tag), nameLeft, 32, width - nameLeft - PANEL_INSET, 28, Theme.TEXT)
     addText(panel, "Click items in your bank to add them to this tag.",
         PANEL_INSET, 62, width - PANEL_INSET * 2, 30, Theme.MUTED_TEXT, 2)
-    addText(panel, "Items already in this tag have a gold outline.",
-        PANEL_INSET, 90, width - PANEL_INSET * 2, 30, Theme.MUTED_TEXT, 2)
     owned[#owned + 1] = BankControls.button(parent, "Done", function() app.select:Stop() end, {
         x = FOOTER_X + PANEL_INSET,
         y = top + PANEL_HEIGHT - FOOTER_BUTTON_HEIGHT - 6,
@@ -136,7 +137,7 @@ function TagTab:BuildFooter(controls, height, width)
         spriteName = "EXPORT", tooltip = "Import and share bank tags",
     })
     owned[#owned + 1] = controls.importShareButton
-    local editing = app.shownTag ~= nil
+    local editing = app:ShownTag() ~= nil
     local newTagX = FOOTER_X + ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP
     local newTagWidth = width - ICON_BUTTON_SIZE - FOOTER_BUTTON_GAP
         - (editing and ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP or 0)
@@ -149,8 +150,9 @@ function TagTab:BuildFooter(controls, height, width)
     })
     owned[#owned + 1] = controls.newTagButton
     if editing then
+        -- The footer outlasts a change of shown tag, so read the tag when clicked
         controls.editTagButton = BankControls.button(parent, nil, function()
-            app.windows:OpenLayoutEditor(app.shownTag)
+            app.windows:OpenLayoutEditor(app:ShownTag())
         end, {
             x = newTagX + newTagWidth + FOOTER_BUTTON_GAP, y = top, size = ICON_BUTTON_SIZE, iconSize = 18,
             spriteName = "PENCIL", tooltip = "Edit tag layout",
@@ -196,9 +198,8 @@ function TagTab:Build()
     local ctx = self.ctx
     if ctx == nil then return end
     local app = self.app
-    local bounds = ctx:GetBounds()
     local parent, overlay = ctx.parent, ctx.overlay
-    local width = SidebarRows.ContentWidth(bounds.width)
+    local width = SidebarRows.ContentWidth(ctx.width)
     local controls = { parent = parent, owned = {}, arrangement = self:Arrangement() }
     -- Tooltips draw in the overlay so the column does not clip them
     prettyui.Tooltip.registerContext(parent, overlay, function(target)
@@ -207,16 +208,16 @@ function TagTab:Build()
         return x - originX, y - originY
     end)
 
-    local bottom = bounds.height - SidebarRows.FOOTER_HEIGHT
+    local bottom = ctx.height - SidebarRows.FOOTER_HEIGHT
     if app.select:Tag() ~= nil then bottom = bottom - PANEL_HEIGHT - 4 end
     if app.status ~= nil then bottom = bottom - STATUS_HEIGHT end
     controls.list = TagList.new(parent, {
         store = app.store,
         settings = function() return app.settings end,
         state = self.listState,
-        width = bounds.width,
+        width = ctx.width,
         listHeight = math.max(1, bottom - SidebarRows.LIST_TOP - 4),
-        isSelected = function(tag) return tag == app.shownTag or tag == app.select:Tag() end,
+        isSelected = function(tag) return tag == app:ShownTag() or tag == app.select:Tag() end,
         onSelect = function(tag)
             app:ShowStatus(nil)
             app:ToggleTag(tag)
@@ -230,10 +231,10 @@ function TagTab:Build()
             width, STATUS_HEIGHT - 4, Theme.ERROR_TEXT, 3)
     end
     if app.select:Tag() ~= nil then
-        self:BuildSelectPanel(controls, bounds.height - SidebarRows.FOOTER_HEIGHT - PANEL_HEIGHT, width)
+        self:BuildSelectPanel(controls, ctx.height - SidebarRows.FOOTER_HEIGHT - PANEL_HEIGHT, width)
     end
-    self:BuildFooter(controls, bounds.height, width)
-    app.tutorial:Mounted()
+    self:BuildFooter(controls, ctx.height, width)
+    app.tutorial:Offer()
 end
 
 -- Show current tags, rebuilding only when the arrangement changed
@@ -249,23 +250,6 @@ end
 -- Find the drawn row for a tag, if the column shows it
 function TagTab:RowFor(tag)
     return self.controls ~= nil and self.controls.list:RowFor(tag) or nil
-end
-
--- Tag a dropped item, or start a new tag from New Tag
--- Numbered tabs name no copy, so those drops tag the first copy
-function TagTab:Drop(item)
-    if self.controls == nil or item.view ~= "native" then return end
-    local objectID = type(item.objectID) == "number" and math.tointeger(item.objectID) or nil
-    if objectID == nil or objectID <= 0 then return end
-    local copy = item.copy or 1
-    if self.controls.newTagButton.root.isMouseOver == true then
-        self.app:CreateTagWithItem(objectID, copy)
-        return
-    end
-    local entry = self.controls.list:HoveredEntry()
-    if entry ~= nil and entry.kind == "tag" then
-        self.app:AddItemToTag(entry.tag, objectID, copy)
-    end
 end
 
 return TagTab

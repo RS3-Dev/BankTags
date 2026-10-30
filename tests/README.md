@@ -19,6 +19,6 @@ Menus load PrettyUI's real `src/minimenu.lua`, read-only, from the checkout `PRE
 set PRETTYUI_ROOT=C:\path\to\prettyui-checkout
 ```
 
-The check prints which Bank Core and PrettyUI checkouts and commits the tests loaded. A checkout whose `HOST_CONTRACT.md` lacks the API Bank Tags uses (`PluginDependencyUpdate(event)`, `GetMenuItem`, `SetItemHighlight`, the reported `columns`, a plain, clonable root, `SetSettings`, and `onBankClose(reason)`) is refused with a message rather than tested against, so an older sibling checkout cannot fail or pass the tests for the wrong reason.
+The check prints which Bank Core and PrettyUI checkouts and commits the tests loaded. A checkout whose `docs/LAUNCH_API_SPEC.md` lacks the launch API Bank Tags uses (`bankcore.Register(spec)`, `GetBankBounds`, and the menu item's `slot`) is refused with a message rather than tested against, so an older sibling checkout cannot fail or pass the tests for the wrong reason.
 
 The stand-in host is not the game client: these tests show Bank Tags' behavior against Bank Core's public API under that model, not how the live client draws, scrolls, or delivers input.

@@ -2,8 +2,6 @@
 
 local TagRules = require("banktags/tags/tag_rules")
 local TagLayouts = require("banktags/tags/tag_layouts")
-local TagData = require("banktags/tags/tag_data")
-local ItemIdentity = require("banktags/tags/item_identity")
 local trim = require("banktags/core/text").trim
 local copy = TagRules.copy
 local labelText = TagRules.labelText
@@ -53,7 +51,7 @@ function TagStoreLayouts:GetLayout(tag, columnCount)
     return slots, boundary, labels
 end
 
--- List the item copies in a tag, arranged ones first
+-- List the item slots in a tag, arranged ones first
 function TagStoreLayouts:GetTaggedItems(tag)
     local record = self.data.tags[tag]
     local items = {}
@@ -321,69 +319,13 @@ function TagStoreLayouts:UnarrangeLayoutItem(tag, layoutKey)
     return false, "The item is no longer in the preserved layout."
 end
 
--- Add a ghost copy that opens its source item, returning its key
-function TagStoreLayouts:DuplicateLayoutItem(tag, sourceLayoutKey)
-    local record = self.data.tags[tag]
-    local items = self:GetTaggedItems(tag)
-    local source = nil
-    for _, item in ipairs(items) do
-        if item.layoutKey == sourceLayoutKey then source = item end
-    end
-    if source == nil then return false, nil, "The selected item is no longer in this layout." end
-    local lastCopy = 0
-    for _, item in ipairs(items) do
-        if item.objectID == source.objectID then
-            lastCopy = math.max(lastCopy, TagData.CopyNumber(item.layoutKey) or 0)
-        end
-    end
-    local nextKey = ItemIdentity.LayoutKey(source.objectID, lastCopy + 1)
-    local nextData = copy(self.data)
-    local rows = nextData.tags[tag].rows
-    local sourceEntry, sourcePosition, interactionKey = nil, nil, sourceLayoutKey
-    for index, entry in ipairs(rows) do
-        for position, slot in ipairs(entry.slots or {}) do
-            if slot.layoutKey == sourceLayoutKey then
-                sourceEntry, sourcePosition = index, position
-                interactionKey = slot.sourceLayoutKey or sourceLayoutKey
-            end
-        end
-    end
-    for _, slot in ipairs(record.unsorted) do
-        if slot.layoutKey == sourceLayoutKey then interactionKey = slot.sourceLayoutKey or sourceLayoutKey end
-    end
-    local ghost = {
-        kind = "item",
-        objectID = source.objectID,
-        layoutKey = nextKey,
-        sourceLayoutKey = interactionKey,
-    }
-    -- Place a copy after its source, earlier, or at its row's end
-    local targetEntry, targetPosition = TagLayouts.FirstOpenSlot(rows, sourceEntry, sourcePosition)
-    if targetEntry ~= nil then
-        rows[targetEntry].slots[targetPosition] = ghost
-    elseif sourceEntry ~= nil then
-        local slots = rows[sourceEntry].slots
-        slots[#slots + 1] = ghost
-    else
-        TagLayouts.AppendToLastRow(rows, ghost)
-    end
-    local saved, reason = self:Commit(nextData, "Could not save the layout copy.")
-    if not saved then return false, nil, reason end
-    return true, nextKey, nil
-end
-
--- Add copies that open their source stacks, the first copied item at a grid index
+-- Add slots for copied objects, the first copied item at a grid index
 -- Each keeps its line and column offset; every cell they take must be empty, or none is added
 function TagStoreLayouts:PasteLayoutItems(tag, items, destinationIndex, columnCount)
     destinationIndex = math.tointeger(tonumber(destinationIndex))
     if self.data.tags[tag] == nil or destinationIndex == nil or destinationIndex < 1
         or type(items) ~= "table" or #items == 0 then
         return false, nil, "The paste position is invalid."
-    end
-    local lastCopies = {}
-    for _, item in ipairs(self:GetTaggedItems(tag)) do
-        local number = TagData.CopyNumber(item.layoutKey) or 0
-        lastCopies[item.objectID] = math.max(lastCopies[item.objectID] or 0, number)
     end
     local nextData = copy(self.data)
     local rows = nextData.tags[tag].rows
@@ -398,16 +340,9 @@ function TagStoreLayouts:PasteLayoutItems(tag, items, destinationIndex, columnCo
         if itemLine < view.lines and (view.cells[index] == nil or not TagLayouts.IsOpen(view.slots[index])) then
             return false, nil, "Paste needs empty cells; an item, reserved slot, or label is in the way."
         end
-        local copyNumber = (lastCopies[item.objectID] or 0) + 1
-        lastCopies[item.objectID] = copyNumber
-        local key = ItemIdentity.LayoutKey(item.objectID, copyNumber)
-        keys[#keys + 1] = key
-        writes[index] = {
-            kind = "item",
-            objectID = item.objectID,
-            layoutKey = key,
-            sourceLayoutKey = item.sourceLayoutKey,
-        }
+        local slot = TagLayouts.Item(item.objectID)
+        keys[#keys + 1] = slot.layoutKey
+        writes[index] = slot
     end
     writeCells(rows, view, writes)
     local saved, reason = self:Commit(nextData, "Could not save the pasted copies.")

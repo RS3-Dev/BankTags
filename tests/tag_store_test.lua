@@ -26,7 +26,21 @@ local TagData = require("banktags/tags/tag_data")
 local TagLayouts = require("banktags/tags/tag_layouts")
 local ItemIdentity = require("banktags/tags/item_identity")
 
-local function key(objectID, copy) return "object:" .. objectID .. ":" .. (copy or 1) end
+-- Report whether a tag holds the slot with a key
+local function has(store, tag, layoutKey)
+    for _, slot in ipairs(store:GetTaggedItems(tag)) do
+        if slot.layoutKey == layoutKey then return true end
+    end
+    return false
+end
+-- Count a tag's slots for an object
+local function count(store, tag, objectID)
+    local total = 0
+    for _, slot in ipairs(store:GetTaggedItems(tag)) do
+        if slot.objectID == objectID then total = total + 1 end
+    end
+    return total
+end
 -- Return the object at a grid index of a tag's rows drawn ten wide
 local function objectAt(store, tag, index)
     local slot = TagLayouts.Render(store.data.tags[tag].rows, 10).slots[index]
@@ -37,54 +51,53 @@ end
 
 local store = TagStore.new()
 assert(store:CreateTag("melee", 4151))
-assert(store:AddTag("melee", 4151, key(4151)))
--- Only the listed copy is in the tag, not a second stack
-assert(store:HasTag("melee", key(4151)) and not store:HasTag("melee", key(4151, 2)))
-assert(not store:HasTag("ranged", key(4151)))
--- Adding a listed copy again changes nothing
-local saved, _, added = store:AddTag("melee", 4151, key(4151))
-assert(saved and not added)
-assert(not store:AddTag("missing", 4151, key(4151)))
--- With no copy given, an item joins as its first copy
+local saved, _, whip = store:AddTag("melee", 4151)
+assert(saved and has(store, "melee", whip))
+assert(not has(store, "ranged", whip))
+-- Adding the object again adds another slot, which shows its next stack
+local _, _, secondWhip = store:AddTag("melee", 4151)
+assert(secondWhip ~= whip and count(store, "melee", 4151) == 2)
+assert(not store:AddTag("missing", 4151))
+assert(store:RemoveTag("melee", secondWhip) and count(store, "melee", 4151) == 1)
 assert(store:AddTag("melee", 385))
-assert(store:HasTag("melee", key(385)))
 
 -- New items go to Unsorted, or with fill placement into the layout
 assert(#store.data.tags.melee.unsorted == 2 and #store.data.tags.melee.rows == 0)
 store:SetLayoutPlacement(false)
-assert(store:AddTag("melee", 100) and store:AddTag("melee", 101) and store:AddTag("melee", 102))
+local keys = {}
+for objectID = 100, 102 do
+    local added
+    added, _, keys[objectID] = store:AddTag("melee", objectID)
+    assert(added)
+end
 assert(objectAt(store, "melee", 1) == 100 and objectAt(store, "melee", 3) == 102)
-assert(store:MoveLayoutItem("melee", key(4151), 4, 10))
+assert(store:MoveLayoutItem("melee", whip, 4, 10))
 assert(#store.data.tags.melee.unsorted == 1)
 
 -- Removing an arranged item leaves a blank so later items keep their places
-assert(store:RemoveTag("melee", key(102)))
-assert(not store:HasTag("melee", key(102)))
+assert(store:RemoveTag("melee", keys[102]))
+assert(not has(store, "melee", keys[102]))
 assert(objectAt(store, "melee", 3) == nil and objectAt(store, "melee", 4) == 4151)
-saved, _, added = store:RemoveTag("melee", key(102))
-assert(saved and not added)
+local removed
+saved, _, removed = store:RemoveTag("melee", keys[102])
+assert(saved and not removed)
 -- Fill placement takes the first open slot
-assert(store:AddTag("melee", 103) and objectAt(store, "melee", 3) == 103)
+saved, _, keys[103] = store:AddTag("melee", 103)
+assert(saved and objectAt(store, "melee", 3) == 103)
 store:SetLayoutPlacement(true)
-assert(store:RemoveTag("melee", key(103)) and store:RemoveTag("melee", key(101)))
+assert(store:RemoveTag("melee", keys[103]) and store:RemoveTag("melee", keys[101]))
 -- A trailing blank is not kept
-assert(store:MoveLayoutItem("melee", key(4151), 3, 10))
+assert(store:MoveLayoutItem("melee", whip, 3, 10))
 assert(#store.data.tags.melee.rows[1].slots == 3 and objectAt(store, "melee", 2) == nil)
 
--- A ghost takes the next open slot after its source and opens it
-local copied, ghost = store:DuplicateLayoutItem("melee", key(4151))
-assert(copied and ghost == key(4151, 2))
-local ghostSlot = TagLayouts.Render(store.data.tags.melee.rows, 10).slots[2]
-assert(ghostSlot.layoutKey == ghost and ghostSlot.sourceLayoutKey == key(4151))
--- With no open slot, a copy ends its source's row
--- A copy of a ghost opens the original
-local _, ghostOfGhost = store:DuplicateLayoutItem("melee", ghost)
-assert(ghostOfGhost == key(4151, 3))
-assert(TagLayouts.Render(store.data.tags.melee.rows, 10).slots[4].sourceLayoutKey == key(4151))
--- Removing a ghost removes only that ghost
-assert(store:RemoveTag("melee", ghost))
-assert(store:HasTag("melee", key(4151)) and store:HasTag("melee", ghostOfGhost))
-assert(objectAt(store, "melee", 2) == nil and objectAt(store, "melee", 4) == 4151)
+-- Another slot for an object is placed like any new item; removing it leaves the first
+_, _, secondWhip = store:AddTag("melee", 4151)
+assert(store:MoveLayoutItem("melee", secondWhip, 4, 10))
+assert(objectAt(store, "melee", 3) == 4151 and objectAt(store, "melee", 4) == 4151)
+assert(store:RemoveTag("melee", secondWhip))
+assert(has(store, "melee", whip) and count(store, "melee", 4151) == 1)
+_, _, secondWhip = store:AddTag("melee", 4151)
+assert(store:MoveLayoutItem("melee", secondWhip, 4, 10))
 
 -- Tag names follow the limit saving enforces
 assert(not store:CreateTag(string.rep("a", TagStore.MAX_TAG_NAME + 1)))
@@ -95,14 +108,14 @@ assert(store:NextPlaceholderTagName() == "placeholder 1")
 -- Saving and loading ------------------------------------------------------------
 
 -- Items and icons are saved by config name, so new object IDs still load
+-- A repeated object saves once per slot, with nothing naming a stack
 local text = TagData.Encode(store.data, "melee")
-assert(string.find(text, '"abyssal_whip"', 1, true) and string.find(text, '"abyssal_whip:3<1"', 1, true))
-assert(not string.find(text, "4151", 1, true))
+assert(string.find(text, '"abyssal_whip","abyssal_whip"', 1, true))
+assert(not string.find(text, "4151", 1, true) and not string.find(text, "abyssal_whip:", 1, true))
 objects.abyssal_whip.id, byID[4151], byID[5000] = 5000, nil, objects.abyssal_whip
 ItemIdentity.Reset()
 local reloaded = TagStore.new()
-assert(reloaded:HasTag("melee", key(5000)) and reloaded:GetTagSprite("melee") == 5000)
-assert(reloaded:HasTag("melee", key(5000, 3)))
+assert(count(reloaded, "melee", 5000) == 2 and reloaded:GetTagSprite("melee") == 5000)
 assert(Json.encode(reloaded:AllTags()) == Json.encode(store:AllTags()))
 
 -- An item this client cannot name keeps its place and is written back unchanged
@@ -113,7 +126,7 @@ local dormant = reloaded.data.tags.melee.rows[1].slots[3]
 assert(dormant.kind == "blank" and dormant.dormant == "abyssal_whip")
 assert(not TagLayouts.IsOpen(dormant))
 assert(reloaded:AddTag("melee", 200))
-assert(string.find(TagData.Encode(reloaded.data, "melee"), '"abyssal_whip:3<1"', 1, true))
+assert(string.find(TagData.Encode(reloaded.data, "melee"), '"abyssal_whip","abyssal_whip"', 1, true))
 
 -- A failed save reports why and leaves the live data as it was
 failWrites = true
@@ -125,13 +138,13 @@ local function refused(ok, ...)
 end
 refused(store:CreateTag("potions"))
 refused(store:AddTag("melee", 300))
-refused(store:RemoveTag("melee", key(100)))
+refused(store:RemoveTag("melee", keys[100]))
 refused(store:UpdateTag("melee", "fighting"))
 refused(store:DeleteTag("melee"))
 refused(store:CreateFolder("Combat", "melee"))
 refused(store:InsertLabel("melee", 0, "Weapons", 10))
-refused(store:DuplicateLayoutItem("melee", key(100)))
-refused(store:MoveLayoutItem("melee", key(100), 9, 10))
+refused(store:PasteLayoutItems("melee", { { objectID = 100, line = 0, column = 0 } }, 9, 10))
+refused(store:MoveLayoutItem("melee", keys[100], 9, 10))
 refused(store:ImportText(TagData.Encode(store.data, "melee"), { name = "copy" }))
 failWrites = false
 
@@ -203,7 +216,12 @@ assert(store:AllTags()[1] ~= "mutated")
 store = TagStore.new()
 assert(store:CreateTag("gear"))
 store:SetLayoutPlacement(false)
-for objectID = 1, 12 do assert(store:AddTag("gear", objectID)) end
+local gear = {}
+for objectID = 1, 12 do
+    local added
+    added, _, gear[objectID] = store:AddTag("gear", objectID)
+    assert(added)
+end
 store:SetLayoutPlacement(true)
 -- Return the grid rows the labels land on at a width
 local function labelRows(columns)
@@ -212,8 +230,8 @@ local function labelRows(columns)
     return table.concat(rows, ",")
 end
 -- Twelve items in one row, split into a row of ten and a row of two
-assert(store:MoveLayoutItem("gear", key(11), 21, 10))
-assert(store:MoveLayoutItem("gear", key(12), 22, 10))
+assert(store:MoveLayoutItem("gear", gear[11], 21, 10))
+assert(store:MoveLayoutItem("gear", gear[12], 22, 10))
 assert(#store.data.tags.gear.rows == 2 and objectAt(store, "gear", 12) == 12)
 
 -- Label text is cleaned
@@ -234,7 +252,7 @@ assert(labelRows() == "0,3,4")
 assert(labelRows(4) == "0,5,6")
 
 -- Items cannot drop onto labels; the layout ends after the last label
-assert(not store:MoveLayoutItem("gear", key(1), 5, 10))
+assert(not store:MoveLayoutItem("gear", gear[1], 5, 10))
 local _, boundary = store:GetLayout("gear", 10)
 assert(boundary == 50)
 
@@ -290,12 +308,12 @@ assert(target:CreateFolder("Mine", "existing"))
 local imported, summary = target:ImportText(backup)
 assert(imported and summary.tags == 2)
 assert(Json.encode(target:AllTags()) == Json.encode({ "alpha", "beta", "existing" }))
-assert(target:GetTagFolder("alpha") == "combat" and target:HasTag("alpha", key(385)))
+assert(target:GetTagFolder("alpha") == "combat" and count(target, "alpha", 385) == 1)
 
 -- A tag with the same name is replaced
 assert(target:AddTag("alpha", 4151))
 assert(target:ImportText(shared))
-assert(not target:HasTag("alpha", key(4151)) and target:HasTag("alpha", key(385)))
+assert(count(target, "alpha", 4151) == 0 and count(target, "alpha", 385) == 1)
 
 -- One shared tag can take a new name, icon, and folder
 assert(target:ImportText(shared, { name = "Renamed", spriteObjectID = 4151, folderKey = "mine" }))
@@ -321,24 +339,22 @@ assert(Json.encode(target.data) == before)
 db = {}
 local rowsStore = TagStore.new()
 assert(rowsStore:CreateTag("rows"))
-local function rowItem(objectID, copy, source)
-    return { kind = "item", objectID = objectID, layoutKey = key(objectID, copy),
-        sourceLayoutKey = source ~= nil and key(objectID, source) or nil }
-end
--- Lines at ten wide: 0 Top, 1 a whip and its copy, 2-4 a row of 25 wrapping,
+local rowItem = TagLayouts.Item
+-- Lines at ten wide: 0 Top, 1 two whips, 2-4 a row of 25 wrapping,
 -- 5 an empty row, 6 End, 7 a shark beside a reserved slot
 local long = {}
 for objectID = 1, 25 do long[objectID] = rowItem(5000 + objectID) end
 long[11], long[12] = { kind = "blank" }, { kind = "blank" }
+local secondRowWhip = rowItem(4151)
 rowsStore.data.tags.rows.rows = {
     { kind = "label", text = "Top" },
-    { kind = "row", slots = { rowItem(4151, 1), rowItem(4151, 2, 1) } },
+    { kind = "row", slots = { rowItem(4151), secondRowWhip } },
     { kind = "row", slots = long },
     { kind = "row", slots = {} },
     { kind = "label", text = "End" },
-    { kind = "row", slots = { rowItem(385, 1), { kind = "blank", dormant = "gone_item" } } },
+    { kind = "row", slots = { rowItem(385), { kind = "blank", dormant = "gone_item" } } },
 }
-rowsStore.data.tags.rows.unsorted = { rowItem(385, 2) }
+rowsStore.data.tags.rows.unsorted = { rowItem(385) }
 assert(rowsStore:Save())
 -- Describe each grid line ten wide: a label's text, "-" for empty, or its first item
 local function lines()
@@ -389,16 +405,17 @@ assert(lines() == "- Top - 4151 5001 - 5013 5021 - - End 385 6001 - - 6002", lin
 view = TagLayouts.Render(rowsStore.data.tags.rows.rows, 10)
 assert(view.slots[160].objectID == 6002)
 
--- Copies, their sources, reserved slots, and Unsorted all stay as they were
-local whipCopy = view.slots[32]
-assert(whipCopy.layoutKey == key(4151, 2) and whipCopy.sourceLayoutKey == key(4151, 1))
+-- Repeated objects, reserved slots, and Unsorted all stay as they were
+assert(view.slots[32].layoutKey == secondRowWhip.layoutKey)
 assert(view.slots[112].dormant == "gone_item")
 assert(Json.encode(rowsStore.data.tags.rows.unsorted) == unsortedBefore)
 
 -- The empty rows survive a share code and a reload
-local reloaded = assert(TagData.Decode(TagData.Encode(rowsStore.data, "rows")))
-assert(Json.encode(reloaded.tags.rows.rows) == Json.encode(rowsStore.data.tags.rows.rows))
-assert(Json.encode(TagStore.new().data.tags.rows.rows) == Json.encode(rowsStore.data.tags.rows.rows))
+-- Reading gives slots new keys, so compare the saved text
+local savedRows = TagData.Encode(rowsStore.data, "rows")
+local reloaded = assert(TagData.Decode(savedRows))
+assert(TagData.Encode(reloaded, "rows") == savedRows)
+assert(TagData.Encode(TagStore.new().data, "rows") == savedRows)
 
 -- Lines past the layout, bad lines, and missing tags change nothing
 local rowsBefore = Json.encode(rowsStore.data)
@@ -412,7 +429,7 @@ assert(writes == 0 and Json.encode(rowsStore.data) == rowsBefore)
 -- A full tag refuses another row, with a reason the editor can show
 local full = {}
 for index = 1, TagData.EDIT_ENTRY_LIMIT - 2 do full[index] = { kind = "label", text = "L" .. index } end
-full[#full + 1] = { kind = "row", slots = { rowItem(385, 3) } }
+full[#full + 1] = { kind = "row", slots = { rowItem(385) } }
 rowsStore.data.tags.rows.rows, rowsStore.data.tags.rows.unsorted = full, {}
 assert(rowsStore:Save())
 rowsBefore = Json.encode(rowsStore.data)
@@ -421,17 +438,17 @@ assert(not saved and reason:find("at most", 1, true) and Json.encode(rowsStore.d
 
 -- Removing a row -------------------------------------------------------------------
 
--- Lines at ten wide: 0 Top, 1 a whip and its copy, 2-3 a row of 12 wrapping,
--- 4 a shark, a reserved slot, and another copy of the whip
+-- Lines at ten wide: 0 Top, 1 two whips, 2-3 a row of 12 wrapping,
+-- 4 a shark, a reserved slot, and a third whip
 local wrapping = {}
 for index = 1, 12 do wrapping[index] = rowItem(5000 + index) end
 rowsStore.data.tags.rows.rows = {
     { kind = "label", text = "Top" },
-    { kind = "row", slots = { rowItem(4151, 1), rowItem(4151, 2, 1) } },
+    { kind = "row", slots = { rowItem(4151), rowItem(4151) } },
     { kind = "row", slots = wrapping },
-    { kind = "row", slots = { rowItem(385, 1), { kind = "blank", dormant = "gone_item" }, rowItem(4151, 3, 1) } },
+    { kind = "row", slots = { rowItem(385), { kind = "blank", dormant = "gone_item" }, rowItem(4151) } },
 }
-rowsStore.data.tags.rows.unsorted = { rowItem(385, 2) }
+rowsStore.data.tags.rows.unsorted = { rowItem(385) }
 assert(rowsStore:Save())
 unsortedBefore = Json.encode(rowsStore.data.tags.rows.unsorted)
 assert(lines() == "Top 4151 5001 5011 385", lines())
@@ -448,17 +465,17 @@ assert(rowsStore:LayoutLineContents("rows", 5, 10) == nil and rowsStore:LayoutLi
 writes = 0
 assert(rowsStore:RemoveLayoutRow("rows", 2, 10))
 assert(writes > 0 and lines() == "Top 4151 5011 385", lines())
-assert(not rowsStore:HasTag("rows", key(5001)) and not rowsStore:HasTag("rows", key(5010)))
-assert(rowsStore:HasTag("rows", key(5011)) and rowsStore:HasTag("rows", key(5012)))
+assert(count(rowsStore, "rows", 5001) == 0 and count(rowsStore, "rows", 5010) == 0)
+assert(count(rowsStore, "rows", 5011) == 1 and count(rowsStore, "rows", 5012) == 1)
 -- A label's line takes only the label
 assert(rowsStore:RemoveLayoutRow("rows", 0, 10))
 assert(lines() == "4151 5011 385", lines())
--- A row's items leave the tag as Remove does: a copy elsewhere keeps the source it opens
+-- A row's items leave the tag as Remove does; a slot elsewhere for the same object stays
 assert(rowsStore:RemoveLayoutRow("rows", 0, 10))
 assert(lines() == "5011 385", lines())
-assert(not rowsStore:HasTag("rows", key(4151, 1)) and not rowsStore:HasTag("rows", key(4151, 2)))
+assert(count(rowsStore, "rows", 4151) == 1)
 view = TagLayouts.Render(rowsStore.data.tags.rows.rows, 10)
-assert(view.slots[12].dormant == "gone_item" and view.slots[13].sourceLayoutKey == key(4151, 1))
+assert(view.slots[12].dormant == "gone_item" and view.slots[13].objectID == 4151)
 assert(Json.encode(rowsStore.data.tags.rows.unsorted) == unsortedBefore)
 -- Lines past the layout, bad lines, missing tags, and a failed save change nothing
 rowsBefore = Json.encode(rowsStore.data)
@@ -473,32 +490,33 @@ assert(not removed and why ~= nil and Json.encode(rowsStore.data) == rowsBefore)
 
 -- Pasting copies -------------------------------------------------------------------
 
--- Copies keep their offsets, open the copied stacks, and number after the tag's last copy of each item
+-- Pasted objects keep their offsets, each in a new slot with its own key
 local items = {
-    { objectID = 5011, sourceLayoutKey = key(5011), line = 0, column = 0 },
-    { objectID = 4151, sourceLayoutKey = key(4151, 1), line = 1, column = 2 },
+    { objectID = 5011, line = 0, column = 0 },
+    { objectID = 4151, line = 1, column = 2 },
 }
 writes = 0
-local pasted, keys = rowsStore:PasteLayoutItems("rows", items, 6, 10)
-assert(pasted and keys[1] == key(5011, 2) and keys[2] == key(4151, 4) and writes > 0)
+local pasted, pastedKeys = rowsStore:PasteLayoutItems("rows", items, 6, 10)
+assert(pasted and #pastedKeys == 2 and pastedKeys[1] ~= pastedKeys[2] and writes > 0)
 view = TagLayouts.Render(rowsStore.data.tags.rows.rows, 10)
-assert(view.slots[6].layoutKey == key(5011, 2) and view.slots[6].sourceLayoutKey == key(5011))
-assert(view.slots[18].layoutKey == key(4151, 4) and view.slots[18].sourceLayoutKey == key(4151, 1))
--- Two copies of one item number one after the other; below the rows they add lines
+assert(view.slots[6].layoutKey == pastedKeys[1] and view.slots[6].objectID == 5011)
+assert(view.slots[18].layoutKey == pastedKeys[2] and view.slots[18].objectID == 4151)
+assert(count(rowsStore, "rows", 5011) == 2 and count(rowsStore, "rows", 4151) == 2)
+-- One object pasted twice gets two slots; below the rows they add lines
 local pair = {
-    { objectID = 4151, sourceLayoutKey = key(4151, 1), line = 0, column = 0 },
-    { objectID = 4151, sourceLayoutKey = key(4151, 1), line = 1, column = 1 },
+    { objectID = 4151, line = 0, column = 0 },
+    { objectID = 4151, line = 1, column = 1 },
 }
-pasted, keys = rowsStore:PasteLayoutItems("rows", pair, 41, 10)
-assert(pasted and keys[1] == key(4151, 5) and keys[2] == key(4151, 6))
+pasted, pastedKeys = rowsStore:PasteLayoutItems("rows", pair, 41, 10)
+assert(pasted and pastedKeys[1] ~= pastedKeys[2])
 view = TagLayouts.Render(rowsStore.data.tags.rows.rows, 10)
-assert(view.lines == 6 and view.slots[41].layoutKey == key(4151, 5) and view.slots[52].layoutKey == key(4151, 6))
+assert(view.lines == 6 and view.slots[41].layoutKey == pastedKeys[1] and view.slots[52].layoutKey == pastedKeys[2])
 -- An item, a reserved slot, a label, the right edge, or one blocked copy refuses the whole paste
 assert(rowsStore:InsertLabel("rows", 2, "Mid", 10))
 rowsBefore = Json.encode(rowsStore.data)
-local one = { { objectID = 385, sourceLayoutKey = key(385), line = 0, column = 0 } }
-local blocked = { one[1], { objectID = 385, sourceLayoutKey = key(385), line = 0, column = 1 } }
-local offEdge = { one[1], { objectID = 385, sourceLayoutKey = key(385), line = 0, column = 3 } }
+local one = { { objectID = 385, line = 0, column = 0 } }
+local blocked = { one[1], { objectID = 385, line = 0, column = 1 } }
+local offEdge = { one[1], { objectID = 385, line = 0, column = 3 } }
 writes = 0
 for _, case in ipairs({ { one, 1 }, { one, 12 }, { one, 21 }, { blocked, 5 }, { offEdge, 8 }, { one, 0 }, { {}, 3 } }) do
     local ok, pastedKeys, refusal = rowsStore:PasteLayoutItems("rows", case[1], case[2], 10)
@@ -512,7 +530,7 @@ failWrites = false
 assert(not ok and failure ~= nil and Json.encode(rowsStore.data) == rowsBefore)
 full = {}
 for index = 1, TagData.EDIT_ENTRY_LIMIT - 2 do full[index] = { kind = "label", text = "L" .. index } end
-full[#full + 1] = { kind = "row", slots = { rowItem(385, 3) } }
+full[#full + 1] = { kind = "row", slots = { rowItem(385) } }
 rowsStore.data.tags.rows.rows, rowsStore.data.tags.rows.unsorted = full, {}
 assert(rowsStore:Save())
 rowsBefore = Json.encode(rowsStore.data)

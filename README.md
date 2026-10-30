@@ -12,18 +12,18 @@ Open a bank and click **Bank Tags** on the left rail. There is no separate Bank 
 
 1. Click **New Tag** at the bottom of the sidebar.
 2. Enter a name, choose an icon if you want one, and save.
-3. Drag a bank item onto the tag's row to add it.
+3. Right-click the tag, choose **Select items**, and click a bank item to add it. Adding an item does not move it out of your bank.
 4. Click the tag to view its items. Click it again to return to the normal bank view.
-
-You can also drop an item onto **New Tag**, then name the new tag. Dragging adds the item to the tag; it does not move the item out of your bank.
 
 Opening an empty tag list offers an eight-step tutorial, starting with **New Tag**. Click the **Help “i” beside Search** to replay it. Its arrows and numbered steps let you go back or skip ahead.
 
 ## Add several bank items
 
-Right-click a tag and choose **Select items**. Click bank items to add them to that tag; items already included have a gold outline. Click **Done** in the sidebar to finish.
+Right-click a tag and choose **Select items**. Click bank items to add them to that tag. Click **Done** in the sidebar to finish. Select mode works in any bank tab.
 
-Select mode needs the bank's **All Items** view. Drops from numbered native bank tabs use the item's first stack when the exact stack cannot be identified.
+A tag lists items, not particular stacks. Clicking an item that is already in the tag adds it again: the tag then shows that item's next stack too, with stacks that hold items first and placeholders after. An item listed more times than you have stacks shows as an empty placeholder.
+
+To remove an item, view the tag, right-click the item, and choose **Remove from**.
 
 ## Rename, group, and reorder tags
 
@@ -56,18 +56,18 @@ Click an item before using a shortcut. Click an empty Layout cell to choose wher
 | Action | Shortcut | What it does |
 | --- | --- | --- |
 | Copy | Ctrl+C | Copies the selected item or group to the editor clipboard |
-| Paste | Ctrl+V | Places additional layout copies into empty cells |
+| Paste | Ctrl+V | Adds the copied items again into empty cells |
 | Remove | Delete | Removes the selected single item from the tag |
 | Undo | Ctrl+Z | Reverses the last layout edit |
 | Redo | Ctrl+Y | Reapplies an undone edit |
 
-Layout copies point to the same bank stack; they do not duplicate real items. Every destination cell must be empty for a paste to succeed. **Cut is not implemented.**
+Pasting lists the same items again, so the tag shows each one's next stack; it does not duplicate real items. Every destination cell must be empty for a paste to succeed. **Cut is not implemented.**
 
 Undo keeps up to 50 steps for the current tag while the editor stays open. Switching tags or closing the editor clears undo and the clipboard. Renaming the tag keeps them. Changes made elsewhere to that tag end its undo history.
 
 Remove and Move to Unsorted require a single selection; Copy supports a group. Shortcuts pause while you type in editor fields or use its dialogs. Click the grid again to resume them.
 
-Arrow-key movement is **off by default**. Enable it in Bank settings → Bank Tags if desired. The arrows also move the game's camera.
+Arrow-key movement is **off by default**. Enable it on the Bank Tags plugin panel if desired. The arrows also move the game's camera.
 
 ## Import and share
 
@@ -80,15 +80,15 @@ Sharing a tag shares its layout, labels, icon, and folder information, not bank 
 
 ## Settings and troubleshooting
 
-Open the sidebar gear and choose **Bank Tags** to change tag icons, new-item placement, arrow-key movement, or debug logging.
+Open the **Bank Tags** plugin panel to change tag icons, new-item placement, arrow-key movement, or debug logging.
 
-- **Nothing appears:** check that Bank Core and PrettyUI are enabled. If the client log says Bank Tags needs a newer Bank Core, update Bank Core.
-- **Cannot open a tag or use select mode:** switch to the native All Items tab and try again.
+- **Nothing appears:** check that Bank Core and PrettyUI are enabled.
+- **Cannot open a tag:** close the preset selector, switch to the native All Items tab, and try again. A tag with more than 10,000 rows, labels, and items cannot be shown; remove some in the layout editor.
 - **Limited item search:** enable RuneQL for the full catalog.
 - **Shortcut does nothing:** close dialogs, click the grid, and release Shift/Alt before using Ctrl.
 - **Save error:** read the displayed message. Unreadable saved data is protected from being overwritten; do not delete it without a backup.
 
-A new installation starts empty. Tags from the older integrated Bank Utilities plugin must be transferred with its share codes; they are not imported automatically.
+A new installation starts empty. Share codes and saved tags from earlier versions, including the older integrated Bank Utilities plugin, are not read.
 
 ## For reviewers and developers
 

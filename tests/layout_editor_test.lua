@@ -18,18 +18,17 @@ h:LoadTags()
 local app = h:App()
 local session, layout = h:OpenBank()
 h:Tick(12)
-assert(app.state.columns == 13 and app.state.bounds ~= nil)
+local bounds = app.windows:BankBounds()
+assert(bounds.columns == 13)
 
-local ItemIdentity = require("banktags/tags/item_identity")
-local key = ItemIdentity.LayoutKey
 assert(app.store:CreateTag("melee", 4151))
 assert(app.store:CreateTag("food"))
 assert(app.store:CreateFolder("Combat", "melee"))
 app.store:SetLayoutPlacement(false)
-assert(app.store:AddTag("melee", 4151, key(4151, 1)))
+local _, _, WHIP = app.store:AddTag("melee", 4151)
 app.store:SetLayoutPlacement(true)
-assert(app.store:AddTag("melee", 385, key(385, 1)))
-assert(app.store:AddTag("melee", 1944, key(1944, 1)))
+local _, _, SHARK = app.store:AddTag("melee", 385)
+assert(WHIP ~= nil and SHARK ~= nil and app.store:AddTag("melee", 1944))
 app:Changed()
 assert(app:ShowTag("melee"))
 h:Tick(2)
@@ -44,7 +43,7 @@ local editor = app.windows.layoutEditor
 assert(editor ~= nil and editor.selectedTag == "melee")
 local editorSize = h:TagsModule("banktags/windows/layout_editor_parts").size
 assert(editorSize.CENTER_COLUMNS == 13)
-assert(editor.window.root.x == app.state.bounds.x and editor.window.root.y == app.state.bounds.y)
+assert(editor.window.root.x == bounds.x and editor.window.root.y == bounds.y)
 -- A tag rail replaces the tag column: an icon button per tag in sidebar order, named with its folder
 local rail = editor.tagRail
 -- Find the rail button for a tag
@@ -120,11 +119,11 @@ end
 
 -- Sorted rows fill the center and Unsorted is the right column's first tab; the shark leads it
 local sorted, unsorted = editor.panes.sorted, editor.panes.unsorted
-assert(sorted.slots[1].layoutKey == key(4151, 1) and unsorted.slots[1].layoutKey == key(385, 1))
+assert(sorted.slots[1].layoutKey == WHIP and unsorted.slots[1].layoutKey == SHARK)
 -- Drag the shark into column 12, which only 13 columns allow
 drag("unsorted", 0, 0, "sorted", 11, 0)
 local row = app.store.data.tags.melee.rows[1].slots
-assert(#row == 12 and row[12].layoutKey == key(385, 1), "the shark landed at row 1, column 12")
+assert(#row == 12 and row[12].layoutKey == SHARK, "the shark landed at row 1, column 12")
 h:Tick(4)
 -- Bank Core draws the page at the same columns
 local whipY, sharkX, sharkY = nil, nil, nil
@@ -134,27 +133,25 @@ for _, entry in ipairs(layout:BuildPageItems()) do
 end
 assert(whipY ~= nil and sharkY == whipY and sharkX == 8 + 11 * 44, tostring(sharkX))
 
--- Select the whip, copy it, and paste it into an empty cell; the new copy opens copy 1
+-- Select the whip, copy it, and paste it into an empty cell as another whip slot
 drag("sorted", 0, 0, "sorted", 0, 0)
-assert(editor.selectedLayoutKey == key(4151, 1))
+assert(editor.selectedLayoutKey == WHIP)
 Harness.Find(editor.content, "Copy").hooks.pressed()
 drag("sorted", 5, 0, "sorted", 5, 0)
 assert(editor.pasteCell == 6 and editor.selectedLayoutKey == nil)
 Harness.Find(editor.content, "Paste").hooks.pressed()
-assert(editor.selectedLayoutKey == key(4151, 2) and editor.pasteCell == nil)
-local ghost = nil
-for _, slot in ipairs(app.store.data.tags.melee.rows[1].slots) do
-    if slot.layoutKey == key(4151, 2) then ghost = slot end
-end
-assert(ghost ~= nil and ghost.sourceLayoutKey == key(4151, 1))
--- Move to Unsorted keeps the selected copy in the tag
+local pasted = editor.selectedLayoutKey
+assert(pasted ~= nil and pasted ~= WHIP and editor.pasteCell == nil)
+local row1 = app.store.data.tags.melee.rows[1].slots
+assert(row1[6].layoutKey == pasted and row1[6].objectID == 4151)
+-- Move to Unsorted keeps the selected slot in the tag
 Harness.Find(editor.content, "Move to Unsorted").hooks.pressed()
 local unsorted = app.store.data.tags.melee.unsorted
-assert(unsorted[#unsorted].layoutKey == key(4151, 2) and app.store:HasTag("melee", key(4151, 2)))
--- Remove takes the selected copy out of the tag
+assert(unsorted[#unsorted].layoutKey == pasted and h:Saved("melee") == "4151 0 0 0 0 0 0 0 0 0 0 385 1944 4151")
+-- Remove takes the selected slot out of the tag
 drag("sorted", 0, 0, "sorted", 0, 0)
 Harness.Find(editor.content, "Remove").hooks.pressed()
-assert(not app.store:HasTag("melee", key(4151, 1)) and app.store:HasTag("melee", key(4151, 2)))
+assert(h:Saved("melee") == "0 0 0 0 0 0 0 0 0 0 0 385 1944 4151", h:Saved("melee"))
 -- With nothing selected the buttons explain instead of acting
 editor.selectedLayoutKey = nil
 Harness.Find(editor.content, "Remove").hooks.pressed()
@@ -231,16 +228,18 @@ app:Changed()
 assert(not rail.view.arrows and railTags() == "melee,snacks" and rail.upArrow == nil)
 railButton("snacks").root.hooks.pressed()
 
--- Moving the bank moves the editor once Bank Core reports the new bounds
+-- Moving the bank, with no item change, moves the open editor within a few ticks
 local window = host.window
+local items = app.bankItems
 window.host:SetPos(window.host.x + 30, 80)
 h:Tick(12)
-assert(app.state.bounds.y == 80 and editor.window.root.y == 80)
+assert(app.bankItems == items, "the bank's items did not change")
+assert(app.windows:BankBounds().y == 80 and editor.window.root.y == 80)
 assert(app.windows.layoutEditor == editor)
--- Resizing the item area reopens the editor at the new columns
+-- Resizing the item area reopens the editor at the new columns, once Core rewraps and the editor checks
 host.itemLayer.width = 448
-h:Tick(12)
-assert(app.state.columns == 10)
+h:Tick(22)
+assert(app.windows:BankBounds().columns == 10)
 local reopened = app.windows.layoutEditor
 assert(reopened ~= nil and reopened ~= editor and reopened.selectedTag == "snacks")
 assert(editorSize.CENTER_COLUMNS == 10)
@@ -287,7 +286,7 @@ h:Tick(2)
 app.windows:OpenTagDeleteConfirm("snacks")
 app.windows.tagDeleteConfirm.confirmButton.root.hooks.click()
 h:Tick(2)
-assert(app.store.data.tags.snacks == nil and app.shownTag == nil and layout.shownPage == nil)
+assert(app.store.data.tags.snacks == nil and app:ShownTag() == nil and layout.shownPage == nil)
 
 -- The footer Close button closes the editor, as does Bank Core unloading
 assert(app:ShowTag("melee"))

@@ -6,10 +6,18 @@ local TagLayouts = {}
 
 -- Width used when a caller gives none
 local DEFAULT_COLUMNS = 10
+-- The last key given to a slot; keys tell slots apart in this session and are never saved
+local lastKey = 0
 
 -- Return a new empty slot
 local function blank()
     return { kind = "blank" }
+end
+
+-- Return a new slot for an object, with its own key
+function TagLayouts.Item(objectID)
+    lastKey = lastKey + 1
+    return { kind = "item", objectID = objectID, layoutKey = lastKey }
 end
 
 -- Check whether a slot is empty and reserves no item

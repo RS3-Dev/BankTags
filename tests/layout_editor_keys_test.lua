@@ -17,14 +17,12 @@ local app = h:App()
 h:OpenBank()
 h:Tick(12)
 
-local ItemIdentity = require("banktags/tags/item_identity")
-local key = ItemIdentity.LayoutKey
-local WHIP, SHARK = key(4151, 1), key(385, 1)
 local store = app.store
 assert(store:CreateTag("melee"))
 assert(store:CreateTag("food"))
-assert(store:AddTag("melee", 4151, WHIP))
-assert(store:AddTag("melee", 385, SHARK))
+local _, _, WHIP = store:AddTag("melee", 4151)
+local _, _, SHARK = store:AddTag("melee", 385)
+assert(WHIP ~= nil and SHARK ~= nil)
 app:Changed()
 h:Tick(2)
 local editorSize = h:TagsModule("banktags/windows/layout_editor_parts").size
@@ -85,11 +83,11 @@ local function clickSlot(paneName, column, row)
     pane.surface.hooks.click(nil, pointAt(paneName, column, row))
     pane.surface.hooks.release()
 end
--- Count the tag's whip copies
+-- Count the tag's whip slots
 local function whipCopies()
     local count = 0
-    for copy = 1, 20 do
-        if store:HasTag("melee", key(4151, copy)) then count = count + 1 end
+    for _, slot in ipairs(store:GetTaggedItems("melee")) do
+        if slot.objectID == 4151 then count = count + 1 end
     end
     return count
 end
@@ -105,7 +103,7 @@ local function outlines()
     end
     return count
 end
--- Find a copy saved in the tag's rows or Unsorted
+-- Find a slot saved in the tag's rows or Unsorted
 local function findSlot(layoutKey)
     local melee = store.data.tags.melee
     for _, entry in ipairs(melee.rows) do
@@ -119,6 +117,7 @@ local function findSlot(layoutKey)
     return nil
 end
 local function saved() return Json.encode(store.data) end
+local function hasSlot(layoutKey) return findSlot(layoutKey) ~= nil end
 
 -- Shortcuts listen only while the editor is open
 assert(listener("KeyDown") ~= nil and listener("WindowFocusChanged") ~= nil and listener("KeyUp") == nil)
@@ -126,13 +125,13 @@ assert(listener("KeyDown") ~= nil and listener("WindowFocusChanged") ~= nil and 
 assert(editor.copyButton.tooltipText == "Copy the selected item or group (Ctrl+C)")
 assert(editor.pasteButton.tooltipText == "Click an empty cell, then paste the copied items there (Ctrl+V)")
 assert(editor.removeButton.tooltipText == "Remove the selected item (Delete). Ctrl+Z undoes and Ctrl+Y redoes;"
-    .. " arrow keys move the selection when turned on in Bank settings")
+    .. " arrow keys move the selection when turned on in Bank Tags' settings")
 
 -- Before any press on the grid, keys do nothing
 editor.selectedLayoutKey = WHIP
 controlKey(GAME.C)
 press(GAME.DELETE, NONE)
-assert(whipCopies() == 1 and store:HasTag("melee", WHIP) and changes == 0 and editor.clipboard == nil)
+assert(whipCopies() == 1 and hasSlot(WHIP) and changes == 0 and editor.clipboard == nil)
 
 -- Ctrl+C copies the selection to the editor's clipboard, saving nothing and adding no undo step
 selectWhip()
@@ -148,16 +147,19 @@ editor:HideError()
 -- Clicking an empty sorted cell outlines it as the paste cell and clears the item selection
 clickSlot("sorted", 2, 1)
 assert(editor.pasteCell == 13 and editor.selectedLayoutKey == nil and outlines() == 1)
--- Ctrl+V adds a new copy of the same bank stack there, selects it, and keeps the clipboard
+-- Ctrl+V adds another whip slot there, selects it, and keeps the clipboard
 controlKey(GAME.V)
-local copy, position = findSlot(key(4151, 2))
-assert(copy ~= nil and copy.sourceLayoutKey == WHIP and position == 3 and editor.panes.sorted.slots[13] ~= nil)
-assert(editor.selectedLayoutKey == key(4151, 2) and editor.pasteCell == nil and changes == 1 and outlines() == 1)
+local pasted = editor.selectedLayoutKey
+local copy, position = findSlot(pasted)
+assert(copy ~= nil and copy.objectID == 4151 and pasted ~= WHIP and position == 3)
+assert(editor.panes.sorted.slots[13].layoutKey == pasted)
+assert(editor.pasteCell == nil and changes == 1 and outlines() == 1)
 assert(#editor.clipboard.items == 1)
 -- The clipboard pastes again at another empty cell
 clickSlot("sorted", 0, 0)
 controlKey(GAME.V)
-assert(whipCopies() == 3 and editor.panes.sorted.slots[1].layoutKey == key(4151, 3) and changes == 2)
+local THIRD = editor.panes.sorted.slots[1].layoutKey
+assert(whipCopies() == 3 and THIRD == editor.selectedLayoutKey and THIRD ~= pasted and changes == 2)
 -- Unsorted cells are never paste cells
 clickSlot("unsorted", 3, 3)
 assert(editor.pasteCell == nil and editor.selectedLayoutKey == nil and outlines() == 0)
@@ -188,9 +190,9 @@ editor:HideError()
 -- Into open cells the group lands with its shape and stays selected
 clickSlot("sorted", 0, 3)
 controlKey(GAME.V)
-assert(editor.panes.sorted.slots[31].layoutKey == key(4151, 4))
-assert(editor.panes.sorted.slots[43].layoutKey == key(4151, 5) and findSlot(key(4151, 5)).sourceLayoutKey == WHIP)
-assert(editor:GroupCount() == 2 and editor.groupKeys[key(4151, 4)] and changes == 3)
+local fourth, fifth = editor.panes.sorted.slots[31].layoutKey, editor.panes.sorted.slots[43].layoutKey
+assert(fourth ~= nil and fifth ~= nil and findSlot(fifth).objectID == 4151 and whipCopies() == 5)
+assert(editor:GroupCount() == 2 and editor.groupKeys[fourth] and editor.groupKeys[fifth] and changes == 3)
 
 -- Ctrl+Z and Ctrl+Y work with nothing selected, once per press
 clickSlot("unsorted", 3, 3)
@@ -229,25 +231,25 @@ press(GAME.Z, CONTROL)
 host.shiftDown = false
 assert(saved() == before and changes == 9)
 
--- Delete removes the selected copy once; Backspace and modified Delete do not
+-- Delete removes the selected slot once; Backspace and modified Delete do not
 clickSlot("sorted", 0, 0)
 local selected = editor.selectedLayoutKey
-assert(selected == key(4151, 3))
+assert(selected == THIRD)
 press(GAME.BACKSPACE, NONE)
 press(GAME.DELETE, SHIFT)
 press(GAME.DELETE, CONTROL)
-assert(store:HasTag("melee", selected))
+assert(hasSlot(selected))
 press(GAME.DELETE, NONE)
 press(GAME.DELETE, NONE, true)
-assert(not store:HasTag("melee", selected) and editor.selectedLayoutKey == nil and changes == 10)
+assert(not hasSlot(selected) and editor.selectedLayoutKey == nil and changes == 10)
 -- With nothing selected, Delete and Ctrl+C do nothing and say nothing
 press(GAME.DELETE, NONE)
 controlKey(GAME.C)
 assert(changes == 10 and editor.errorBanner == nil and #editor.clipboard.items == 2)
 undo()
-assert(store:HasTag("melee", selected) and changes == 11)
+assert(hasSlot(selected) and changes == 11)
 
--- Arrow keys move the selection only once turned on in Bank settings
+-- Arrow keys move the selection only once turned on in Bank Tags' settings
 assert(app.settings.arrowKeyMovement == false)
 clickSlot("sorted", 0, 0)
 local history = editor.history
@@ -258,9 +260,9 @@ assert(saved() == before and changes == 11 and editor.errorBanner == nil)
 -- Turning it on applies at once and changes neither the layout nor the undo steps
 assert(app:SetSetting("arrowKeyMovement", true))
 assert(saved() == before and editor.history == history and history.index == historyIndex)
-assert(#editor.clipboard.items == 2 and editor.selectedLayoutKey == key(4151, 3))
+assert(#editor.clipboard.items == 2 and editor.selectedLayoutKey == THIRD)
 press(GAME.RIGHT, NONE)
-assert(editor.panes.sorted.slots[2].layoutKey == key(4151, 3) and changes == 12)
+assert(editor.panes.sorted.slots[2].layoutKey == THIRD and changes == 12)
 -- Modified arrows still do nothing
 before = saved()
 for _, modifiers in ipairs({ SHIFT, CONTROL, ALT }) do press(GAME.LEFT, modifiers) end
@@ -271,7 +273,7 @@ assert(app:SetSetting("arrowKeyMovement", false))
 press(GAME.LEFT, NONE)
 assert(saved() == before and editor.history.index == historyIndex and changes == 12)
 undo()
-assert(editor.panes.sorted.slots[1].layoutKey == key(4151, 3) and changes == 13)
+assert(editor.panes.sorted.slots[1].layoutKey == THIRD and changes == 13)
 
 -- An open menu blocks the keys; the grid's own row menu leaves them working
 clickSlot("sorted", 0, 0)

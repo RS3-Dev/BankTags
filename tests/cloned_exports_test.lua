@@ -16,7 +16,7 @@ local app = h:App()
 local coreClone = rawget(tags.env, "bankcore")
 assert(rawget(tags.env._G, "__bankcore_api") == nil)
 assert(coreClone ~= core.result and getmetatable(coreClone) == nil)
-assert(app:IsConnected() and app.bank == coreClone)
+assert(h:Connected())
 
 -- Its tab mounts and a tag's page opens
 assert(app.store:CreateTag("melee"))
@@ -25,17 +25,17 @@ local _, layout = h:OpenBank()
 h:Tick(2)
 local tabParent = h:TabParent()
 assert(tabParent ~= nil and Harness.Find(tabParent, "Melee") ~= nil)
-assert(app:ShowTag("melee") and layout.shownPage.key == "tag:melee")
+assert(app:ShowTag("melee") and app:ShownTag() == "melee" and layout.shownPage ~= nil)
 
 -- Core reloads and Bank Tags reconnects through a fresh clone
 h.host:Reload("bankcore", { shutdown = true, notify = true, reinject = true })
-assert(tabParent.destroyed and not coreClone.GetState().running)
+assert(tabParent.destroyed and select(2, coreClone.Register({ id = "late", name = "Late" })) == "stopped")
 local freshClone = rawget(tags.env, "bankcore")
 assert(freshClone ~= coreClone and freshClone ~= core.result)
-assert(app:IsConnected() and app.bank == freshClone)
+assert(h:Connected())
 _, layout = h:OpenBank()
 h:Tick(2)
-assert(h:TabParent() ~= nil and app:ShowTag("melee") and layout.shownPage.key == "tag:melee")
+assert(h:TabParent() ~= nil and app:ShowTag("melee") and app:ShownTag() == "melee")
 
 -- A plugin that requires Bank Tags adds an import source using only its injected clone
 local folder = h.out .. "/importer"

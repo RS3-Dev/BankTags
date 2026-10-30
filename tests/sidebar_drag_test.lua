@@ -101,13 +101,13 @@ assert(rowIDs() == "alpha,bravo," .. COMBAT .. ",melee,ranged,magic,charlie," ..
 -- A press and release selects; a small wobble is still a click
 local root = press("alpha", 10)
 holdAt(root, 14, 43)
-assert(not tagList().gesture.dragging and app.shownTag == nil, "a press alone selects nothing")
+assert(not tagList().gesture.dragging and app:ShownTag() == nil, "a press alone selects nothing")
 root.hooks.release()
 h:Tick(2)
-assert(app.shownTag == "alpha" and saves == 0)
+assert(app:ShownTag() == "alpha" and saves == 0)
 h:ClickRow("alpha")
 h:Tick(2)
-assert(app.shownTag == nil)
+assert(app:ShownTag() == nil)
 
 -- Past the threshold the row lifts: an invisible cover over the list, a ghost, and a drop line
 local list = tagList()
@@ -139,7 +139,7 @@ local ghost, line = gesture.ghost, gesture.line
 root.hooks.release()
 assert(order() == "bravo,alpha,melee,ranged,magic,charlie,mining,fishing" and saves == 1)
 assert(ghost.destroyed and line.destroyed and root.destroyed and tagList().gesture == nil)
-assert(app.shownTag == nil, "a drag never selects")
+assert(app:ShownTag() == nil, "a drag never selects")
 root.hooks.release()
 root.hooks.dragcomplete(root, nil, 0, 0)
 assert(saves == 1, "one save per drop")
@@ -222,7 +222,7 @@ press("bravo", 2 * ENTRY + 16)
 assert(tagList().gesture == nil and tagList():RowFor("alpha") ~= nil)
 h:ClickRow("bravo")
 h:Tick(2)
-assert(app.shownTag == "bravo" and saves == 0)
+assert(app:ShownTag() == "bravo" and saves == 0)
 
 -- Searches show some rows only, so they never drag; selection still works
 tagList().search.root.hooks.contentchanged(nil, "change", "a")
@@ -232,7 +232,7 @@ holdAt(root, 5 * ENTRY)
 assert(not tagList().gesture.dragging)
 root.hooks.release()
 h:Tick(2)
-assert(app.shownTag == "charlie" and saves == 0)
+assert(app:ShownTag() == "charlie" and saves == 0)
 -- Typing a search mid-drag ends the drag
 tagList().search.root.hooks.contentchanged(nil, "change", "")
 root = press("alpha", 16)
@@ -243,28 +243,13 @@ assert(tagList().gesture == nil and ghost.destroyed)
 root.hooks.release()
 assert(saves == 0)
 
--- A bank item dropped on a tag row tags it once and never reorders, filtered or not
-local function dropOn(tag)
-    local row = tagList():RowFor(tag)
-    h:PointAt(row.root, 20, 10)
-    app.tab.callbacks.onItemDrop({ view = "native", objectID = 385, copy = 1 })
-    -- The drag's end reaches the row beneath, which was never pressed
-    row.root.hooks.release()
-    row.root.hooks.dragcomplete(row.root, nil, 9999, 9999)
-end
-local before = order()
-dropOn("mining")
-assert(app.store:HasTag("mining", "object:385:1") and order() == before and saves == 1)
 tagList().search.root.hooks.contentchanged(nil, "change", "")
-dropOn("alpha")
-assert(app.store:HasTag("alpha", "object:385:1") and order() == before and saves == 2)
-dropOn("alpha")
-assert(saves == 2, "the same stack is not added twice")
+local before = order()
 
 -- A row menu built before a drag is out of date after it; a new one acts
 h:ClickRow("charlie")
 h:Tick(2)
-assert(app.shownTag == nil)
+assert(app:ShownTag() == nil)
 saves = 0
 local alphaRow = tagList():RowFor("alpha")
 h:PointAt(alphaRow.root, 20, 10)
@@ -274,12 +259,12 @@ drag("alpha", ENTRY + 20)
 assert(order() == "charlie,alpha,bravo,magic,melee,ranged,mining,fishing" and saves == 1)
 Harness.Choose(menu, "Select <col=f2c66d>Alpha</col>")
 h:Tick(2)
-assert(app.shownTag == nil, "the stale menu does nothing")
+assert(app:ShownTag() == nil, "the stale menu does nothing")
 h:PointAt(tagList():RowFor("alpha").root, 20, 10)
 menu = h:ContentMenu()
 Harness.Choose(menu, "Select <col=f2c66d>Alpha</col>")
 h:Tick(2)
-assert(app.shownTag == "alpha" and saves == 1)
+assert(app:ShownTag() == "alpha" and saves == 1)
 -- Mid-drag, the pointer is over no row, so a menu offers nothing from the list
 root = press("bravo", 2 * ENTRY + 16)
 holdAt(root, 6 * ENTRY + 20)
@@ -288,7 +273,7 @@ root.isMouseOver = true
 assert(#h:ContentMenu().entries == 1)
 root.hooks.release()
 assert(order() == "charlie,alpha,magic,melee,ranged,bravo,mining,fishing")
-assert(app.shownTag == "alpha", "the shown tag stays shown through a drag")
+assert(app:ShownTag() == "alpha", "the shown tag stays shown through a drag")
 
 -- In a short list the wheel and the list's edges scroll during a drag
 local mount = layout.tabMount
