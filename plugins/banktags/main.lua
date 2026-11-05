@@ -33,7 +33,7 @@ local app = App.new()
 _G[SESSION_KEY] = app
 app:Start()
 
--- Follow Bank Core and RuneQL loading and unloading
+-- Handle dependency updates when the host sends them
 function PluginDependencyUpdate(event)
     if event.pluginIdentifier == "runeql" then Catalog.SetRuneQLEnabled(event.enabled) end
     if event.pluginIdentifier ~= "bankcore" then return end

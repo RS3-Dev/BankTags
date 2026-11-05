@@ -81,14 +81,13 @@ assert(section.controls.showTagSprites:IsSelected("showTagSprites") and section.
 assert(section.controls.enableDebug:IsSelected("enableDebug"))
 assert(section.controls.arrowKeyMovement:IsSelected("arrowKeyMovement"))
 
--- The panel needs no Bank Core: it stays and still saves while Core is gone
-h.host:Unload("bankcore")
+-- Disconnecting bank tools leaves preferences usable
+app:Disconnect()
 assert(app.settingsSection == section and not section.destroyed)
 section.controls.showTagSprites:SetSelected("showTagSprites", false, true)
 assert(h.databases.banktags[SETTINGS_KEY].showTagSprites == false)
 section.controls.showTagSprites:SetSelected("showTagSprites", true, true)
-h:LoadCore()
-assert(h:Connected())
+assert(app:Connect() and h:Connected())
 
 -- Bank Tags unloads, destroying the panel; a reload reads the saved choice back
 h.host:Unload("banktags")

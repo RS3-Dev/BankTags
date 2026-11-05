@@ -26,9 +26,13 @@ local tabParent = h:TabParent()
 assert(tabParent ~= nil and Harness.Find(tabParent, "Melee") ~= nil)
 assert(app:ShowTag("melee") and app:ShownTag() == "melee" and layout.shownPage ~= nil)
 
--- Core reloads and Bank Tags reconnects through a fresh clone
+-- Reload Bank Tags after Core to refresh required imports
 h.host:Reload("bankcore", { shutdown = true, notify = true, reinject = true })
 assert(tabParent.destroyed and select(2, coreClone.Register({ id = "late", name = "Late" })) == "stopped")
+assert(rawget(tags.env, "bankcore") == coreClone)
+h.host:Reload("banktags", { shutdown = true, freshEnvironment = true })
+assert(app.shutDown and app.ext == nil)
+app = h:App()
 local freshClone = rawget(tags.env, "bankcore")
 assert(freshClone ~= coreClone and freshClone ~= core.result)
 assert(h:Connected())

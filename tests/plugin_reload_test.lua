@@ -1,6 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Load the built Bank Tags beside Bank Core in every load order
+-- Check required imports, reloads, and shutdown cleanup
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -8,22 +8,21 @@ local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("plugin_reload")
 h.bankHost:SetItems({ { 1944, 3, "Egg" }, { 1927, 1, "Milk" } })
 
--- Bank Tags loads without Bank Core and waits for it
+-- Required dependencies load before Bank Tags
 h.host.sharedGlobals.__banktags_api = { RegisterExtension = function() error("stale import API") end }
+local core = h:LoadCore()
 local tags = h:LoadTags()
 local app = h:App()
-assert(app ~= nil and app.ext == nil)
+assert(app ~= nil and h:Connected())
+local firstDependencyUpdate = rawget(tags.env, "PluginDependencyUpdate")
 assert(type(rawget(tags.env, "PluginDependencyUpdate")) == "function")
 assert(rawget(tags.env, "PluginOptionalDependencyChanged") == nil)
 assert(tags.result == nil and rawget(tags.env._G, "__banktags_api") == nil)
 -- No Core module was loaded into Bank Tags' cache
 for moduleName in pairs(tags.env.package.loaded) do
-    assert(string.sub(moduleName, 1, 9) == "banktags/", moduleName .. " is not a Bank Tags module")
+    assert(string.sub(moduleName, 1, 19) == "resources/banktags/", moduleName .. " is not a Bank Tags module")
 end
 
--- Core arrives late, and the dependency update connects Bank Tags
-local core = h:LoadCore()
-assert(h:Connected())
 local session, layout = h:OpenBank()
 h:Tick(2)
 local tabParent = h:TabParent()
@@ -38,30 +37,39 @@ assert(h.databases.banktags["banktags:tags:v4:manifest"] ~= nil)
 assert(h.databases.bankcore == nil or h.databases.bankcore["banktags:tags:v4:manifest"] == nil)
 for key in pairs(h.databases.banktags) do assert(string.sub(key, 1, 9) == "banktags:", key) end
 
--- Core reloads, and Bank Tags reconnects to the new API
+-- Required imports refresh when Bank Tags reloads after Core
 local oldAPI = core.result
 h.host:Reload("bankcore", { shutdown = true, notify = true, reinject = true })
 assert(tabParent.destroyed and select(2, oldAPI.Register({ id = "late", name = "Late" })) == "stopped")
+assert(rawget(tags.env, "bankcore") == oldAPI)
+local oldApp = app
+h.host:Reload("banktags", { shutdown = true, freshEnvironment = true })
+app = h:App()
+assert(oldApp.shutDown and oldApp.ext == nil and app ~= oldApp)
 assert(h:Connected() and core.result ~= oldAPI)
 session, layout = h:OpenBank()
 h:Tick(2)
 tabParent = h:TabParent()
 assert(tabParent ~= nil and not tabParent.destroyed and Harness.Find(tabParent, "Melee") ~= nil)
 
--- A reload still connects through a cloned Core API
+-- Reloading also connects through a cloned Core API
 h.host:Reload("bankcore", { shutdown = true })
 h.host.exports.bankcore = require("tools/test_support/fake_plugin_host").Clone(core.result)
-h.host:Notify("bankcore", true, true)
+h.host:Reload("banktags", { shutdown = true })
+app = h:App()
 assert(h:Connected())
 session, layout = h:OpenBank()
 h:Tick(2)
 assert(h:TabParent() ~= nil)
 
--- Core unloads; Bank Tags lets go and its tags stay saved
+-- Stop Bank Tags before unloading its required dependency
+h.host:Unload("banktags")
 h.host:Unload("bankcore")
 assert(app.ext == nil)
 assert(app.store.data.tags.melee ~= nil)
 h:LoadCore()
+tags = h:LoadTags()
+app = h:App()
 assert(h:Connected())
 session, layout = h:OpenBank()
 h:Tick(2)
@@ -77,16 +85,17 @@ assert(tabParent.destroyed)
 h:Tick(2)
 assert(h:TabParent() ~= nil and Harness.Find(h:TabParent(), "Melee") ~= nil)
 -- Told Core loaded again, the old copy stays shut down
-rawget(tags.env, "PluginDependencyUpdate")({ pluginIdentifier = "bankcore", enabled = true })
+firstDependencyUpdate({ pluginIdentifier = "bankcore", enabled = true })
 assert(h:Connected() and app.ext == nil)
 
 -- A reload that keeps the module cache still runs the new modules
 local cachedApp = h:TagsModule("banktags/app")
+local cachedDebugLog = h:TagsModule("banktags/core/debug_log")
 h.host:Reload("banktags")
 local hotReloaded = h:App()
 assert(hotReloaded ~= reloaded and reloaded.shutDown and h:Connected())
 assert(h:TagsModule("banktags/app") ~= cachedApp and getmetatable(hotReloaded) ~= getmetatable(reloaded))
-assert(h:TagsModule("banktags/core/debug_log") ~= nil)
+assert(h:TagsModule("banktags/core/debug_log") == cachedDebugLog)
 reloaded = hotReloaded
 h:Tick(2)
 assert(h:TabParent() ~= nil)
@@ -107,8 +116,8 @@ split:LoadCore()
 local first = split:LoadTags()
 assert(split:Connected())
 
--- Without RuneQL the catalog is limited; with it RuneQL is searched
-local Catalog = split.tags.env.package.loaded["banktags/tags/catalog"]
+-- The stand-in permits missing imports to exercise limited search
+local Catalog = split:TagsModule("banktags/tags/catalog")
 assert(not Catalog.IsFull())
 local results, _, limited = Catalog.Find("Egg", 10, { { objectID = 1944 } })
 assert(limited and #results == 1 and results[1].objectId == 1944)
@@ -120,16 +129,20 @@ end } }
 config.Obj.egg = { id = 1944 }
 split.host.exports.runeql = runeqlCatalog
 split.host:Notify("runeql", true, true)
+assert(not Catalog.IsFull(), "required dependencies receive no optional-change notification")
+split.host:Reload("banktags", { shutdown = true, freshEnvironment = true })
+Catalog = split:TagsModule("banktags/tags/catalog")
 assert(Catalog.IsFull())
 results, _, limited = Catalog.Find("eg", 10, {})
 assert(not limited and found == 1 and results[1].objectId == 1944 and results[1].displayName == "Egg (eg)")
 
--- RuneQL unloads, and Bank Tags stops reading its leftover global
-split.host:Notify("runeql", false, false)
+-- Explicit callbacks still stop reads from stale RuneQL exports
+local dependencyUpdate = rawget(first.env, "PluginDependencyUpdate")
+dependencyUpdate({ pluginIdentifier = "runeql", enabled = false })
 assert(rawget(first.env, "runeql") == runeqlCatalog and not Catalog.IsFull())
 results, _, limited = Catalog.Find("Egg", 10, { { objectID = 1944 } })
 assert(limited and found == 1 and #results == 1)
-split.host:Notify("runeql", true, true)
+dependencyUpdate({ pluginIdentifier = "runeql", enabled = true })
 assert(Catalog.IsFull())
 
 print("plugin_reload_test: ok")

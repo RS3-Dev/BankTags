@@ -444,7 +444,7 @@ end
 
 -- Read a module from Bank Tags' own cache
 function Harness:TagsModule(moduleName)
-    return self.tags.env.package.loaded[moduleName]
+    return self.tags.env.package.loaded["resources/" .. moduleName]
 end
 
 -- Return the running Bank Tags app

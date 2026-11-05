@@ -16,7 +16,7 @@ function Catalog.SetRuneQLEnabled(enabled)
     runeqlEnabled = enabled == true
 end
 
--- Find RuneQL's catalog search when the optional plugin is loaded
+-- Find RuneQL's catalog search when the plugin is loaded
 local function runeqlFind()
     if not runeqlEnabled then return nil end
     -- Loop by index since either one may be missing

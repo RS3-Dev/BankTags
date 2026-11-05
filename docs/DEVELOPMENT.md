@@ -35,11 +35,11 @@ Writes use the same 1,000-tag, 200-folder, and 1,000,000-byte limits as reads. A
 ## Requirements and load order
 
 - **PrettyUI** is a required dependency. Its [published documentation](https://prettyui.j3.gg/index.html) defines the API Bank Tags uses, including `Dialog`, managed text fields, and dialog actions.
-- **Bank Core** (`bankcore`) is needed for anything in the bank. It is declared as an optional dependency only because the host reports changes for optional dependencies; required dependencies get no change notification. Without Bank Core, Bank Tags loads, keeps its tags, and waits. Core is a fixed dependency; Bank Tags uses its existing public API without changes to Core.
-- Bank Core 1.5.0 or later is required. Bank Tags reads the initial state and listens for changes. Pages require an open bank on All Items with no native presets, search, or filter active. Each open attempt checks a fresh snapshot; clearing a restriction does not reopen a page automatically.
-- **RuneQL** (`runeql`) is optional. With it, the sprite picker and the editor's item search cover every item. Without it they find items in the bank by name, an exact item ID, or an exact config name, and say so. Once the host reports RuneQL unloaded, search stops reading it, even if its global remains, until the host reports it loaded again.
+- **Bank Core** (`bankcore`, plugin ID `6464293`) is a required dependency for anything in the bank. Bank Tags uses its existing public API without changes to Core.
+- Bank Core 1.1.0 or later is required. Bank Tags reads the initial state and listens for changes. Pages require an open bank on All Items with no native presets, search, or filter active. Each open attempt checks a fresh snapshot; clearing a restriction does not reopen a page automatically.
+- **RuneQL** (`runeql`, plugin ID `6464301`) is required. Its catalog lets the sprite picker and the editor's item search cover every item. The limited-search fallback remains available when its API is unavailable.
 
-Any load order works: Bank Tags connects when Bank Core loads, reconnects when Bank Core reloads, and lets go when Bank Core unloads, through the host's `PluginDependencyUpdate`. Reloading Bank Tags shuts down the previous copy in the same Lua state first. Each registration replaces the last one with the same ID, so a copy in another Lua state that registers later takes the rail icon over. A typical development reload is Bank Core first, then Bank Tags, but either can reload alone.
+The client loads the required dependencies before Bank Tags. Required dependencies do not receive the client's optional-dependency notifications, so during development reload Bank Tags after reloading Bank Core or RuneQL. The dependency-update handler still handles any updates the host sends. Reloading Bank Tags shuts down the previous copy in the same Lua state first. Each registration replaces the last one with the same ID, so a copy in another Lua state that registers later takes the rail icon over.
 
 ## Saved data
 
@@ -70,7 +70,7 @@ The editor uses native click, hold, and mouse-repeat coordinates throughout hove
 ## Layout
 
 - `plugins/banktags/`: the entry (`main.lua`) and manifest.
-- `banktags/`: every runtime module. All require paths start with `banktags/`, so none can collide with Bank Core's modules.
+- `banktags/`: every runtime module. Source imports start with `banktags/`; the build places modules under `resources/banktags/` and updates their imports and reload names.
 - `tools/`: the build and check tools, and the test harness that loads Bank Core beside Bank Tags.
 - `tests/`: the tests; see [tests/README.md](../tests/README.md).
 - `reference/`: the preserved source from Bank Utilities `beba274`, kept as an archive. Nothing in it is built or loaded. `EXTRACTION_MANIFEST.json` records where each preserved file came from.
@@ -82,7 +82,9 @@ lua54 tools/build.lua
 lua54 tools/check.lua
 ```
 
-The build writes only `dist/banktags/`: `main.lua`, `plugin.json`, the modules the entry's require graph loads, and the tutorial's Ogg sound resource, with the entry's module eviction list generated from that graph. It refuses output paths inside the source tree and removes only what its previous build wrote. The check builds into `dist/check`, runs every test, compiles every built file, and fails on unexpected globals, a runtime source the entry never loads, or anything from `reference/`, `tests/`, or `tools/` in the package. Tests that load Bank Core read it from `BANKCORE_ROOT`.
+The build writes `dist/banktags/` with only `main.lua`, `plugin.json`, and `resources/` at its root. All supporting Lua modules live under `resources/banktags/`; the tutorial sound is `resources/tutorial_step.ogg`. The build updates imports and generates the entry's module eviction list for those packaged paths. A release ZIP includes the `banktags/` folder itself, so its only top-level directory is `banktags/`.
+
+The build refuses output paths inside the source tree and removes only what its previous build wrote. The check builds into `dist/check`, runs every test, compiles every built file, and fails on unexpected globals, a runtime source the entry never loads, or anything from `reference/`, `tests/`, or `tools/` in the package. Tests that load Bank Core read it from `BANKCORE_ROOT`.
 
 The toolchain used locally is a Lua 5.4 interpreter with `luac54` beside it, which the compile step needs.
 

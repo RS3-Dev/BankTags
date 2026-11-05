@@ -13,6 +13,7 @@ Build.PLUGIN = { name = "banktags", entry = "plugins/banktags/main", manifest = 
 Build.EVICTION_MARKER = "-- build: every module this plugin loads, except the debug log"
 -- The debug log stays loaded so its preference survives a failed stop
 Build.KEPT_LOADED = "banktags/core/debug_log"
+Build.MODULE_PREFIX = "resources/"
 -- Top-level source directories an output may never be placed in
 local SOURCE_DIRECTORIES = {
     banktags = true, plugins = true, tools = true, tests = true, reference = true,
@@ -77,19 +78,32 @@ function Build.CheckOutput(out)
     return true
 end
 
--- Return the entry with its marker replaced by module names
+-- Point imports at their packaged resource files
+function Build.RuntimeSource(source, moduleName)
+    local _, imports = ModuleGraph.RequiresIn(source, moduleName)
+    for index = #imports, 1, -1 do
+        local import = imports[index]
+        source = string.sub(source, 1, import.first - 1) .. Build.MODULE_PREFIX .. import.name
+            .. string.sub(source, import.last + 1)
+    end
+    return source
+end
+
+-- Return the entry with packaged imports and reload names
 function Build.Entry()
     local plugin = Build.PLUGIN
     local marker = "\n([ \t]*)" .. string.gsub(Build.EVICTION_MARKER, "%p", "%%%0") .. "(\r?)%f[\n]"
     local bytes, count = string.gsub(readFile(plugin.entry .. ".lua"), marker, function(indent, cr)
         local lines = {}
         for _, name in ipairs(ModuleGraph.PluginModules(plugin.entry)) do
-            if name ~= Build.KEPT_LOADED then lines[#lines + 1] = indent .. '"' .. name .. '",' end
+            if name ~= Build.KEPT_LOADED then
+                lines[#lines + 1] = indent .. '"' .. Build.MODULE_PREFIX .. name .. '",'
+            end
         end
         return "\n" .. table.concat(lines, cr .. "\n") .. cr
     end)
     if count ~= 1 then error(plugin.entry .. " needs exactly one eviction marker line", 0) end
-    return bytes
+    return Build.RuntimeSource(bytes, plugin.entry)
 end
 
 -- List the plugin folder's files in a stable order
@@ -101,7 +115,7 @@ function Build.Plan()
         { path = "resources/tutorial_step.ogg", source = "plugins/banktags/resources/tutorial_step.ogg" },
     }
     for _, moduleName in ipairs(ModuleGraph.PluginModules(plugin.entry)) do
-        files[#files + 1] = { path = moduleName .. ".lua", source = moduleName .. ".lua" }
+        files[#files + 1] = { path = Build.MODULE_PREFIX .. moduleName .. ".lua", source = moduleName .. ".lua" }
     end
     table.sort(files, function(a, b) return a.path < b.path end)
     return files
@@ -199,6 +213,9 @@ function Build.Run(options)
     local files = Build.Plan()
     for _, file in ipairs(files) do
         file.bytes = file.entry and Build.Entry() or readFile(file.source)
+        if not file.entry and string.match(file.path, "%.lua$") then
+            file.bytes = Build.RuntimeSource(file.bytes, file.source)
+        end
         if file.manifest then
             local ok, manifest = pcall(Json.decode, file.bytes)
             if not ok or type(manifest) ~= "table" or manifest.name ~= Build.PLUGIN.name then

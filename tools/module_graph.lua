@@ -19,10 +19,10 @@ function ModuleGraph.Requires(moduleName)
     return ModuleGraph.RequiresIn(source, moduleName)
 end
 
--- Find required modules and reject unsupported calls
+-- Find module names and their positions in imports
 function ModuleGraph.RequiresIn(source, moduleName)
     local code = ModuleGraph.Code(source)
-    local names, position = {}, 1
+    local names, imports, position = {}, {}, 1
     while true do
         local start, finish = string.find(code, "%f[%w_]require%f[^%w_]", position)
         if start == nil then break end
@@ -51,9 +51,10 @@ function ModuleGraph.RequiresIn(source, moduleName)
                 position = after
             end
             names[#names + 1] = name
+            imports[#imports + 1] = { name = name, first = quote + 1, last = close - 1 }
         end
     end
-    return names
+    return names, imports
 end
 
 -- Collect every module the roots load, sorted by name

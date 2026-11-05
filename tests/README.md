@@ -8,11 +8,13 @@ lua54 tools/check.lua
 
 The check also requires a short summary above every named function in the plugin, tools, and current tests. It ignores comments and string literals when finding functions, and leaves the `reference/` archive unchanged.
 
+Packaging tests require `main.lua`, `plugin.json`, and `resources/` at the plugin root. Every packaged Lua import must resolve to a file under `resources/`; import rewriting must leave comments and examples unchanged. Reload tests exercise the packaged module names and preserve the debug preference across reloads.
+
 Data tests cover damaged or unreadable chunked saves, failed replacement writes, Unicode and empty JSON values, invalid numbers, save limits, and batch item edits. Folder changes and nested edits must save together or roll back. Search tests check duplicate bank stacks and stop work when the result limit is reached. Editor lifecycle tests also reject label prompts after the saved layout changes.
 
 Tests that load Bank Core read it, unchanged, from the checkout named by `BANKCORE_ROOT`, or from `../bank-utils-core` when it is unset. They use Bank Core's own stand-in host (`tools/test_support/fake_bank_host.lua` and `fake_plugin_host.lua` in that checkout) and load Bank Core's `main.lua` with its own module cache, beside the Bank Tags folder the build writes under `dist/test/`. Nothing from Bank Core is copied into Bank Tags or its package.
 
-The runtime must support omitted page titles and Core 1.5.0's native bank-state API, including `filterActive`. To test an installed package without its test tools, set `BANKCORE_ROOT` to that package and add the Core checkout's `?.lua` path to `LUA_PATH` for the stand-in host. This runs the installed runtime unchanged; it does not adapt older runtimes to accept newer APIs.
+The runtime must support omitted page titles and Core 1.1.0's native bank-state API, including `filterActive`. To test an installed package without its test tools, set `BANKCORE_ROOT` to that package and add the Core checkout's `?.lua` path to `LUA_PATH` for the stand-in host. This runs the installed runtime unchanged; it does not adapt older runtimes to accept newer APIs.
 
 ```text
 set BANKCORE_ROOT=C:\path\to\bank-utils-core
@@ -33,7 +35,7 @@ Bank-state tests check the registration snapshot, real state-change delivery, an
 
 The page-notice test checks that errors use the bank's top-center overlay, keep the sidebar list and footer intact, clear after a successful choice, and disappear on unmount or unload. Banner appearance and text wrapping still need a client check.
 
-The harness reads Bank Tags' required dependencies from the client's `requiredDependencies` field before adapting them for Core's older stand-in loader. The manifest regression test checks that PrettyUI is injected and the sidebar mounts, so the obsolete `dependencies` field cannot silently pass.
+The harness reads Bank Tags' required dependencies from the client's `requiredDependencies` field before adapting them for Core's older stand-in loader. The manifest regression test checks that PrettyUI, Bank Core, and RuneQL are injected, the sidebar mounts, and catalog search calls RuneQL. Reload tests refresh required imports by reloading Bank Tags after Core or RuneQL; they do not assume optional-dependency notifications. The stand-in does not enforce dependency availability, which lets other tests exercise missing-API fallbacks.
 
 The tutorial overlay test separates the game area and bank into distinct render branches. It checks that the guide draws above the bank and editor, aligns with native component coordinates, and hides targets scrolled out of view. Actual sprite rendering still needs verification in the client.
 
