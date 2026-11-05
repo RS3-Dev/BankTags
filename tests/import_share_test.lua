@@ -1,6 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Pasted codes and full backups still preview, customize, save, and share.
+-- Pasted codes and full backups still preview, customize, save, and share
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("import_share")
 h.bankHost:SetItems({ { 385, 20, "Shark" } })
@@ -31,7 +31,7 @@ assert(#app.store:GetTaggedItems("imported supplies") == 1)
 assert(window.importStatus.content == "Imported 1 tag.")
 assert(#window.shareRows == 2 and #window.shareRows[2].field:GetText() > 0)
 
--- Multi-tag backups keep their names and do not enable single-tag overrides.
+-- Multi-tag backups keep their names and do not enable single-tag overrides
 local backup = h:TagsModule("banktags/tags/tag_data").Encode(app.store.data)
 window.importField:SetText(backup, true)
 assert(window.importSingleTag == nil and window.importNameField.disabled)
@@ -40,7 +40,7 @@ assert(window.importStatus.content:find("Backup: 2 tags.", 1, true))
 window.importButton.action()
 assert(window.importStatus.content == "Imported 2 tags.")
 
--- A failed save keeps the preview and its chosen name available to retry.
+-- A failed save keeps the preview and its chosen name available to retry
 window.importField:SetText(code, true)
 window.importNameField:SetText("Retry supplies")
 app.store.loadError = "Save unavailable."
@@ -52,7 +52,7 @@ app.store.loadError = nil
 window.importButton.action()
 assert(app.store.data.tags["retry supplies"] ~= nil)
 
--- Invalid or emptied input invalidates the previous preview, even without a change event.
+-- Invalid or emptied input invalidates the previous preview, even without a change event
 window.importField:SetText("{}", false)
 before = Json.encode(app.store.data)
 window.importButton.action()
@@ -61,7 +61,7 @@ assert(Json.encode(app.store.data) == before)
 window.importField:SetText("", true)
 assert(window.importButton.disabled and window.importStatus.hidden)
 
--- An icon picker cannot change a preview replaced while it was open.
+-- An icon picker cannot change a preview replaced while it was open
 window.importField:SetText(code, true)
 local choose
 window.options.onChooseImportSprite = function(callback) choose = callback end

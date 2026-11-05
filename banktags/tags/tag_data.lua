@@ -10,9 +10,9 @@ local TagData = {}
 
 local FORMAT = "bankutilities-tags"
 local VERSION = 4
-local MAX_TEXT_LENGTH = 1000000
-local MAX_TAGS = 1000
-local MAX_FOLDERS = 200
+TagData.MAX_TEXT_LENGTH = 1000000
+TagData.MAX_TAGS = 1000
+TagData.MAX_FOLDERS = 200
 -- Rows, labels, and slots one tag may hold, matching Bank Core
 local MAX_TAG_ENTRIES = 10000
 -- Room for the Unsorted label and row a shown tag adds
@@ -26,7 +26,7 @@ function TagData.Empty()
     return { order = {}, folders = {}, tags = {} }
 end
 
--- Write a slot as its item's reference, or "" when blank
+-- Write an item's reference or its reserved blank
 local function slotText(slot)
     if slot.kind ~= "item" then return slot.dormant or "" end
     return ItemIdentity.Reference(slot.objectID)
@@ -82,7 +82,7 @@ local function readTag(value, entryLimit)
         unsorted = {},
     }
     local count = 0
-    -- Keep a slot, or a blank only where blanks are kept
+    -- Keep an item or a permitted blank slot
     local function add(list, text, keepBlank)
         count = count + 1
         local slot = readSlot(text)
@@ -93,7 +93,7 @@ local function readTag(value, entryLimit)
         if type(entry) == "string" then
             local text = TagRules.labelText(entry)
             if text ~= nil then tag.rows[#tag.rows + 1] = { kind = "label", text = text } end
-        elseif type(entry) == "table" then
+        elseif type(entry) == "table" and entry ~= Json.null then
             local slots = {}
             for _, text in ipairs(entry) do add(slots, text, true) end
             tag.rows[#tag.rows + 1] = { kind = "row", slots = slots }
@@ -107,17 +107,16 @@ local function readTag(value, entryLimit)
     return tag
 end
 
--- Decode and check saved or pasted tag data
--- Only a save may be empty or use the full entry limit
+-- Read and validate saved tags or share codes
 function TagData.Decode(text, allowEmpty)
     if type(text) ~= "string" or trim(text) == "" then
         return nil, "Paste a bank tag share code first."
     end
     local entryLimit = allowEmpty and MAX_TAG_ENTRIES or TagData.EDIT_ENTRY_LIMIT
-    if #text > MAX_TEXT_LENGTH then return nil, "The import is too large." end
+    if #text > TagData.MAX_TEXT_LENGTH then return nil, "The import is too large." end
     local ok, saved = pcall(Json.decode, trim(text))
     if not ok or type(saved) ~= "table" or saved.format ~= FORMAT or saved.version ~= VERSION
-        or type(saved.tags) ~= "table" then
+        or type(saved.tags) ~= "table" or saved.tags == Json.null then
         return nil, "This is not a bank tag share code."
     end
     local folders = type(saved.folders) == "table" and saved.folders or {}
@@ -139,8 +138,8 @@ function TagData.Decode(text, allowEmpty)
     local data, folderCount = TagData.Empty(), 0
     for _, savedName in ipairs(names) do
         local name, value = TagRules.normalizeTag(savedName), saved.tags[savedName]
-        if name ~= nil and type(value) == "table" and data.tags[name] == nil then
-            if #data.order >= MAX_TAGS then return nil, "The import has too many tags." end
+        if name ~= nil and type(value) == "table" and value ~= Json.null and data.tags[name] == nil then
+            if #data.order >= TagData.MAX_TAGS then return nil, "The import has too many tags." end
             local tag = readTag(value, entryLimit)
             if tag == nil then
                 return nil, "The tag " .. name .. " has more than " .. entryLimit .. " entries."
@@ -152,7 +151,7 @@ function TagData.Decode(text, allowEmpty)
             end
             if key ~= nil and data.folders[key] == nil then
                 folderCount = folderCount + 1
-                if folderCount > MAX_FOLDERS then return nil, "The import has too many folders." end
+                if folderCount > TagData.MAX_FOLDERS then return nil, "The import has too many folders." end
                 data.folders[key] = { name = display, collapsed = folder.collapsed == true,
                     icon = type(folder.icon) == "string" and folder.icon or nil }
             end

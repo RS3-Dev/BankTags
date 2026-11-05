@@ -8,11 +8,10 @@ TagPage.UNSORTED_LABEL = "Unsorted"
 -- Bank Core's limit on labels, rows, and slots in one page
 TagPage.MAX_ENTRIES = TagData.MAX_TAG_ENTRIES
 
--- Lay a tag out as page rows, with Unsorted items last
--- Also lists each page slot's layout key by its position among the slots, false for a blank
+-- Build bank rows and the keys identifying their items
 function TagPage.Rows(record)
     local rows, keys, count = {}, {}, 0
-    -- Add one saved slot to a page row and the key list
+    -- Add a saved slot and its page key
     local function add(slots, slot)
         local item = slot.kind == "item"
         slots[#slots + 1] = item and slot.objectID or false
@@ -43,7 +42,7 @@ function TagPage.Rows(record)
     return rows, keys, count
 end
 
--- Describe a tag's page and its slots' layout keys, or explain why it cannot be shown
+-- Build a tag's page or explain why it cannot open
 function TagPage.Build(store, tag)
     local record = store.data.tags[tag]
     if record == nil then return nil, "The tag no longer exists." end

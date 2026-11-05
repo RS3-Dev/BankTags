@@ -1,5 +1,4 @@
--- Place Bank Tags' actions in bank menus
--- The game client doesn't always put added entries in the same place, so each one is found and moved
+-- Find and position added menu actions in the client's order
 
 local MenuEntries = {}
 
@@ -20,7 +19,7 @@ function MenuEntries.PromoteCancel(menu)
     for current = index, menu.entryCount - 1 do menu:Swap(current, current + 1) end
 end
 
--- Describe an entry well enough to tell it from its neighbours
+-- Describe a menu entry so it can be identified
 local function signature(entry)
     return table.concat({ tostring(entry.actionType), tostring(entry.overrideText),
         tostring(entry.fullText), tostring(entry.verbText), tostring(entry.subjectText) }, "\n")
@@ -60,13 +59,13 @@ local function add(menu, entry)
     return added
 end
 
--- Move an entry from one index to another, shifting the ones between
+-- Move a menu entry while keeping neighbouring entries ordered
 local function move(menu, from, to)
     local step = from < to and 1 or -1
     for current = from, to - step, step do menu:Swap(current, current + step) end
 end
 
--- Keep Cancel last and place a submenu at its requested visible row
+-- Keep Cancel last and position the folder submenu
 function MenuEntries.PlaceSubmenu(menu, label, position)
     local cancel = cancelIndex(menu)
     if cancel ~= nil then move(menu, cancel, 1) end
@@ -80,8 +79,7 @@ function MenuEntries.PlaceSubmenu(menu, label, position)
     end
 end
 
--- Add entries at the bottom of the menu, keeping the left click
--- If placement fails, Cancel becomes the default
+-- Add lower-priority actions while keeping the current left click
 function MenuEntries.AddLow(menu, entries)
     if #entries == 0 then return end
     local top = menu.entries[menu.entryCount]
@@ -101,8 +99,7 @@ function MenuEntries.AddLow(menu, entries)
     if now == nil or signature(now) ~= topSignature then MenuEntries.PromoteCancel(menu) end
 end
 
--- Add entries at the top of the menu, in order, with the first as the left click
--- If placement fails, Cancel becomes the default
+-- Add ordered actions with the first as left click
 function MenuEntries.AddTop(menu, entries)
     for index = #entries, 1, -1 do
         local added = add(menu, entries[index])
@@ -115,8 +112,7 @@ function MenuEntries.AddTop(menu, entries)
     return true
 end
 
--- Make an entry the left-click default
--- If Cancel already is, add it low instead
+-- Set the left click unless Cancel already holds it
 function MenuEntries.AddDefault(menu, entry)
     local top = menu.entries[menu.entryCount]
     if top == nil or top.actionType == MiniMenuActionType.CANCEL then

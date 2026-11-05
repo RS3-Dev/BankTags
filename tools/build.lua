@@ -1,7 +1,5 @@
--- Build the plugin folder from every module the entry loads
--- Tests, tools, and reference material never ship
--- Usage, from the repository root:
---   lua54 tools/build.lua [--out dist]
+-- Build the runtime plugin from the entry point
+-- Run from the repository root: lua54 tools/build.lua [--out dist]
 
 local ModuleGraph = require("tools/module_graph")
 local Json = require("banktags/core/json")
@@ -53,7 +51,7 @@ local function shell(commands)
     return handle:close() == true, output
 end
 
--- List a directory's entries, or nil when it does not exist
+-- List directory entries when the directory exists
 local function listDirectory(path)
     local command = WINDOWS and ("if exist " .. shellPath(path .. "/") .. " dir /b " .. shellPath(path))
         or ("[ -d " .. shellPath(path) .. " ] && ls -A " .. shellPath(path))
@@ -64,7 +62,7 @@ local function listDirectory(path)
     return names
 end
 
--- Refuse an output path that could reach source or leave the repository
+-- Refuse output paths outside safe build folders
 function Build.CheckOutput(out)
     if type(out) ~= "string" or string.match(out, "^[%w_%-][%w_%-/]*$") == nil
         or string.find(out, "//", 1, true) ~= nil or string.sub(out, -1) == "/" then
@@ -127,7 +125,7 @@ local function plannedDirectories(name, files)
     return directories
 end
 
--- True for segments of letters, digits, _, and - joined by single slashes
+-- Check for a simple relative folder path
 local function isRelativePath(path)
     return type(path) == "string" and string.gsub(string.gsub(path, "[%w_%-]+", "x"), "/x", "") == "x"
 end
@@ -177,7 +175,7 @@ local function cleanOutput(out)
     os.remove(out .. "/" .. Build.MANIFEST)
 end
 
--- Write the manifest naming every file and directory this build wrote
+-- Record every file and directory written by this build
 local function writeManifest(out, files, directories)
     local lines = { "-- Written by tools/build.lua; the next build removes exactly these files", "return {",
         ("    name = %q,"):format(Build.PLUGIN.name), "    files = {" }
@@ -190,7 +188,7 @@ local function writeManifest(out, files, directories)
     writeFile(out .. "/" .. Build.MANIFEST, table.concat(lines, "\n") .. "\n")
 end
 
--- Build the plugin into options.out (default dist) and return what was written
+-- Build the plugin and return its written files
 function Build.Run(options)
     options = options or {}
     local out = options.out or Build.DEFAULT_OUT

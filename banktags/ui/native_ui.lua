@@ -1,4 +1,4 @@
--- Provide native panel sprites, button styles, and sprite rotation
+-- Provide native panel sprites and button styles
 
 local NativeUi = {}
 

@@ -12,7 +12,6 @@ function BankControls.button(parent, content, action, options)
     options = options or {}
     local self = setmetatable({
         action = action,
-        active = options.active == true,
         disabled = options.disabled == true,
         spriteName = options.spriteName,
         parent = parent,
@@ -32,9 +31,10 @@ function BankControls.button(parent, content, action, options)
         self.height,
         {
             text = self.spriteName == nil and tostring(content or "") or "",
+            -- Run the button action only while enabled
             onPress = function()
                 if self.disabled then return end
-                if self.action ~= nil then self.action(self, self.active) end
+                if self.action ~= nil then self.action(self) end
             end,
         }
     )
@@ -52,11 +52,13 @@ function BankControls.button(parent, content, action, options)
         )
         self.icon:SetSize(iconSize, iconSize)
         self.icon.clickthrough = true
+        -- Show the button icon's hovered appearance
         self.root:Subscribe(ui.Hook.ONMOUSEOVER, function()
             self.hovered = true
             self:_UpdateState()
             return true
         end)
+        -- Restore the button icon after the pointer leaves
         self.root:Subscribe(ui.Hook.ONMOUSELEAVE, function()
             self.hovered = false
             self:_UpdateState()
@@ -77,13 +79,13 @@ function NativeButton:_UpdateState()
     self.root.hidden = self.hidden
     self.root.stylesheetID = NativeUi.styleID("BUTTON_PANEL")
     if self.root.text ~= nil then
-        self.root.text.rgba = self.active and 0xF2C66DFF or 0xE7D7B0FF
+        self.root.text.rgba = 0xE7D7B0FF
     end
     if self.icon ~= nil and self.sprites ~= nil then
         self.icon.hidden = self.hidden
         if self.disabled then
             self.icon.spriteID = self.sprites.disabled or self.sprites.neutral
-        elseif self.active or self.hovered then
+        elseif self.hovered then
             self.icon.spriteID = self.sprites.active or self.sprites.neutral
         else
             self.icon.spriteID = self.sprites.neutral
@@ -91,21 +93,10 @@ function NativeButton:_UpdateState()
     end
 end
 
--- Set whether the button is selected
-function NativeButton:SetActive(active)
-    self.active = active == true
-    self:_UpdateState()
-end
-
 -- Enable or disable the button
 function NativeButton:SetDisabled(disabled)
     self.disabled = disabled == true
     self:_UpdateState()
-end
-
--- Update the button's tooltip
-function NativeButton:SetTooltip(value)
-    return prettyui.Tooltip.set(self, value)
 end
 
 -- Destroy the button and its decorations

@@ -1,4 +1,4 @@
--- Track sidebar presses, row drags, edge scrolling, and drops.
+-- Track sidebar presses, row drags, edge scrolling, and drops
 
 local Config = require("banktags/core/config")
 local Geometry = require("banktags/ui/geometry")
@@ -20,12 +20,10 @@ local SCROLL_EDGE = 12
 local GHOST_FILL = 0x403728E0
 local LINE_HEIGHT = 2
 
--- Follow a pressed row's holds and releases
--- PrettyUI's row click reports the press itself, through Press
+-- Follow a pressed row until release
 function TagListDrag:BindRow(row)
     local root = row.root
-    -- The client may report a held pointer as a hold or as its own drag
-    -- Leaving the row is checked too, since holds may stop off it
+    -- Follow the held pointer, including when leaving the row
     local function move()
         self:MoveGesture(row)
         return true
@@ -33,7 +31,7 @@ function TagListDrag:BindRow(row)
     root:Subscribe(ui.Hook.ONHOLD, DRAG_HOOK, move)
     root:Subscribe(ui.Hook.ONDRAG, DRAG_HOOK, move)
     root:Subscribe(ui.Hook.ONMOUSELEAVE, DRAG_HOOK, move)
-    -- Finish the same gesture for either release event the client sends
+    -- Finish the gesture for either release event
     local function release()
         self:Release(row)
         return true
@@ -42,8 +40,7 @@ function TagListDrag:BindRow(row)
     root:Subscribe(ui.Hook.ONDRAGCOMPLETE, DRAG_HOOK, release)
 end
 
--- Find the pointer in the list's visible area, or nil without a mouse
--- Native drag start and end positions are not used; they are wrong under Windows scaling
+-- Find the pointer within the visible list
 function TagListDrag:Pointer()
     local x, y = Geometry.interfaceMousePosition()
     if x == nil then return nil, nil end
@@ -57,14 +54,14 @@ function TagListDrag:Contains(x, y)
     return x ~= nil and x >= 0 and x < viewport.width and y >= 0 and y < viewport.height
 end
 
--- Use the client's hovered row for bank-item drops, independent of display scaling
+-- Find the hovered tag for a bank item drop
 function TagListDrag:ItemDropTarget()
     if self.gesture ~= nil then return nil end
     local entry = self:HoveredEntry()
     return entry ~= nil and entry.kind == "tag" and entry.tag or nil
 end
 
--- Begin a press; a press on a stuck drag only ends that drag
+-- Begin a row press or cancel a stuck drag
 function TagListDrag:Press(entryID)
     self.clicks = self.clicks + 1
     debugLog("Bank Tags row press ", tostring(entryID), ", clicks ", self.clicks)
@@ -73,8 +70,7 @@ function TagListDrag:Press(entryID)
     self.gesture = { row = self:RowFor(entryID), id = entryID, x = x, y = y, dragging = false }
 end
 
--- Follow the held pointer, turning a press into a drag once it moves far enough
--- Searches show only some rows, so a filtered list never drags
+-- Turn an unfiltered row press into a drag
 function TagListDrag:MoveGesture(row)
     local gesture = self.gesture
     if gesture == nil or gesture.row ~= row or gesture.x == nil then return end
@@ -92,8 +88,7 @@ function TagListDrag:MoveGesture(row)
     self:UpdateDrag(y)
 end
 
--- Find the rows an entry spans: a folder spans its shown tags
--- A tag inside a folder spans only its own row
+-- Find the rows belonging to a dragged entry
 function TagListDrag:Span(rows, index, withinFolder)
     if withinFolder then return index, index end
     -- Name the folder or top-level tag a row belongs to
@@ -107,8 +102,7 @@ function TagListDrag:Span(rows, index, withinFolder)
     return first, last
 end
 
--- Make the pressed row an invisible cover over the list, with a ghost and drop line
--- The press stays with that row, so its holds and release follow the pointer anywhere in the list
+-- Keep the pressed row over its drag area
 function TagListDrag:BeginDrag()
     local gesture = self.gesture
     local row, list = gesture.row, self.list
@@ -158,7 +152,7 @@ function TagListDrag:BeginDrag()
     gesture.line = line
 end
 
--- Keep the cover over the visible rows as the list scrolls
+-- Keep the pressed row over the visible list
 function TagListDrag:PlaceCover()
     local gesture, list = self.gesture, self.list
     gesture.row.root:SetPos(0, list.scrollY)
@@ -167,8 +161,7 @@ function TagListDrag:PlaceCover()
     gesture.row.root:MoveToFront()
 end
 
--- Find where the dragged entry would go at a height in the rows
--- Returns the entry it goes beside, whether after it, and the line's height, or nil where nothing would move
+-- Find a valid gap for the dragged row
 function TagListDrag:DropTarget(y)
     local gesture = self.gesture
     local rows = gesture.rows
@@ -185,8 +178,7 @@ function TagListDrag:DropTarget(y)
     return { entry = sidebarEntry(rows[first].entry.id), after = after, lineY = (gap - 1) * ENTRY_HEIGHT }
 end
 
--- Move the cover, ghost, and drop line to a height in the visible list
--- Each arrival at the list's top or bottom edge scrolls one row
+-- Show the proposed drop and scroll at the edges
 function TagListDrag:UpdateDrag(y)
     local gesture, list = self.gesture, self.list
     local height = list.viewport.height
@@ -208,8 +200,7 @@ function TagListDrag:UpdateDrag(y)
     end
 end
 
--- Select or open a pressed row, or drop a dragged one where its line shows
--- Releases from bank item drags reach rows that were never pressed, so they do nothing
+-- Select a pressed row or finish its drag
 function TagListDrag:Release(row)
     local gesture = self.gesture
     if gesture == nil or gesture.row ~= row then return end
@@ -217,7 +208,7 @@ function TagListDrag:Release(row)
         self.gesture = nil
         local folderKey = folderKeyOf(gesture.id)
         if folderKey ~= nil then
-            self:ToggleFolder(folderKey)
+            self.onToggleFolder(folderKey)
         else
             self.onSelect(gesture.id)
         end
@@ -230,7 +221,7 @@ function TagListDrag:Release(row)
     if target ~= nil then self.onReorder(gesture.source, target.entry, target.after) end
 end
 
--- Forget the press or drag in progress, reporting whether a drag was showing
+-- Forget the gesture and remove its drag controls
 function TagListDrag:StopGesture()
     local gesture = self.gesture
     self.gesture = nil

@@ -10,6 +10,7 @@ prettyui.Window.new = function(parent, options)
     local window = newWindow(parent, options)
     local destroy = window.Destroy
     window.destroyCalls = 0
+    -- Fail window cleanup to check tutorial recovery
     function window:Destroy()
         assert(self.root ~= nil, "the window must be destroyed only once")
         self.destroyCalls = self.destroyCalls + 1

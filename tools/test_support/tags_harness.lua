@@ -1,7 +1,6 @@
--- Load the real Bank Core beside the built Bank Tags in a stand-in host
--- Bank Core is read, never changed, from BANKCORE_ROOT or ../bank-utils-core
--- FAKE HOST: stand-in loader, components, and menus, not the game client
--- Kept outside tests/ so tools/check.lua does not count it as a test program
+-- Load unchanged Bank Core beside built Bank Tags
+-- Use BANKCORE_ROOT or ../bank-utils-core for Core
+-- FAKE HOST: stand-in components, loader, and menus
 
 local Harness = {}
 
@@ -37,7 +36,8 @@ function Harness.CoreRoot()
         error("Bank Core was not found at " .. root .. "; set BANKCORE_ROOT to a bank-utils-core checkout", 0)
     end
     local spec = readText(root .. "/docs/API.md") or ""
-    for _, needed in ipairs({ "bankcore.Register(spec)", "ext:GetBankBounds()", "`slot`" }) do
+    for _, needed in ipairs({ "bankcore.Register(spec)", "ext:GetBankBounds()", "`slot`",
+        "ext:GetBankState()", "onBankStateChanged(state)", "`filterActive`" }) do
         if not string.find(spec, needed, 1, true) then
             error("Bank Core at " .. root .. " lacks " .. needed .. " in its API reference; set BANKCORE_ROOT "
                 .. "to a checkout with the extension API Bank Tags uses", 0)
@@ -61,9 +61,7 @@ function Harness.PrettyUIRoot()
     return root
 end
 
--- Load PrettyUI's real MiniMenu, recording each submenu a menu is given
--- Its handlers are kept apart so tests run them in the client's order
--- Drawing the submenu needs the client, so tests choose a child as its row click would
+-- Load PrettyUI's menus and record their submenu actions
 local function installMiniMenu()
     local root = Harness.PrettyUIRoot()
     local stubs = {
@@ -92,8 +90,7 @@ local function installMiniMenu()
     }, { __index = MiniMenu })
 end
 
--- Run PrettyUI's real dialog stack, footer actions, and close handling.
--- Only the native window and leaf controls are stand-ins.
+-- Load real dialogs with stand-in native window controls
 local function installDialogs()
     local root = Harness.PrettyUIRoot()
     local fancy = { getSize = function(label) return math.max(70, #label * 8 + 24) end }
@@ -101,19 +98,23 @@ local function installDialogs()
         local window = prettyui.Window.new(parent, options)
         window.content:SetSize(options.width - 16, options.height - 40)
         window.managed = {}
+        -- Remember a control for cleanup with its window
         local function keep(control)
             window.managed[#window.managed + 1] = control
             return control
         end
+        -- Create text owned by the stand-in window
         function window:AddText(value, ...)
             assert(select("#", ...) == 0, "AddText accepts one string or options table")
             local opts = type(value) == "table" and value or { text = value }
             opts.width, opts.height = opts.width or self.content.width, opts.height or 24
             return keep(prettyui.Text.new(self.content, opts))
         end
+        -- Create a text field owned by the stand-in window
         function window:AddTextField(opts)
             return keep(prettyui.TextField.new(self.content, opts))
         end
+        -- Create a footer button owned by the stand-in window
         function window:AddFancyButton(label, action, opts)
             opts.width, opts.height = fancy.getSize(label), 28
             local button = prettyui.SimpleButton.new(self.content, label, action, opts)
@@ -121,6 +122,7 @@ local function installDialogs()
             return keep(button)
         end
         local destroy = window.Destroy
+        -- Release the window and its managed controls
         function window:Destroy()
             assert(self.root ~= nil, "dialog window destroyed twice")
             for _, control in ipairs(self.managed) do control:Destroy() end
@@ -137,13 +139,14 @@ local function installDialogs()
     prettyui.Dialog = assert(loadfile(root .. "/src/dialog.lua", "t", env))()
 end
 
--- Give stand-in list rows real positions so tests can point at them
+-- Position stand-in rows so tests can point at them
 local function placeListRows()
     local newList = prettyui.List.new
     prettyui.List.new = function(parent, options)
         local list = newList(parent, options)
         list.viewport:SetSize(options.width, options.height)
         local setEntries = list.SetEntries
+        -- Replace the stand-in rows and position them
         function list:SetEntries(entries)
             setEntries(self, entries)
             for index, row in ipairs(self.rows) do
@@ -152,6 +155,7 @@ local function placeListRows()
                 row.label.content = row.entry.label
             end
         end
+        -- Leave scrolling unchanged unless a test replaces it
         function list:_OnScrollWheel() return true end
         -- PrettyUI clamps the list's scroll to its rows
         function list:SetScrollPosition(position)
@@ -162,8 +166,7 @@ local function placeListRows()
     end
 end
 
--- Give stand-in views a place and PrettyUI's scroll: clamped to the content,
--- moved by the wheel a step at a time, and reporting whether it moved
+-- Give stand-in views clamped scrolling and wheel movement
 local function scrollViews()
     local newView = prettyui.SimpleView.new
     prettyui.SimpleView.new = function(parent, options)
@@ -171,27 +174,27 @@ local function scrollViews()
         view.root:SetPos(options.x or 0, options.y or 0)
         view.root:SetSize(options.width, options.height)
         view.height, view.scrollY, view.scrollStep = options.height, 0, options.scrollStep or 32
+        -- Clamp the scroll position to the visible content
         function view:SetScrollPosition(position)
             local most = math.max(0, (self.content.height or 0) - self.height)
             self.scrollY = math.max(0, math.min(math.floor(position or 0), most))
         end
+        -- Update content height and scrollbar visibility
         function view:SetContentHeight(height)
             self.content.height = height
             self.scrollbarVisible = height > self.height
             self.contentWidth = self.root.width - (self.scrollbarVisible and 18 or 0)
             self:SetScrollPosition(self.scrollY)
         end
+        -- Move the view's scroll by the requested amount
         function view:ScrollBy(delta) self:SetScrollPosition(self.scrollY + delta) end
         return view
     end
 end
 
--- Stand in for PrettyUI's Tabs with the API Bank Tags uses:
--- new(parent, entries, options), GetPage(index).content, SetActive(index, notify),
--- GetActiveIndex, and Destroy; tab hit areas sit above a 42px header like PrettyUI's
--- A click runs SetActive(index), which hides other pages' roots and calls
--- onChange(tabs, index, value, page) only when the active tab changes and notify is not false
+-- Match PrettyUI's tab height, page switching, and change notifications
 local TAB_HEADER = 42
+-- Build stand-in tabs using PrettyUI's public methods
 local function standInTabs()
     prettyui.Tabs = { new = function(parent, entries, options)
         options = options or {}
@@ -211,9 +214,11 @@ local function standInTabs()
             page.root:SetSize(tabs.content.width, tabs.content.height)
             page.content = ui.Layer.new(page.root)
             page.content:SetSize(tabs.content.width, tabs.content.height)
+            -- Record the page's scrollable content height
             function page:SetContentHeight(height) self.contentHeight = height end
             tabs.pages[index] = page
         end
+        -- Show one page and optionally report the change
         function tabs:SetActive(index, notify)
             local tab = self.tabs[index]
             if tab == nil then return false end
@@ -225,9 +230,13 @@ local function standInTabs()
             end
             return true
         end
+        -- Read the current page number
         function tabs:GetActiveIndex() return self.activeIndex end
+        -- Find a tab by its page number
         function tabs:GetTab(index) return self.tabs[index] end
+        -- Find a page by its number
         function tabs:GetPage(index) return self.pages[index] end
+        -- Release the tab strip and all pages
         function tabs:Destroy()
             assert(self.root ~= nil, "Tabs destroyed twice")
             self.root:Destroy()
@@ -238,18 +247,18 @@ local function standInTabs()
     end }
 end
 
--- Install the stand-in host, build Bank Tags, and create a loader
+-- Install the host and build the test plugin
 function Harness.new(name, options)
     options = options or {}
     local coreRoot = Harness.CoreRoot()
     local bankHost = require("tools/test_support/fake_bank_host").install()
     bankHost:InstallSidebarWidgets()
     bankHost:InstallWindowWidgets()
-    -- Native bank icon-tab states (stand-in sprite IDs).
+    -- Native bank icon-tab states (stand-in sprite IDs)
     id.Sprite.BANK_TABS_HORIZONTAL_0 = 101
     id.Sprite.BANK_TABS_HORIZONTAL_1 = 102
     id.Sprite.BANK_TABS_HORIZONTAL_2 = 103
-    -- Native font metrics for clipped-label hover decisions (fixed-width stand-in).
+    -- Native font metrics for clipped-label hover decisions (fixed-width stand-in)
     config.Font = { MUSEO_SANS_15PT_REGULAR = {
         GetStringWidth = function(_, text) return #text * 7 end,
     } }
@@ -268,6 +277,7 @@ function Harness.new(name, options)
     local newWindow = prettyui.Window.new
     prettyui.Window.new = function(parent, windowOptions)
         local window = newWindow(parent, windowOptions)
+        -- Show the stand-in window above its siblings
         function window:Show()
             self.root.hidden = false
             self.root:MoveToFront()
@@ -284,16 +294,23 @@ function Harness.new(name, options)
     prettyui.Tooltip.attach = function(target, parent, value)
         local tooltip = attach(target, parent, value)
         tooltip.target, tooltip.parent, tooltip.text, tooltip.shown = target, parent, value, false
+        -- Update and record the tooltip text
         function tooltip:SetText(text) self.text = text end
+        -- Show the tooltip and record its visibility
         function tooltip:Show() self.shown = true end
+        -- Hide the tooltip and record its visibility
         function tooltip:Hide() self.shown = false end
+        -- Release the tooltip and record its removal
         function tooltip:Destroy() self.destroyed, self.shown = true, false end
         return tooltip
     end
     prettyui.ItemGrid = { new = function(parent)
         local grid = { root = ui.Layer.new(parent), slots = {} }
+        -- Record the grid's requested items
         function grid:SetObjects(objects) self.objects = objects end
+        -- Leave individual slots unavailable in this stand-in
         function grid:GetSlot() return nil end
+        -- Record that the stand-in grid was released
         function grid:Destroy() self.destroyed = true end
         return grid
     end }
@@ -301,6 +318,7 @@ function Harness.new(name, options)
     local newSlot = prettyui.ItemSlot.new
     prettyui.ItemSlot.new = function(...)
         local slot = newSlot(...)
+        -- Record the item slot's tooltip text
         function slot:SetTooltip(text) self.tooltipText = text end
         return slot
     end
@@ -313,6 +331,7 @@ function Harness.new(name, options)
     prettyui.List.new = function(parent, listOptions)
         local list = newList(parent, listOptions)
         if listOptions.onChange ~= nil then
+            -- Pick a visible row through its selection callback
             function list:Click(entryID)
                 for _, row in ipairs(self.rows) do
                     if row.entry.id == entryID then
@@ -405,7 +424,7 @@ function Harness.new(name, options)
     }, { __index = Harness })
 end
 
--- Load Bank Core from its source checkout, as a plugin with its own module cache
+-- Load Bank Core with its own module cache
 function Harness:LoadCore()
     self.core = self.host:Load("bankcore", self.coreFolder, nil, self.coreRoot)
     return self.core
@@ -423,7 +442,7 @@ function Harness:LoadTags()
     return self.tags
 end
 
--- Read one of Bank Tags' loaded modules from its own module cache
+-- Read a module from Bank Tags' own cache
 function Harness:TagsModule(moduleName)
     return self.tags.env.package.loaded[moduleName]
 end
@@ -438,13 +457,13 @@ function Harness:Session()
     return rawget(self.core.env._G, "__bankcore_session")
 end
 
--- Report whether Bank Tags holds an extension registered with the running Core session
+-- Check the app's registration with the current Core session
 function Harness:Connected()
     local session = self:Session()
     return self:App().ext ~= nil and session ~= nil and session.pluginPages.owners.banktags ~= nil
 end
 
--- Open the bank in View All for the running Core session
+-- Open the bank's All Items view
 function Harness:OpenBank(width, height)
     if self.bankHost.window == nil then
         local window = self.bankHost:MountBankWindow(width or 714, height or 650)
@@ -463,7 +482,7 @@ function Harness:Fire(event, payload)
     for _, action in ipairs(actions) do action(payload) end
 end
 
--- Close the bank as the host does: the inventory goes before the window
+-- Remove the inventory before reporting the bank closed
 function Harness:CloseBank()
     self:Fire("InventoryRemoved", { inv = { id = 95 } })
     self:Tick()
@@ -494,7 +513,7 @@ function Harness.Find(parent, text)
     return nil
 end
 
--- Click the control that owns a visible label, including shared-dialog footer actions.
+-- Click the visible control with the requested label
 function Harness.Click(parent, text)
     local target = assert(Harness.Find(parent, text), "missing control: " .. text)
     while target ~= nil do
@@ -517,7 +536,7 @@ Harness.PLACEMENTS = {
     below_default = function(menu) return math.max(1, menu.entryCount) end,
 }
 
--- Build a menu and let each plugin answer in the chosen order
+-- Build a menu and ask plugins in the chosen order
 function Harness:HostMenu(natives, silent)
     local menu = { entries = { { verbText = "Cancel", actionType = MiniMenuActionType.CANCEL } } }
     for _, native in ipairs(natives) do menu.entries[#menu.entries + 1] = native end
@@ -525,11 +544,13 @@ function Harness:HostMenu(natives, silent)
         if key == "entryCount" then return #values.entries end
     end })
     local place = Harness.PLACEMENTS[self.placement]
+    -- Add an entry and record its action
     function menu:Add(label, action, ...)
         local entry = { verbText = not silent and label or "", overrideText = not silent and label or nil, action = action,
             arguments = { ... }, actionEntryType = MiniMenuEntryType.PLUGIN }
         table.insert(self.entries, place(self), entry)
     end
+    -- Swap two entries in the stand-in menu
     function menu:Swap(a, b) self.entries[a], self.entries[b] = self.entries[b], self.entries[a] end
     local keys = {}
     for key in pairs(self.menuSubscriptions) do keys[#keys + 1] = key end
@@ -556,7 +577,7 @@ function Harness:MenuFor(component, silent)
     return self:HostMenu(natives, silent)
 end
 
--- Open a menu over mounted content with no item under the pointer
+-- Build a menu without a bank item target
 function Harness:ContentMenu(silent)
     return self:HostMenu({}, silent)
 end
@@ -575,21 +596,21 @@ function Harness.Labels(menu)
     return labels
 end
 
--- List a menu's labels as the client shows them, the left click on top
+-- List menu labels with the left click first
 function Harness.DisplayedLabels(menu)
     local labels = {}
     for index = menu.entryCount, 1, -1 do labels[#labels + 1] = menu.entries[index].verbText end
     return labels
 end
 
--- Open a menu by right click, once, as choosing from it needs
+-- Report a right-click menu opening once
 function Harness.Open(menu)
     local open = openers[menu]
     openers[menu] = nil
     if open ~= nil then open() end
 end
 
--- Choose an entry by its label, failing when it is missing
+-- Choose a menu entry by its visible label
 function Harness.Choose(menu, label)
     Harness.Open(menu)
     for _, entry in ipairs(menu.entries) do
@@ -618,8 +639,7 @@ function Harness.ChildLabels(submenu)
     return labels
 end
 
--- Open a menu and click a child of its submenu, then close the menu
--- PrettyUI clears its submenu state before running the child, as its row click does
+-- Close the submenu before running its chosen child
 function Harness.ChooseChild(menu, label, childLabel)
     Harness.Open(menu)
     local submenu = Harness.Submenu(menu, label)
@@ -643,14 +663,14 @@ function Harness.Has(menu, label)
     return false
 end
 
--- Click a Tags row as the client does: PrettyUI's row hears the press, then the row hears the release
+-- Press and release a tag row through its hooks
 function Harness:ClickRow(entryID)
     local list = self:App().tab.controls.list
     assert(list.list:Click(entryID), tostring(entryID) .. " has no row")
     list:RowFor(entryID).root.hooks.release()
 end
 
--- Point at the shown page's slot at a position among its slots, counting blanks, and let Core hover it
+-- Hover the requested page slot, including blanks
 function Harness:PointAtSlot(position)
     local layout = self:Session().layout
     local key = nil
@@ -671,13 +691,13 @@ function Harness:PointAtSlot(position)
     self:Tick()
 end
 
--- Open the menu for the page slot under the pointer: its stack's, or none for a ghost
+-- Build the bank item's menu at a page slot
 function Harness:SlotMenu()
     local hover = self:Session().layout.itemHover.hoveredBankStack
     return hover ~= nil and self:MenuFor(hover.item) or self:ContentMenu()
 end
 
--- List a tag's saved slots in page order as object IDs, 0 for a blank
+-- List saved item IDs with zero for each blank
 function Harness:Saved(tag)
     local record, values = self:App().store.data.tags[tag], {}
     for _, entry in ipairs(record.rows) do
@@ -687,7 +707,7 @@ function Harness:Saved(tag)
     return table.concat(values, " ")
 end
 
--- Send native hover coordinates to the editor surface at a content position.
+-- Send native hover coordinates to the current editor surface
 function Harness:PointEditor(x, y)
     local editor = assert(self:App().windows.layoutEditor)
     local Geometry = require("banktags/ui/geometry")
@@ -729,7 +749,7 @@ function Harness:PressEditor(surface, x, y)
     return surface.hooks.click(surface, clip.x + x, clip.y + y)
 end
 
--- Release the editor's drag where it was last pointed, in its surface's native units
+-- Release the editor drag at its latest pointer position
 function Harness:ReleaseEditor()
     local editor = assert(self:App().windows.layoutEditor)
     local surface = editor.drag ~= nil and editor.drag.sourceSurface or self.editorHoveredSurface

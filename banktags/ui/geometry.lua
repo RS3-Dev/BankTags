@@ -30,6 +30,7 @@ end
 
 -- Keep pointer conversion aligned with native hover events
 function Geometry.trackPointer(component)
+    -- Keep pointer scaling aligned with native hover positions
     component:Subscribe(ui.Hook.ONMOUSEREPEAT, POINTER_HOOK, function(value, x, y)
         Geometry.calibratePointer(value, x, y)
         return false

@@ -25,8 +25,7 @@ local function withLimit(message)
     return message .. " " .. Catalog.LIMITED_HINT
 end
 
--- Search items and show matches, guidance, or an error
--- RuneQL is an optional plugin, so its search may fail
+-- Show item matches or explain an unavailable search
 function LayoutEditorSearch:RunSearch(value)
     local query = Text.trim(value)
     local ok, results = true, {}
@@ -44,7 +43,7 @@ function LayoutEditorSearch:RunSearch(value)
     else
         self:SetSearchHint(#results == 0 and withLimit("No items match that search.") or nil)
     end
-    -- PrettyUI lists take a sprite per row, not an item, so each row gets the item's own sprite
+    -- Add each item's sprite to its search row
     for index, row in ipairs(self.searchList.rows) do
         local icon = ui.Sprite.new(row.root)
         icon:SetPos(7, (ROW_HEIGHT - SEARCH_ICON_SIZE) // 2)
@@ -54,15 +53,14 @@ function LayoutEditorSearch:RunSearch(value)
         icon.associatedObjectQuantityMode = ui.ObjectQuantityDisplayMode.NEVER
         icon.clickthrough = true
         row.label:SetPos(38, 0)
-        -- PrettyUI narrows rows by 16px when the scrollbar appears. Follow the
-        -- resolved row width so rendering and clipped-name hover use the same bounds.
+        -- Follow row width so scrolling and name tooltips agree
         row.label:SetSize(-44, ROW_HEIGHT, 1.0, 0)
         row.label:MoveToFront()
     end
     self.searchDragSurface:MoveToFront()
 end
 
--- Build one list row per result, named as the catalog resolved it
+-- Build named rows for item search results
 function LayoutEditorSearch:SearchEntries(results)
     local entries = {}
     for row, result in ipairs(results) do
@@ -78,14 +76,15 @@ function LayoutEditorSearch:SearchEntries(results)
     return entries
 end
 
--- Save a search result to the tag at a sorted slot
--- Adding and placing it is one save and one undo step, or nothing changes
+-- Add and place a search result in one save
 function LayoutEditorSearch:AddCatalogResult(result, destination)
     local tag = self.selectedTag
+    -- Keep adding and placing an item in one undo step
     return (self:SaveEdit("Could not add the item to this tag.", function()
         local layoutKey
+        -- Save item membership and placement together
         local saved, reason = self.store:SaveTogether(function()
-            -- An item already in the tag gets another slot, which shows its next stack
+            -- Keep a separate layout slot for the repeated item
             local added, addReason
             added, addReason, layoutKey = self.store:AddTag(tag, result.objectId)
             if not added then return false, addReason end

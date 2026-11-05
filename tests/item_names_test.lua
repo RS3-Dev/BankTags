@@ -1,15 +1,14 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 local BankGrid = require("banktags/ui/bank_grid")
 
--- Name grid items without repeating names over search results
--- Bank Core names a shown tag page's items itself; Bank Tags adds nothing over the page
--- FAKE HOST: stand-in components, pointer, hover, and tooltips, not the game client
+-- Check editor item names without duplicating bank page tooltips
+-- FAKE HOST: stand-in components, pointer, and tooltips
 
 local Harness = require("tools/test_support/tags_harness")
 local Geometry = require("banktags/ui/geometry")
 local h = Harness.new("item_names")
 h.bankHost.anchoredLayout = true
--- Exercise PrettyUI's actual automatic hover hooks and manual tooltip lifecycle.
+-- Exercise PrettyUI's actual automatic hover hooks and manual tooltip lifecycle
 local frame = setmetatable({}, { __index = function() return 1 end })
 local tooltipEnv = setmetatable({
     require = function(name)
@@ -31,9 +30,13 @@ prettyui.Tooltip.attach = function(target, parent, value)
     local tooltip = Tooltip.attach(target, parent, value)
     local show, hide, setText, destroy = tooltip.Show, tooltip.Hide, tooltip.SetText, tooltip.Destroy
     tooltip.shown, tooltip.text = false, type(value) == "table" and value.text or value
+    -- Show the tooltip and record its visibility
     function tooltip:Show() show(self); self.shown = not self.root.hidden end
+    -- Hide the tooltip and record its visibility
     function tooltip:Hide() hide(self); self.shown = false end
+    -- Update and record the tooltip text
     function tooltip:SetText(text) setText(self, text); self.text = text end
+    -- Release the tooltip and record its removal
     function tooltip:Destroy() destroy(self); self.destroyed, self.shown = true, false end
     return tooltip
 end
@@ -53,8 +56,7 @@ h:Tick(12)
 -- Bank Tags' own module, so these slots' keys never repeat ones it gives out
 local item = h:TagsModule("banktags/tags/tag_layouts").Item
 assert(app.store:CreateTag("melee"))
--- A stack, a second stack, a ghost, a placeholder, a whip with no stack left, and an unnamed item;
--- then a label and a shark, with another shark in Unsorted
+-- Cover repeated stacks, ghosts, placeholders, unnamed items, and both panes
 app.store.data.tags.melee.rows = {
     { kind = "row", slots = { item(4151), item(4151), item(536), item(1944), item(4151), item(777) } },
     { kind = "label", text = "Food" },
@@ -73,7 +75,7 @@ end }
 local nameTooltip = editor.nameTooltip
 assert(nameTooltip.parent == editor.content and editor.nameAnchor.clickthrough == true)
 
--- Rail names render in the editor overlay, not inside the 32px button row.
+-- Rail names render in the editor overlay, not inside the 32px button row
 local railTooltip = editor.tagTabs.rows[1].tooltip
 local railContext = railTooltip.context
 assert(railTooltip.parent == editor.content and railTooltip.root.parent == editor.content)
@@ -100,6 +102,7 @@ h:Tick()
 assert(nameTooltip.shown and nameTooltip.text == "Egg", tostring(nameTooltip.text))
 local show = nameTooltip.Show
 local repeatedShows = 0
+-- Count repeated tooltip displays
 function nameTooltip:Show() repeatedShows = repeatedShows + 1; return show(self) end
 local front = editor.window.root.front
 h:Tick(20)
@@ -107,13 +110,13 @@ assert(repeatedShows == 0, "an unchanged tooltip must not be re-shown every tick
 assert(editor.window.root.front == front, "an idle editor must not reorder its native window every tick")
 local anchor = editor.nameAnchor
 assert(anchor.hidden, "the positioning anchor must not participate in native hover")
--- The editor drives this anchor programmatically; native hover must not hide it.
+-- The editor drives this anchor programmatically; native hover must not hide it
 for _ = 1, 5 do
     if anchor.enabled ~= false then anchor.hooks.mouseleave() end
     assert(nameTooltip.shown, "automatic anchor hover must not fight the editor's tooltip")
     h:Tick()
 end
--- A leave/re-enter during native layer ordering must not hide the tooltip mid-frame.
+-- A leave/re-enter during native layer ordering must not hide the tooltip mid-frame
 for _ = 1, 5 do
     sorted.surface.hooks.mouseleave()
     assert(nameTooltip.shown)
@@ -172,8 +175,7 @@ pointAt("sorted", 0, 0)
 h:Tick()
 assert(nameTooltip.shown and nameTooltip.text == "Abyssal whip")
 
--- A window opened over the editor, an open menu, or a hidden editor names nothing,
--- even if the surface heard no leave, and the name returns once it is gone
+-- Hide names while a window or menu covers the editor
 assert(editor:PromptNewLabel(0) and #editor.overlayWindows == 1)
 h:Tick()
 assert(not nameTooltip.shown)
@@ -196,14 +198,14 @@ pointAt("unsorted", 0, 0)
 h:Tick()
 assert(nameTooltip.shown and nameTooltip.text == "Shark")
 
--- Readable search labels do not get a redundant tooltip over their text.
+-- Readable search labels do not get a redundant tooltip over their text
 editor:RunSearch("whip")
 assert(#editor.searchResults >= 1)
 local left, top = Geometry.absolutePosition(editor.content)
 h:PointEditor(editorSize.SEARCH_X + editorSize.SEARCH_INSET + 100, editorSize.PANEL_TOP + editorSize.SEARCH_LIST_TOP + 10)
 h:Tick()
 assert(not nameTooltip.shown)
--- A name that exactly fits still needs no tooltip; only a clipped name does.
+-- A name that exactly fits still needs no tooltip; only a clipped name does
 local label = editor.searchList.rows[1].label
 local searchRow = editor.searchList.rows[1].root
 local nameWidth = config.Font.MUSEO_SANS_15PT_REGULAR:GetStringWidth("Abyssal whip", false)
@@ -211,7 +213,7 @@ searchRow:SetSize(nameWidth + 44, editorSize.SEARCH_ROW_HEIGHT)
 assert(label.width == nameWidth)
 h:Tick()
 assert(not nameTooltip.shown)
--- The native list removes 16px from the row when its scrollbar is visible.
+-- The native list removes 16px from the row when its scrollbar is visible
 searchRow:SetSize(nameWidth + 44 - 16, editorSize.SEARCH_ROW_HEIGHT)
 assert(label.width == nameWidth - 16)
 h:Tick()

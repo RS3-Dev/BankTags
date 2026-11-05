@@ -9,12 +9,13 @@ end
 
 -- Capitalize each word for display without changing the stored name
 function Text.titleCase(value)
+    -- Capitalize the first letter of each word
     return (tostring(value or ""):gsub("(%S+)", function(word)
         return (word:gsub("^%l", string.upper))
     end))
 end
 
--- Drop control characters and the client's markup brackets, as menu text requires
+-- Remove control characters and markup brackets
 function Text.plain(value)
     local text = string.gsub(tostring(value or ""), "[%c<>]", "")
     return Text.trim(text)

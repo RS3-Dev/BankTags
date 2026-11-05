@@ -24,7 +24,7 @@ local Json = require("banktags/core/json")
 local TagStore = require("banktags/tags/tag_store")
 local TagData = require("banktags/tags/tag_data")
 local TagLayouts = require("banktags/tags/tag_layouts")
--- Simulate a fresh plugin load after the client's config IDs change.
+-- Reload the store after item IDs change
 local function reloadStore()
     for _, name in ipairs({ "banktags/tags/item_identity", "banktags/tags/tag_data", "banktags/tags/tag_store" }) do
         package.loaded[name] = nil
@@ -49,7 +49,7 @@ local function count(store, tag, objectID)
     end
     return total
 end
--- Return the object at a grid index of a tag's rows drawn ten wide
+-- Read the item at a ten-column grid position
 local function objectAt(store, tag, index)
     local slot = TagLayouts.Render(store.data.tags[tag].rows, 10).slots[index]
     return slot ~= nil and slot.kind == "item" and slot.objectID or nil
@@ -62,7 +62,7 @@ assert(store:CreateTag("melee", 4151))
 local saved, _, whip = store:AddTag("melee", 4151)
 assert(saved and has(store, "melee", whip))
 assert(not has(store, "ranged", whip))
--- Adding the object again adds another slot, which shows its next stack
+-- Adding the same item keeps a separate layout slot
 local _, _, secondWhip = store:AddTag("melee", 4151)
 assert(secondWhip ~= whip and count(store, "melee", 4151) == 2)
 assert(not store:AddTag("missing", 4151))
@@ -115,8 +115,7 @@ assert(store:NextPlaceholderTagName() == "placeholder 1")
 
 -- Saving and loading ------------------------------------------------------------
 
--- Items and icons are saved by config name, so new object IDs still load
--- A repeated object saves once per slot, with nothing naming a stack
+-- Keep saved item names across ID changes and repeated slots
 local text = TagData.Encode(store.data, "melee")
 assert(string.find(text, '"abyssal_whip","abyssal_whip"', 1, true))
 assert(not string.find(text, "4151", 1, true) and not string.find(text, "abyssal_whip:", 1, true))
@@ -137,6 +136,7 @@ assert(string.find(TagData.Encode(reloaded.data, "melee"), '"abyssal_whip","abys
 -- A failed save reports why and leaves the live data as it was
 failWrites = true
 local before = Json.encode(store.data)
+-- Check that a failed save leaves live data unchanged
 local function refused(ok, ...)
     assert(not ok, "a failed save must report failure")
     assert(select("#", ...) > 0)
@@ -229,7 +229,7 @@ for objectID = 1, 12 do
     assert(added)
 end
 store:SetLayoutPlacement(true)
--- Return the grid rows the labels land on at a width
+-- List the grid rows containing labels
 local function labelRows(columns)
     local rows = {}
     for _, label in ipairs(store:GetLabels("gear", columns or 10)) do rows[#rows + 1] = label.row end
@@ -352,8 +352,7 @@ db = {}
 local rowsStore = TagStore.new()
 assert(rowsStore:CreateTag("rows"))
 local rowItem = TagLayouts.Item
--- Lines at ten wide: 0 Top, 1 two whips, 2-4 a row of 25 wrapping,
--- 5 an empty row, 6 End, 7 a shark beside a reserved slot
+-- Use a wrapped 25-item row, labels, blanks, and reserved slots
 local long = {}
 for objectID = 1, 25 do long[objectID] = rowItem(5000 + objectID) end
 long[11], long[12] = { kind = "blank" }, { kind = "blank" }
@@ -368,7 +367,7 @@ rowsStore.data.tags.rows.rows = {
 }
 rowsStore.data.tags.rows.unsorted = { rowItem(385) }
 assert(rowsStore:Save())
--- Describe each grid line ten wide: a label's text, "-" for empty, or its first item
+-- Describe the saved layout in reading order
 local function lines()
     local view = TagLayouts.Render(rowsStore.data.tags.rows.rows, 10)
     local out = {}
@@ -450,8 +449,7 @@ assert(not saved and reason:find("at most", 1, true) and Json.encode(rowsStore.d
 
 -- Removing a row -------------------------------------------------------------------
 
--- Lines at ten wide: 0 Top, 1 two whips, 2-3 a row of 12 wrapping,
--- 4 a shark, a reserved slot, and a third whip
+-- Use a wrapped 12-item row beside labels and reserved slots
 local wrapping = {}
 for index = 1, 12 do wrapping[index] = rowItem(5000 + index) end
 rowsStore.data.tags.rows.rows = {

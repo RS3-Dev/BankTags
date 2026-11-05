@@ -1,9 +1,8 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 local BankGrid = require("banktags/ui/bank_grid")
 
--- Drive the layout editor over a bank Bank Core reports
--- Moves it saves show up where the page draws them
--- FAKE HOST: stand-in loader, components, and menus, not the game client
+-- Check that saved editor moves appear on the bank page
+-- FAKE HOST: stand-in components, loader, and menus
 
 local Harness = require("tools/test_support/tags_harness")
 local Geometry = require("banktags/ui/geometry")
@@ -47,12 +46,15 @@ assert(editorSize.CENTER_COLUMNS == 13)
 assert(editor.window.root.x == bounds.x and editor.window.root.y == bounds.y)
 -- Tag buttons retain sidebar order and use icons or initials
 local rail = editor.tagTabs
+-- List the labels on the editor's tag tabs
 local function railLabels()
     local labels = {}
     for _, entry in ipairs(rail.entries) do labels[#labels + 1] = entry.label end
     return table.concat(labels, ",")
 end
+-- Read the selected tag tab
 local function chosen() return rail:GetSelectedID() end
+-- Choose the named entry from an opened menu
 local function choose(label)
     for _, entry in ipairs(rail.entries) do
         if entry.label == label then return assert(rail:Select(entry.id, true)) end
@@ -77,7 +79,7 @@ assert(editor.panes.sorted.y == editor.panes.unsorted.y)
 assert(not editor.searchDragSurface.hidden and not editor.panes.unsorted.surface.hidden)
 assert(Harness.Find(editor.content, "Saved automatically") == nil)
 
--- Quantities come from Bank Core's snapshot; a placeholder is drawn faded
+-- Find the drawn sprite for an item
 local function spriteFor(objectID)
     for _, pane in pairs(editor.panes) do
         for _, sprite in pairs(pane.sprites) do
@@ -93,7 +95,7 @@ assert(spriteFor(1944).alpha < 1)
 editor.window.tooltipContext = { position = function()
     return Geometry.absolutePosition(editor.content)
 end }
--- Point at the centre of a pane's grid slot, counted from zero
+-- Point at the centre of a pane's grid cell
 local function pointAtSlot(paneName, column, row)
     local left, top = Geometry.absolutePosition(editor.content)
     local pane = editor.panes[paneName]
@@ -101,7 +103,7 @@ local function pointAtSlot(paneName, column, row)
     h:PointEditor(pane.x + x, pane.y + y)
     return x, y
 end
--- Press on a slot and release over another, as dragging an item does
+-- Drag between the chosen grid cells
 local function drag(fromPane, fromColumn, fromRow, toPane, toColumn, toRow)
     local surface = editor.panes[fromPane].surface
     h:PressEditor(surface, pointAtSlot(fromPane, fromColumn, fromRow))
@@ -144,7 +146,7 @@ assert(unsorted[#unsorted].layoutKey == pasted and h:Saved("melee") == "4151 0 0
 drag("sorted", 0, 0, "sorted", 0, 0)
 Harness.Find(editor.content, "Remove").hooks.pressed()
 assert(h:Saved("melee") == "0 0 0 0 0 0 0 0 0 0 0 385 1944 4151", h:Saved("melee"))
--- Removing an empty selection does nothing; Copy still explains its missing selection.
+-- Removing an empty selection does nothing; Copy still explains its missing selection
 editor.selectedLayoutKey = nil
 Harness.Find(editor.content, "Remove").hooks.pressed()
 assert(editor.status.content == "")
@@ -166,7 +168,7 @@ Harness.Click(prompt.window.content, "Add")
 local rows = app.store.data.tags.melee.rows
 assert(rows[#rows].kind == "label" and rows[#rows].text == "Weapons")
 
--- An idle search stays empty; a failed search without RuneQL explains its limits.
+-- An idle search stays empty; a failed search without RuneQL explains its limits
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "")
 assert(editor.searchHint.hidden and editor.searchHint.content == "")
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "no matching item")

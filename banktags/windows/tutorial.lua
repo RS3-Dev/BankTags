@@ -19,7 +19,7 @@ local STEPS = {
     { text = "Click Import/Share, then choose Share. Click your tag's code field and press Ctrl+A, then Ctrl+C to copy it." },
 }
 
--- Teardown can encounter controls already removed by PrettyUI or a previous close
+-- Release a control that may already be closed
 local function destroy(control)
     if control ~= nil then pcall(function() control:Destroy() end) end
 end
@@ -34,7 +34,7 @@ function Tutorial.new(app)
     return setmetatable({ app = app, active = false, offered = false }, Tutorial)
 end
 
--- Offer the first tour only to an empty store, once the Tags tab shows
+-- Offer a first tour when the empty sidebar opens
 function Tutorial:Offer()
     if not self.active and not self.offered and not self.app.settings.tutorialSeen
         and self.app.tab.controls ~= nil and self.app.store.loadError == nil
@@ -45,7 +45,7 @@ end
 function Tutorial:Start()
     if self.active then return end
     if self.app.tab.controls == nil then return end
-    -- The game area renders behind the bank; raising its children cannot cross layers.
+    -- Use the bank's layer to draw above its windows
     local parent = ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__BANK_LAYER)
         or ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__GAME_AREA)
     if parent == nil or self.app.windows:BankBounds() == nil then return end
@@ -80,25 +80,27 @@ function Tutorial:WatchShare(window, field)
     if self.shareField == field then return end
     self:UnwatchShare()
     self.shareField, self.shareWindow = field, window
+    -- Record a click on the guide's current share field
     field.root:Subscribe(ui.Hook.ONCLICK, EVENT, function()
         if self.active and self.step == 8 and self.app.windows.importShare == window then self.shareClicked = true end
         return false
     end)
 end
 
--- A one-shot handle can already be dead when the next step or cleanup arrives
+-- Stop the current cue if it still exists
 function Tutorial:StopCue()
     local sound = self.sound
     self.sound = nil
     if sound ~= nil then pcall(function() sound:Stop() end) end
 end
 
--- Audio is optional; a failed cue must not interrupt the walkthrough
+-- Play the next-step sound when audio is available
 function Tutorial:PlayCue()
     self:StopCue()
     if audio == nil or Plugin == nil or Plugin.resources == nil then return end
     local resource = Plugin.resources.tutorial_step
     if resource == nil then return end
+    -- Play the guide cue without interrupting on audio failure
     local ok, sound = pcall(function()
         local params = audio.SoundPlaybackParams.new()
         params.volume = 0.25

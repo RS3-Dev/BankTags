@@ -69,7 +69,7 @@ function SidebarRows.CreateSearch(parent, width, options)
     })
 end
 
--- Create the message shown in place of an empty row list
+-- Create the message shown when no rows are visible
 function SidebarRows.CreateEmptyLabel(parent, width, text)
     return prettyui.Text.new(parent, {
         text = text,

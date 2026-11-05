@@ -18,12 +18,16 @@ local TagStore = require("banktags/tags/tag_store")
 local TagData = require("banktags/tags/tag_data")
 local TagLayouts = require("banktags/tags/tag_layouts")
 
+-- Find the saved key for an item
 local function key(objectID, copy) return "object:" .. objectID .. ":" .. (copy or 1) end
+-- Create a saved item slot for the test
 local function item(objectID, copy, source)
     return { kind = "item", objectID = objectID, layoutKey = key(objectID, copy),
         sourceLayoutKey = source ~= nil and key(objectID, source) or nil }
 end
+-- Create an open layout slot
 local function blank() return { kind = "blank" } end
+-- Build a layout row from the supplied slots
 local function row(...) return { kind = "row", slots = { ... } } end
 
 local store = TagStore.new()
@@ -42,8 +46,7 @@ local function setRows(rows, unsorted)
     assert(store:Save())
     commits = 0
 end
--- Describe each grid line ten wide: a label in brackets, else its cells
--- An item is its object ID, a reserved slot "r", an open slot "."
+-- Describe the saved layout in reading order
 local function lines()
     local view = TagLayouts.Render(store.data.tags.gear.rows, 10)
     local out = {}
@@ -66,6 +69,7 @@ local function lines()
     end
     return table.concat(out, " | ")
 end
+-- Move the selected group to a grid cell
 local function move(keys, anchor, destination)
     return store:MoveLayoutItems("gear", keys, anchor, destination, 10)
 end

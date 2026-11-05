@@ -23,11 +23,9 @@ local TEXT_STORE = {
 local INVALID_TAG_NAME = "Enter one tag name without commas (up to "
     .. TagRules.MAX_TAG_NAME .. " characters)."
 
-TagStore.MAX_FOLDER_NAME = TagRules.MAX_FOLDER_NAME
 TagStore.MAX_TAG_NAME = TagRules.MAX_TAG_NAME
-TagStore.MAX_LABEL_TEXT = TagRules.MAX_LABEL_TEXT
 
--- Read an icon's saved reference from an object ID, or nil for no icon
+-- Find the saved reference for an optional item icon
 local function iconReference(spriteObjectID)
     if spriteObjectID == nil then return true, nil end
     local objectID = math.tointeger(tonumber(spriteObjectID))
@@ -35,13 +33,13 @@ local function iconReference(spriteObjectID)
     return true, ItemIdentity.Reference(objectID)
 end
 
--- Load saved tags, refusing changes when the save cannot be read
+-- Load tags and protect unreadable saves
 function TagStore.new()
-    local saved = ChunkedStringStore.Read(TEXT_STORE)
-    local data, reason = nil, nil
+    local saved, reason = ChunkedStringStore.Read(TEXT_STORE)
+    local data
     if saved ~= nil then data, reason = TagData.Decode(saved, true) end
     local store = setmetatable({ data = data or TagData.Empty() }, TagStore)
-    if saved ~= nil and data == nil then
+    if reason ~= nil then
         store.loadError = "The saved tags could not be read (" .. tostring(reason)
             .. "). Nothing will be saved until they are fixed or removed."
     end
@@ -56,6 +54,9 @@ end
 -- Save changed data, using it only once the save works
 function TagStore:Commit(nextData, failureMessage)
     if self.loadError ~= nil then return false, self.loadError end
+    if #nextData.order > TagData.MAX_TAGS then
+        return false, "You can save at most " .. TagData.MAX_TAGS .. " tags."
+    end
     local used = {}
     for name, tag in pairs(nextData.tags) do
         TagLayouts.Trim(tag.rows)
@@ -68,8 +69,12 @@ function TagStore:Commit(nextData, failureMessage)
                 .. " rows, labels, and items."
         end
     end
+    local folderCount = 0
     for key in pairs(nextData.folders) do
-        if not used[key] then nextData.folders[key] = nil end
+        if used[key] then folderCount = folderCount + 1 else nextData.folders[key] = nil end
+    end
+    if folderCount > TagData.MAX_FOLDERS then
+        return false, "You can save at most " .. TagData.MAX_FOLDERS .. " folders."
     end
     -- Edits saved together are written once at the end
     if self.holdSave then
@@ -79,7 +84,9 @@ function TagStore:Commit(nextData, failureMessage)
     if PersistentDB == nil or PersistentDB.SetString == nil then
         return false, "PersistentDB is unavailable."
     end
-    local saved, failure = ChunkedStringStore.Write(TEXT_STORE, TagData.Encode(nextData))
+    local text = TagData.Encode(nextData)
+    if #text > TagData.MAX_TEXT_LENGTH then return false, "The saved tags are too large." end
+    local saved, failure = ChunkedStringStore.Write(TEXT_STORE, text)
     if not saved then
         if failure.stage == "chunk" then
             return false, "PersistentDB could not save tag chunk "
@@ -96,14 +103,14 @@ function TagStore:Save()
     return self:Commit(self.data, "Could not save the tags.")
 end
 
--- Save several store edits in one write, keeping the old data if any edit or the write fails
--- The edit returns success and a reason, as each store edit does
+-- Save related edits together or roll them all back
 function TagStore:SaveTogether(edit)
     local before = self.data
+    local holding = self.holdSave
     self.holdSave = true
     -- An edit that errors must not leave later saves held
     local ran, done, reason = pcall(edit)
-    self.holdSave = false
+    self.holdSave = holding
     if ran and done and self.data ~= before then
         done, reason = self:Commit(self.data, "Could not save the tags.")
     end
@@ -112,8 +119,7 @@ function TagStore:SaveTogether(edit)
     return done == true, reason
 end
 
--- Add a slot for an object to a tag's layout or Unsorted list, returning the slot's key
--- An object already in the tag gets another slot, which shows its next stack
+-- Add an item slot, including another copy
 function TagStore:AddTag(tag, objectID)
     objectID = math.tointeger(tonumber(objectID))
     if self.data.tags[tag] == nil or objectID == nil or objectID < 0 then
@@ -136,31 +142,44 @@ function TagStore:AddTag(tag, objectID)
     return saved, reason, saved and slot.layoutKey or nil
 end
 
--- Take a slot out of a tag, leaving a blank in its row
-function TagStore.TakeSlot(record, layoutKey)
+-- Take selected items out in reading order
+function TagStore.TakeSlots(record, layoutKeys, onlyRows)
+    local wanted, taken = {}, {}
+    for _, layoutKey in ipairs(layoutKeys) do wanted[layoutKey] = true end
     for _, entry in ipairs(record.rows) do
         for position, slot in ipairs(entry.slots or {}) do
-            if slot.kind == "item" and slot.layoutKey == layoutKey then
+            if slot.kind == "item" and wanted[slot.layoutKey] then
                 entry.slots[position] = { kind = "blank" }
-                return slot
+                taken[#taken + 1] = slot
             end
         end
     end
-    for index, slot in ipairs(record.unsorted) do
-        if slot.kind == "item" and slot.layoutKey == layoutKey then
-            return table.remove(record.unsorted, index)
+    if not onlyRows then
+        local kept = {}
+        for _, slot in ipairs(record.unsorted) do
+            if slot.kind == "item" and wanted[slot.layoutKey] then
+                taken[#taken + 1] = slot
+            else
+                kept[#kept + 1] = slot
+            end
         end
+        record.unsorted = kept
     end
-    return nil
+    return taken
 end
 
--- Remove one slot from a tag
-function TagStore:RemoveTag(tag, layoutKey)
+-- Remove selected items in one save
+function TagStore:RemoveTags(tag, layoutKeys)
     if self.data.tags[tag] == nil then return true, nil, false end
     local nextData = copy(self.data)
-    if TagStore.TakeSlot(nextData.tags[tag], layoutKey) == nil then return true, nil, false end
+    if #TagStore.TakeSlots(nextData.tags[tag], layoutKeys) == 0 then return true, nil, false end
     local saved, reason = self:Commit(nextData, "Could not remove the tag.")
     return saved, reason, saved
+end
+
+-- Remove one item from a tag
+function TagStore:RemoveTag(tag, layoutKey)
+    return self:RemoveTags(tag, { layoutKey })
 end
 
 -- Add a new empty tag to copied data
@@ -196,7 +215,7 @@ function TagStore:GetTagSprite(tag)
     return record ~= nil and ItemIdentity.ObjectID(record.icon) or nil
 end
 
--- Rename a tag and set its icon, keeping the icon when none is given
+-- Rename a tag and keep or replace its icon
 function TagStore:UpdateTag(oldTag, newTag, spriteObjectID)
     local name = normalizeTag(newTag)
     if self.data.tags[oldTag] == nil then return false, nil, "The existing tag is invalid." end
@@ -219,7 +238,7 @@ function TagStore:UpdateTag(oldTag, newTag, spriteObjectID)
     return true, name, nil
 end
 
--- Delete a tag, its layout, and its place in the sidebar
+-- Delete a tag and its saved layout
 function TagStore:DeleteTag(tag)
     if self.data.tags[tag] == nil then return false, "The tag is invalid." end
     local nextData = copy(self.data)
@@ -235,7 +254,7 @@ function TagStore:AllTags()
     return copy(self.data.order)
 end
 
--- Save a sidebar order, keeping any tag it leaves out after the listed ones
+-- Save the listed order, keeping unlisted tags afterward
 function TagStore:SaveTagOrder(requestedOrder)
     local order, seen = {}, {}
     for _, list in ipairs({ requestedOrder or {}, self.data.order }) do

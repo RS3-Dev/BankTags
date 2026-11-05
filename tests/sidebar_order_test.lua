@@ -34,8 +34,11 @@ assert(store:SetTagFolder("ranged", "combat") and store:SetTagFolder("magic", "c
 assert(store:CreateFolder("Skills", "mining") and store:SetTagFolder("fishing", "skills"))
 assert(store:SetFolderCollapsed("skills", true))
 
+-- Describe a tag for sidebar ordering
 local function tag(name) return { kind = "tag", tag = name } end
+-- Describe a folder for sidebar ordering
 local function folder(key) return { kind = "folder", key = key } end
+-- Read the tags in their current sidebar order
 local function order() return table.concat(store:AllTags(), ",") end
 -- Everything but the order, which a move must leave alone
 local function contents()
@@ -47,7 +50,7 @@ local function contents()
 end
 local unchanged = contents()
 
--- Move once and check the order, the single save, and that nothing else changed
+-- Check that a move saves only the new order
 local function moves(source, target, after, expected)
     local before = saves
     local saved, reason = store:MoveSidebarEntry(source, target, after)

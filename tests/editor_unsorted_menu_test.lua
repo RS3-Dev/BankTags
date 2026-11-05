@@ -1,7 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Unsorted context actions use the first available layout cell and preserve menu validity.
--- FAKE HOST: native components, context menus, and deferred callbacks, not the live client.
+-- Check Unsorted item menus, placement, and stale choices
+-- FAKE HOST: stand-in components and deferred menu actions
 local Harness = require("tools/test_support/tags_harness")
 local BankGrid = require("banktags/ui/bank_grid")
 local Json = require("banktags/core/json")
@@ -26,9 +26,13 @@ h:Tick(2)
 app.windows:OpenLayoutEditor("gear")
 local editor = app.windows.layoutEditor
 local columns = editor.panes.sorted.columns
+-- Encode the current tag data for comparison
 local function saved() return Json.encode(store.data) end
+-- Read the current gear tag record
 local function record() return store.data.tags.gear end
+-- List menu labels in their displayed order
 local function shown(menu) return table.concat(Harness.DisplayedLabels(menu), "|") end
+-- Open a menu for the requested Unsorted item
 local function menuFor(layoutKey)
     local pane = editor.panes.unsorted
     local index = assert(editor.layout.unsortedIndex[layoutKey]) - 1
@@ -36,6 +40,7 @@ local function menuFor(layoutKey)
         pane.y + BankGrid.RowItemY(index // pane.columns) + 20 - pane.view.scrollY)
     return h:ContentMenu()
 end
+-- Choose the named entry from an opened menu
 local function choose(menu, label)
     Harness.Choose(menu, label)
     h:Tick(2)
@@ -51,13 +56,13 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
 end
 h.menuOrder, h.placement = "core_first", "documented"
 
--- Merely building the menu or its default action does not edit the tag.
+-- Merely building the menu or its default action does not edit the tag
 local before = saved()
 local menu = menuFor(source.layoutKey)
 assert(Harness.LeftClick(menu) == "Move to Layout")
 h:Tick(2)
 assert(saved() == before)
--- The label row and reserved slot are skipped; the duplicate object's key stays distinct.
+-- The label row and reserved slot are skipped; the duplicate object's key stays distinct
 choose(menu, "Move to Layout")
 assert(editor.layout.sortedIndex[source.layoutKey] == columns + 3)
 assert(editor.layout.sortedIndex[existing.layoutKey] == columns + 1)
@@ -69,14 +74,14 @@ assert(editor:Undo() and saved() == before)
 assert(editor:Redo() and saved() == moved)
 assert(editor:Undo() and saved() == before)
 
--- Remove affects the clicked item, even when a different Layout item is selected.
+-- Remove affects the clicked item, even when a different Layout item is selected
 editor:SelectOnly(existing.layoutKey)
 choose(menuFor(other.layoutKey), "Remove from Tag")
 assert(editor.layout.unsortedIndex[other.layoutKey] == nil)
 assert(editor.layout.unsortedIndex[source.layoutKey] ~= nil and editor.layout.sortedIndex[existing.layoutKey] ~= nil)
 assert(editor:Undo() and saved() == before)
 
--- A failed move preserves both the source and all existing cells.
+-- A failed move preserves both the source and all existing cells
 store.Commit = function() return false, "Could not save the layout." end
 choose(menuFor(source.layoutKey), "Move to Layout")
 store.Commit = nil
@@ -84,7 +89,7 @@ assert(saved() == before and editor.layout.unsortedIndex[source.layoutKey] ~= ni
 assert(editor.status.content ~= "")
 editor:ClearStatus()
 
--- A menu becomes stale after a save or switching tags.
+-- A menu becomes stale after a save or switching tags
 menu = menuFor(source.layoutKey)
 assert(store:SetLabel("gear", 0, "Meals", columns))
 app:Changed()
@@ -97,14 +102,14 @@ choose(menu, "Remove from Tag")
 assert(saved() == changed)
 editor:SelectTag("gear")
 
--- Empty cells and the scrollbar never offer item actions.
+-- Empty cells and the scrollbar never offer item actions
 local pane = editor.panes.unsorted
 h:PointEditor(pane.x + pane.gridLeft + 2 * 44 + 20, pane.y + 24)
 assert(shown(h:ContentMenu()) == "Cancel")
 h:PointEditor(pane.x + pane.width - 5, pane.y + 24)
 assert(shown(h:ContentMenu()) == "Cancel")
 
--- A full layout appends a row; an empty layout starts at its first cell.
+-- A full layout appends a row; an empty layout starts at its first cell
 local full = {}
 for index = 1, columns do full[index] = Item(4151) end
 record().rows = { { kind = "row", slots = full } }
@@ -120,7 +125,7 @@ app:Changed()
 choose(menuFor(source.layoutKey), "Move to Layout")
 assert(editor.layout.sortedIndex[source.layoutKey] == 1 and #record().rows == 1)
 
--- Closing the editor invalidates an outstanding item menu.
+-- Closing the editor invalidates an outstanding item menu
 menu = menuFor(other.layoutKey)
 before = saved()
 editor.window:Close()

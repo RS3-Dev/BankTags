@@ -13,13 +13,12 @@ function LayoutEditorNames:CreateItemNames()
     self.nameAnchor = ui.Layer.new(self.content)
     self.nameAnchor.hidden = true
     self.nameTooltip = prettyui.Tooltip.attach(self.nameAnchor, self.content, " ")
-    -- This is a positioning anchor, not a second hover target. Tooltip.attach's
-    -- automatic enter/leave handlers must not fight the surface-driven updates.
+    -- Let the grid surface control this tooltip's visibility
     self.nameAnchor.enabled = false
     self.nameAnchor.clickthrough = true
 end
 
--- Only clipped search labels need a second copy of their name on hover.
+-- Find a clipped search name that needs a tooltip
 function LayoutEditorNames:SearchItemAt(x, y)
     if not self:OnSearchList(x, y) then return nil end
     local top = Size.PANEL_TOP + Size.SEARCH_LIST_TOP
@@ -34,7 +33,7 @@ function LayoutEditorNames:SearchItemAt(x, y)
         y = top + row * Size.SEARCH_ROW_HEIGHT - self.searchList.scrollY, size = Size.SEARCH_ROW_HEIGHT }
 end
 
--- Find a grid item and its cell under a content point
+-- Find the item and cell under an editor point
 function LayoutEditorNames:GridItemAt(x, y)
     local pane, paneX, paneY = self:PaneAt(x, y)
     if pane == nil then return nil end
@@ -51,9 +50,7 @@ function LayoutEditorNames:GridItemAt(x, y)
     return { objectID = slot.objectID, x = pane.x + cellX, y = pane.y + cellY, size = Size.GRID_SLOT_SIZE }
 end
 
--- Show the name of the item under the pointer, or hide it
--- Resolve visibility once per tick after native hover callbacks settle
--- A window opened over the editor or a menu may cover the grids without a leave
+-- Show the hovered item's name after pointer events settle
 function LayoutEditorNames:UpdateItemName()
     local surface = self.pointerSurface
     if surface == nil or self.drag ~= nil

@@ -1,7 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- FAKE HOST: keep the game area behind the bank, with separate native origins.
--- Moving a child forward cannot put it above a different parent branch.
+-- FAKE HOST: keep game and bank render layers separate
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("tutorial_overlay")
 h.bankHost.anchoredLayout = true
@@ -11,10 +10,11 @@ local gameArea = ui.Layer.new(screen)
 gameArea:SetSize(0, 0, 1, 1)
 local bankLayer = ui.Layer.new(screen)
 bankLayer:SetSize(0, 0, 1, 1)
--- Native coordinates may include offsets not represented by summing x and y.
+-- Native coordinates may include offsets not represented by summing x and y
 bankLayer.xyGlobal = { x = 48, y = 32 }
 id.Component.TOPLEVEL_V2__GAME_AREA = "game_area"
 local lookup = ui.Interfaces.GetComponent
+-- Find the stand-in native component by its ID
 function ui.Interfaces:GetComponent(componentID, ...)
     if componentID == id.Component.TOPLEVEL_V2__GAME_AREA then return gameArea end
     if componentID == id.Component.TOPLEVEL_V2__BANK_LAYER then return bankLayer end
@@ -31,11 +31,13 @@ bankLayer.children[#bankLayer.children + 1] = nativeWindow.host
 h:OpenBank()
 h:Tick(2)
 
+-- Find the top rendering branch containing a control
 local function branch(control)
     while control.parent ~= screen do control = assert(control.parent) end
     return control
 end
 
+-- Read the control's position including its parents
 local function global(control)
     if control.xyGlobal ~= nil then return control.xyGlobal.x, control.xyGlobal.y end
     if control.parent == nil then return control.x, control.y end
@@ -44,7 +46,7 @@ local function global(control)
         y + control.y - (control.parent.scrollY or 0)
 end
 
--- Supply the native target position, including its parents' scrolling.
+-- Check that the highlight follows the native target
 local function checkTarget(control)
     local x, y = global(control)
     control.xyGlobal = { x = x, y = y }
@@ -71,7 +73,7 @@ tour:Go(3)
 local row = app.tab:RowFor("melee").root
 checkTarget(row)
 
--- A row scrolled out of its viewport must not leave a floating arrow behind.
+-- A row scrolled out of its viewport must not leave a floating arrow behind
 local list = app.tab.controls.list.list
 list.root.scrollY = 1000
 local x, y = global(row)
@@ -83,7 +85,7 @@ assert(tour.highlight.hidden and tour.arrow.hidden)
 row.xyGlobal, list.root.xyGlobal = nil, nil
 list.root.scrollY = 0
 
--- The editor shares the bank layer, so its controls also remain below the guide.
+-- The editor shares the bank layer, so its controls also remain below the guide
 app.windows:OpenLayoutEditor("melee")
 tour:Go(5)
 checkTarget(app.windows.layoutEditor.closeButton.root)

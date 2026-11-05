@@ -2,16 +2,22 @@
 
 local Json = {}
 
--- Escape characters that would break a JSON string
+-- Keep empty JSON values without shifting array items
+Json.null = {}
+
+local ESCAPES = {
+    ['"'] = '"', ['\\'] = '\\', ['/'] = '/',
+    b = '\b', f = '\f', n = '\n', r = '\r', t = '\t',
+}
+local MAX_DEPTH = 128
+
+-- Escape quotes, slashes, and control characters
 local function escape(value)
-    value = string.gsub(value, "\\", "\\\\")
-    value = string.gsub(value, "\"", "\\\"")
-    value = string.gsub(value, "\b", "\\b")
-    value = string.gsub(value, "\f", "\\f")
-    value = string.gsub(value, "\n", "\\n")
-    value = string.gsub(value, "\r", "\\r")
-    value = string.gsub(value, "\t", "\\t")
-    return value
+    -- Encode each character that cannot appear directly in JSON
+    return (string.gsub(value, '[%z\1-\31\\"]', function(character)
+        if character == '"' or character == '\\' then return '\\' .. character end
+        return string.format('\\u%04x', string.byte(character))
+    end))
 end
 
 -- Check whether a table encodes as a JSON array
@@ -28,9 +34,14 @@ end
 -- Encode supported Lua values as JSON with sorted object keys
 function Json.encode(value)
     local kind = type(value)
-    if value == nil then return "null" end
+    if value == nil or value == Json.null then return "null" end
     if kind == "boolean" then return value and "true" or "false" end
-    if kind == "number" then return tostring(value) end
+    if kind == "number" then
+        if value ~= value or value == math.huge or value == -math.huge then
+            error("JSON numbers must be finite")
+        end
+        return tostring(value)
+    end
     if kind == "string" then return "\"" .. escape(value) .. "\"" end
     if kind ~= "table" then return "null" end
     local parts = {}
@@ -39,7 +50,10 @@ function Json.encode(value)
         return "[" .. table.concat(parts, ",") .. "]"
     end
     local keys = {}
-    for key in pairs(value) do keys[#keys + 1] = tostring(key) end
+    for key in pairs(value) do
+        if type(key) ~= "string" then error("JSON object keys must be strings") end
+        keys[#keys + 1] = key
+    end
     table.sort(keys)
     for _, key in ipairs(keys) do
         parts[#parts + 1] = Json.encode(key) .. ":" .. Json.encode(value[key])
@@ -55,54 +69,88 @@ end
 -- Read one JSON value and reject extra content after it
 function Json.decode(source)
     if type(source) ~= "string" then error("JSON source must be a string") end
-    local index = 1
+    local index, depth = 1, 0
     local length = #source
 
     -- Advance past whitespace between JSON values and punctuation
     local function skipSpace()
-        while index <= length and string.match(string.sub(source, index, index), "%s") do
-            index = index + 1
-        end
+        index = string.match(source, "[ \t\r\n]*()", index)
     end
 
     local parseValue
-    -- Read a quoted string and decode its supported escape sequences
+    -- Read four digits from a Unicode escape
+    local function unicodeCode()
+        local digits = string.sub(source, index + 2, index + 5)
+        if #digits ~= 4 or string.find(digits, "[^%da-fA-F]") then
+            decodeError(index, "bad unicode escape")
+        end
+        index = index + 6
+        return tonumber(digits, 16)
+    end
+
+    -- Read a quoted string and its escapes
     local function parseString()
         index = index + 1
         local parts = {}
         while index <= length do
-            local character = string.sub(source, index, index)
+            local special = string.find(source, '[%z\1-\31\\"]', index)
+            if special == nil then decodeError(index, "unterminated string") end
+            if special > index then parts[#parts + 1] = string.sub(source, index, special - 1) end
+            index = special
+            local character = string.sub(source, special, special)
             if character == "\"" then
                 index = index + 1
                 return table.concat(parts)
             end
             if character == "\\" then
                 local escaped = string.sub(source, index + 1, index + 1)
-                local substitutions = {
-                    ['"'] = '"', ['\\'] = '\\', ['/'] = '/',
-                    b = '\b', f = '\f', n = '\n', r = '\r', t = '\t'
-                }
-                if substitutions[escaped] ~= nil then
-                    parts[#parts + 1] = substitutions[escaped]
+                if ESCAPES[escaped] ~= nil then
+                    parts[#parts + 1] = ESCAPES[escaped]
                     index = index + 2
                 elseif escaped == "u" then
-                    local code = tonumber(string.sub(source, index + 2, index + 5), 16)
-                    if code == nil then decodeError(index, "bad unicode escape") end
-                    if code < 128 then
-                        parts[#parts + 1] = string.char(code)
-                    else
-                        parts[#parts + 1] = "?"
+                    local code = unicodeCode()
+                    if code >= 0xD800 and code <= 0xDBFF then
+                        if string.sub(source, index, index + 1) ~= "\\u" then
+                            decodeError(index, "missing unicode pair")
+                        end
+                        local low = unicodeCode()
+                        if low < 0xDC00 or low > 0xDFFF then decodeError(index, "bad unicode pair") end
+                        code = 0x10000 + (code - 0xD800) * 0x400 + low - 0xDC00
+                    elseif code >= 0xDC00 and code <= 0xDFFF then
+                        decodeError(index, "unexpected unicode pair")
                     end
-                    index = index + 6
+                    parts[#parts + 1] = utf8.char(code)
                 else
                     decodeError(index, "bad string escape")
                 end
             else
-                parts[#parts + 1] = character
-                index = index + 1
+                decodeError(index, "unescaped control character")
             end
         end
         decodeError(index, "unterminated string")
+    end
+
+    -- Read a number with complete decimal and exponent parts
+    local function parseNumber()
+        local first = index
+        if string.sub(source, index, index) == "-" then index = index + 1 end
+        if string.sub(source, index, index) == "0" then
+            index = index + 1
+        else
+            index = string.match(source, "^[1-9]%d*()", index)
+            if index == nil then decodeError(first, "bad number") end
+        end
+        if string.sub(source, index, index) == "." then
+            index = string.match(source, "^%.%d+()", index)
+            if index == nil then decodeError(first, "bad decimal") end
+        end
+        if string.match(string.sub(source, index, index), "[eE]") then
+            index = string.match(source, "^[eE][+-]?%d+()", index)
+            if index == nil then decodeError(first, "bad exponent") end
+        end
+        local value = tonumber(string.sub(source, first, index - 1))
+        if value == nil or value == math.huge or value == -math.huge then decodeError(first, "bad number") end
+        return value
     end
 
     -- Read comma-separated values until the closing array bracket
@@ -150,17 +198,17 @@ function Json.decode(source)
         skipSpace()
         local character = string.sub(source, index, index)
         if character == "\"" then return parseString() end
-        if character == "{" then return parseObject() end
-        if character == "[" then return parseArray() end
-        local tail = string.sub(source, index)
-        if string.sub(tail, 1, 4) == "true" then index = index + 4 return true end
-        if string.sub(tail, 1, 5) == "false" then index = index + 5 return false end
-        if string.sub(tail, 1, 4) == "null" then index = index + 4 return nil end
-        local numberText = string.match(tail, "^-?%d+%.?%d*[eE]?[+-]?%d*")
-        if numberText ~= nil and numberText ~= "" then
-            index = index + #numberText
-            return tonumber(numberText)
+        if character == "{" or character == "[" then
+            depth = depth + 1
+            if depth > MAX_DEPTH then decodeError(index, "too many nested values") end
+            local value = character == "{" and parseObject() or parseArray()
+            depth = depth - 1
+            return value
         end
+        if string.sub(source, index, index + 3) == "true" then index = index + 4 return true end
+        if string.sub(source, index, index + 4) == "false" then index = index + 5 return false end
+        if string.sub(source, index, index + 3) == "null" then index = index + 4 return Json.null end
+        if character == "-" or string.match(character, "%d") then return parseNumber() end
         decodeError(index, "unexpected value")
     end
 

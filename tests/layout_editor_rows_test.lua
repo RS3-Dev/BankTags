@@ -1,10 +1,8 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 local BankGrid = require("banktags/ui/bank_grid")
 
--- Right-click the layout editor's sorted grid for its Edit row submenu: add a row, or remove one
--- Removing a row with items, reserved slots, or a label asks first in a confirmation window
--- Only sorted rows in the layout get entries; they act once, from the opened menu, while still current
--- FAKE HOST: stand-in components, pointer, menus, and scroll views, not the game client
+-- Check row menus, labels, confirmations, and stale editor actions
+-- FAKE HOST: stand-in components, pointer, menus, and scrolling
 
 local Harness = require("tools/test_support/tags_harness")
 local Geometry = require("banktags/ui/geometry")
@@ -38,7 +36,7 @@ local function onlyBoots()
     local unsorted = store.data.tags.gear.unsorted
     return #unsorted == 1 and unsorted[1].layoutKey == keys.boots
 end
--- Lines: 0 Weapons, 1 an axe, a second axe, and a sword, 2 a helm; boots in Unsorted
+-- Restore the test's original rows and Unsorted items
 local function resetGear()
     if store.data.tags.gear ~= nil then assert(store:DeleteTag("gear")) end
     assert(store:CreateTag("gear"))
@@ -79,7 +77,7 @@ local function pointAtContent(x, y)
     local left, top = Geometry.absolutePosition(editor.content)
     h:PointEditor(x, y)
 end
--- Point at a pane's grid cell by its content row, as its scroll shows it
+-- Point at a pane cell through its scroll
 local function pointAt(paneName, column, row)
     local pane = editor.panes[paneName]
     local x, y = pane.gridLeft + column * 44 + 20, BankGrid.RowItemY(row, pane.labels) + 20 - pane.view.scrollY
@@ -101,14 +99,16 @@ local function lines()
     end
     return table.concat(out, " ")
 end
+-- Encode the current tag data for comparison
 local function saved() return Json.encode(store.data) end
+-- List menu labels in their displayed order
 local function shown(menu) return table.concat(Harness.DisplayedLabels(menu), "|") end
 local EDIT = "Edit row <col=ffffff><gt></col>"
 local ABOVE, BELOW, REMOVE = "Add row above", "Add row below", "Remove row"
 local LABELS = "Add label above|Add label below"
 local OFFERED = EDIT .. "|Cancel"
 local ITEM_OFFERED = "Move to Unsorted|" .. EDIT .. "|Remove from Tag|Cancel"
--- List the Edit row children of a menu, or nil without the submenu
+-- Read the actions in the named submenu
 local function children(menu)
     local submenu = Harness.Submenu(menu, EDIT)
     return submenu ~= nil and table.concat(Harness.ChildLabels(submenu), "|") or nil
@@ -143,7 +143,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
 end
 h.menuOrder, h.placement = "core_first", "documented"
 
--- Unsorted items offer item actions without row editing; other surfaces stay empty.
+-- Unsorted items offer item actions without row editing; other surfaces stay empty
 local sorted = editor.panes.sorted
 pointAt("unsorted", 0, 0)
 assert(shown(h:ContentMenu()) == "Move to Layout|Remove from Tag|Cancel")
@@ -224,8 +224,9 @@ assert(changes == 4 and editor.layout.labels[1].row == 0)
 before = saved()
 assert(not editor:RemoveRow(5) and saved() == before and changes == 4)
 
--- A row holding items asks first, naming what leaves the tag; Cancel changes nothing
+-- Read the open row removal confirmation
 local function confirm() return app.windows.rowRemoveConfirm end
+-- Ask to remove the row under the pointer
 local function askToRemove(column, row)
     pointAt("sorted", column, row)
     choose(h:ContentMenu(), REMOVE)
@@ -259,7 +260,7 @@ assert(lines() == "3001 3003", lines())
 assert(has(keys.axe2) and editor.layout.labels[1] == nil)
 assert(editor:Undo() and saved() == before)
 
--- A confirmation goes stale after any save or another tag, and then removes nothing
+-- Check that a changed layout invalidates pending removal
 local function staleConfirm(change)
     local window = askToRemove(2, 1)
     change()
@@ -352,9 +353,10 @@ h:Tick(2)
 local view = TagLayouts.Render(store.data.tags.gear.rows, 10)
 assert(view.slots[scrolled * 10 + 1].kind == "blank" and view.slots[(scrolled + 1) * 10 + 1].kind == "item")
 
--- Add label above or below asks for text and puts the label at that row, in one undo step
--- Labels drawn on the grid stay draggable, and New label adds at the selection or the end
+-- Add labels through row menus or the current selection
+-- Keep each addition draggable and undoable
 resetGear()
+-- List the grid rows containing labels
 local function labelRows()
     local found = {}
     for _, label in ipairs(TagLayouts.Render(store.data.tags.gear.rows, 10).labels) do
@@ -414,7 +416,7 @@ assert(saved() == before and not stalePrompt.closed)
 Harness.Click(stalePrompt.window.content, "Cancel")
 editor:SelectTag("gear")
 
--- Stale menus do nothing: a save, another tag, a drag, a closed or reopened editor
+-- Check that changed editor state invalidates a menu
 local function staleAfter(change)
     resetGear()
     pointAt("sorted", 0, 1)

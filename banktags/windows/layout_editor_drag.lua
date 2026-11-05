@@ -39,9 +39,7 @@ function LayoutEditorDrag:OnSearchList(x, y)
         and y >= top and y < top + Size.SEARCH_LIST_HEIGHT
 end
 
--- Scroll the list a surface covers, or during a drag the one under the pointer
--- The pressed surface stretches across both panes
--- Returns false once something scrolled, as PrettyUI's own wheel does
+-- Scroll the pane under the pointer during a drag
 function LayoutEditorDrag:ScrollWheel(delta, kind)
     if self.drag ~= nil then
         local x, y = self:ContentPointer()
@@ -69,8 +67,7 @@ function LayoutEditorDrag:OwnsDrag(surface)
     return self.drag ~= nil and self.drag.sourceSurface == surface
 end
 
--- Pass a surface's press, drag, release, and wheel to the editor
--- Each surface's origin stays at the editor's origin, inside a movable clip
+-- Pass native pointer events to the editor
 function LayoutEditorDrag:BindDragSurface(surface, kind, onPress)
     -- Keep the originally pressed surface as the owner
     local function remember(x, y)
@@ -85,15 +82,18 @@ function LayoutEditorDrag:BindDragSurface(surface, kind, onPress)
     end
     surface:Subscribe(ui.Hook.ONMOUSEOVER, follow)
     surface:Subscribe(ui.Hook.ONMOUSEREPEAT, follow)
+    -- Follow holds only on the surface owning this drag
     surface:Subscribe(ui.Hook.ONHOLD, function(component, x, y)
         if self:OwnsDrag(surface) then follow(component, x, y) end
         return false
     end)
+    -- Forget the hover point when its surface is left
     surface:Subscribe(ui.Hook.ONMOUSELEAVE, function()
         if self.pointerSurface == surface then self.pointerSurface = nil end
         -- Visibility is resolved once on the logic tick, after native hover settles
         return true
     end)
+    -- Start a press in the surface's fixed coordinates
     surface:Subscribe(ui.Hook.ONCLICK, function(_, x, y)
         if self.drag ~= nil then return false end
         if surface.hidden then return true end
@@ -107,16 +107,18 @@ function LayoutEditorDrag:BindDragSurface(surface, kind, onPress)
         if self:OwnsDrag(surface) and x ~= nil then self:UpdateDragAt(x, y) end
         return false
     end)
+    -- Commit the owning surface's drag at its release point
     surface:Subscribe(ui.Hook.ONRELEASE, function(_, x, y)
         if not self:OwnsDrag(surface) then return false end
         remember(x, y)
         return self:CommitDrag()
     end)
-    -- Its destination and end point are not the pointer, so it drops at the latest native point
+    -- Drop using the latest hover point, not the completion arguments
     surface:Subscribe(ui.Hook.ONDRAGCOMPLETE, function()
         if self:OwnsDrag(surface) then self:CommitDrag() end
         return false
     end)
+    -- Pass wheel movement to the appropriate pane
     surface:Subscribe(ui.Hook.ONSCROLLWHEEL, function(_, delta)
         return self:ScrollWheel(delta, kind)
     end)
@@ -140,6 +142,7 @@ function LayoutEditorDrag:CreateDragSurfaces()
     for _, pane in pairs(self.panes) do
         local surface = self:CreateDragSurface(pane.name)
         pane.surface = surface
+        -- Select or drag the item or label pressed here
         self:BindDragSurface(surface, pane.name, function(x, y)
             -- A press here takes focus from any text field
             self.keysOnGrid = true
@@ -150,12 +153,13 @@ function LayoutEditorDrag:CreateDragSurfaces()
         end)
     end
     self.searchDragSurface = self:CreateDragSurface("search")
+    -- Begin dragging the search result pressed here
     self:BindDragSurface(self.searchDragSurface, "search", function(_, y)
         return self:BeginSearchDrag(self:SearchSurfaceResult(y))
     end)
 end
 
--- Return the latest native point in editor content units, or nil once the pointer left
+-- Read the latest pointer position within the editor
 function LayoutEditorDrag:ContentPointer()
     local surface = self.pointerSurface
     if surface == nil or surface.hidden or surface.visibleGlobal == false then return nil, nil end
@@ -194,8 +198,7 @@ function LayoutEditorDrag:StartItemDrag(drag, objectID, absentIsPlaceholder)
     return self:StartDrag(drag, ghost, Size.ITEM_WIDTH, Size.ITEM_HEIGHT)
 end
 
--- Start dragging a pane's item or the group it is in
--- Shift-click adds or removes a sorted item; an empty cell clears the selection
+-- Select an item or begin dragging its group
 function LayoutEditorDrag:BeginCenterDrag(pane, index)
     local slot = index ~= nil and pane.slots[index] or nil
     local shift = Keyboard.IsShiftDown()
@@ -224,13 +227,13 @@ function LayoutEditorDrag:BeginCenterDrag(pane, index)
         slot.objectID, true)
 end
 
--- Save a moved item; a plain click stays a selection
--- A sorted cell takes the item; Unsorted takes only a sorted item
+-- Save the item in Layout or Unsorted
 function LayoutEditorDrag:FinishCenterDrag(drag, x, y)
     local pane, paneX, paneY = self:PaneAt(x, y)
     if pane ~= nil and pane.name == "sorted" then
         local destination = self:SlotIndexAt(pane, paneX, paneY)
         if destination == nil then return end
+        -- Save the item's new position as one undo step
         self:SaveEdit("Could not save the layout position.", function()
             return self.store:MoveLayoutItem(self.selectedTag, drag.layoutKey, destination, Size.CENTER_COLUMNS)
         end)
@@ -265,7 +268,7 @@ function LayoutEditorDrag:UpdateDragAt(x, y)
     drag.ghost:MoveToFront()
 end
 
--- Find the sorted grid row under a content point; labels stay out of Unsorted
+-- Find the sorted row under an editor point
 function LayoutEditorDrag:RowFromContentPoint(x, y)
     local pane, paneX, paneY = self:PaneAt(x, y)
     if pane == nil or pane.name ~= "sorted" then return nil end
@@ -301,11 +304,12 @@ function LayoutEditorDrag:BeginLabelDrag(fromRow)
         Size.LABEL_GHOST_WIDTH, Size.LABEL_GHOST_HEIGHT)
 end
 
--- Drop a label: rename it in place, or move it to another row
+-- Rename a label in place or move it
 function LayoutEditorDrag:FinishLabelDrag(drag, x, y)
     local row = self:RowFromContentPoint(x, y)
     if row == nil then return end
     if row == drag.fromRow then return self:EditLabel(row) end
+    -- Save the label's new row as one undo step
     self:SaveEdit("Could not move the label.", function()
         return self.store:MoveLabel(self.selectedTag, drag.fromRow, row, Size.CENTER_COLUMNS)
     end)
@@ -318,7 +322,7 @@ function LayoutEditorDrag:FinishSearchDrag(drag, x, y)
     if destination ~= nil then self:AddCatalogResult(drag.result, destination) end
 end
 
--- Drop the active drag at the latest native point, or cancel without one
+-- Finish the drag at the latest native pointer position
 function LayoutEditorDrag:CommitDrag()
     local drag = self.drag
     local x, y = self:ContentPointer()

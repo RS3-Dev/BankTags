@@ -1,9 +1,8 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 local BankGrid = require("banktags/ui/bank_grid")
 
--- Press Delete, Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+Y, and the arrows in the layout editor over a bank Bank Core reports
--- Key events use the documented payload and native modifier enum
--- FAKE HOST: stand-in key events, keyboard, menus, and focus, not the game client
+-- Check editor shortcuts with native key events and modifiers
+-- FAKE HOST: stand-in keyboard, menus, and focus
 
 local Harness = require("tools/test_support/tags_harness")
 local Geometry = require("banktags/ui/geometry")
@@ -57,7 +56,7 @@ local GAME = { DELETE = 101, BACKSPACE = 85, C = 66, V = 67, Z = 64, Y = 37, A =
 local SYSTEM = { [101] = 46, [85] = 8, [66] = 67, [67] = 86, [64] = 90, [37] = 89, [48] = 65, [82] = 17,
     [96] = 37, [97] = 39, [98] = 38, [99] = 40 }
 local NONE, SHIFT, CONTROL, ALT = 0, 1, 2, 4
--- Send one KeyDown as the client does, optionally as the OS's held-key repeat
+-- Send a key press, optionally as a held-key repeat
 local function press(gameKey, modifiers, isRepeat)
     -- General ONKEY hooks are delivered to visible fields even without focus
     for _, field in ipairs({ editor.itemSearch.root }) do
@@ -66,12 +65,14 @@ local function press(gameKey, modifiers, isRepeat)
     listener("KeyDown")({ isRepeat = isRepeat == true, gameKey = gameKey, systemKey = SYSTEM[gameKey],
         modifiers = modifiers, timestamp = 1000 })
 end
--- Press a key with Ctrl held, as a user does: Ctrl first, then the key, both with Ctrl's bit
+-- Press a key while holding Control
 local function controlKey(gameKey)
     press(GAME.CONTROL, CONTROL)
     press(gameKey, CONTROL)
 end
+-- Press the editor's Undo shortcut
 local function undo() controlKey(GAME.Z) end
+-- Press the editor's Redo shortcut
 local function redo() controlKey(GAME.Y) end
 
 -- Point at a pane's grid cell through its scroll
@@ -82,7 +83,7 @@ local function pointAt(paneName, column, row)
     h:PointEditor(pane.x + x, pane.y + y)
     return x, y
 end
--- Press and release on a pane's grid cell, which selects its item or the empty cell
+-- Select an item or empty cell with a click
 local function clickSlot(paneName, column, row)
     local pane = editor.panes[paneName]
     h:PressEditor(pane.surface, pointAt(paneName, column, row))
@@ -96,6 +97,7 @@ local function whipCopies()
     end
     return count
 end
+-- Select the whip in the editor
 local function selectWhip()
     clickSlot("unsorted", 0, 0)
     assert(editor.selectedLayoutKey == WHIP)
@@ -123,7 +125,9 @@ local function findSlot(layoutKey)
     end
     return nil
 end
+-- Encode the current tag data for comparison
 local function saved() return Json.encode(store.data) end
+-- Check whether a slot remains in the tag
 local function hasSlot(layoutKey) return findSlot(layoutKey) ~= nil end
 
 -- Shortcuts listen only while the editor is open

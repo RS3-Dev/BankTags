@@ -6,7 +6,7 @@ local copy = TagRules.copy
 
 local TagStoreLayouts = {}
 
--- Write slots at grid indexes, giving each new line below the rows its own row
+-- Write grid cells, adding rows below the layout
 local function writeCells(rows, view, writes)
     local columns, firstAdded = view.columns, #rows + 1
     for index, slot in pairs(writes) do
@@ -24,8 +24,7 @@ local function writeCells(rows, view, writes)
     end
 end
 
--- Lay a tag out for the editor: its grid slots, Unsorted items, labels, and lines used
--- Each item's layout key finds its grid index or Unsorted position
+-- Arrange saved items and labels for the editor
 function TagStoreLayouts:EditorLayout(tag, columnCount)
     local record = self.data.tags[tag]
     local view = TagLayouts.Render(record ~= nil and record.rows or {}, columnCount)
@@ -58,8 +57,7 @@ function TagStoreLayouts:GetTaggedItems(tag)
     return items
 end
 
--- Place an item at a grid index of the rows, swapping out any item there
--- Indexes past the rows add rows; Unsorted items are not on this grid
+-- Move an item, swapping with its destination
 function TagStoreLayouts:MoveLayoutItem(tag, layoutKey, destinationIndex, columnCount)
     destinationIndex = math.tointeger(tonumber(destinationIndex))
     if self.data.tags[tag] == nil or destinationIndex == nil or destinationIndex < 1 then
@@ -119,8 +117,7 @@ function TagStoreLayouts:MoveLayoutItem(tag, layoutKey, destinationIndex, column
     return saved, reason, saved
 end
 
--- Find where arranged items land when one of them moves to a grid index
--- The others keep their row and column offsets; nothing wraps across the edge
+-- Check where a group would land without changing it
 function TagStoreLayouts:PlanLayoutItemsMove(tag, layoutKeys, anchorKey, destinationIndex, columnCount)
     destinationIndex = math.tointeger(tonumber(destinationIndex))
     local record = self.data.tags[tag]
@@ -166,8 +163,7 @@ function TagStoreLayouts:PlanLayoutItemsMove(tag, layoutKeys, anchorKey, destina
     return plan, nil
 end
 
--- Move arranged items together in one save, keeping their offsets
--- Whatever sat where they land fills the cells they left, in reading order
+-- Move a group, filling vacated cells with displaced items
 function TagStoreLayouts:MoveLayoutItems(tag, layoutKeys, anchorKey, destinationIndex, columnCount)
     local plan, reason = self:PlanLayoutItemsMove(tag, layoutKeys, anchorKey, destinationIndex, columnCount)
     if plan == nil then return false, reason, false end
@@ -197,8 +193,7 @@ function TagStoreLayouts:MoveLayoutItems(tag, layoutKeys, anchorKey, destination
     return saved, saveReason, saved
 end
 
--- Insert an empty grid row at a line, moving that line and every one after it down
--- A row wrapped across the line is split there; Unsorted is untouched
+-- Insert a grid row, splitting wrapped rows when needed
 function TagStoreLayouts:InsertLayoutRow(tag, line, columnCount)
     line = math.tointeger(tonumber(line))
     if self.data.tags[tag] == nil or line == nil or line < 0 then
@@ -227,8 +222,7 @@ function TagStoreLayouts:InsertLayoutRow(tag, line, columnCount)
     return self:Commit(nextData, "Could not save the layout.")
 end
 
--- Count what a laid-out line holds: its label, items, and reserved slots
--- Lines past the layout hold nothing, so this returns nil for them
+-- Count a grid line's items, label, and reserved slots
 function TagStoreLayouts:LayoutLineContents(tag, line, columnCount)
     local record = self.data.tags[tag]
     line = math.tointeger(tonumber(line))
@@ -251,8 +245,7 @@ function TagStoreLayouts:LayoutLineContents(tag, line, columnCount)
     return contents
 end
 
--- Remove one grid line and everything on it, moving every line after it up
--- A label line takes only the label; a wrapped row loses only that line; Unsorted is untouched
+-- Remove one grid line and its contents
 function TagStoreLayouts:RemoveLayoutRow(tag, line, columnCount)
     if self:LayoutLineContents(tag, line, columnCount) == nil then
         return false, "There is no row there to remove."
@@ -274,14 +267,14 @@ function TagStoreLayouts:RemoveLayoutRow(tag, line, columnCount)
     return self:Commit(nextData, "Could not save the layout.")
 end
 
--- Copy a tag's rows and Unsorted list, the part the layout editor changes
+-- Copy the rows and Unsorted items for undo
 function TagStoreLayouts:LayoutState(tag)
     local record = self.data.tags[tag]
     if record == nil then return nil end
     return { rows = copy(record.rows), unsorted = copy(record.unsorted) }
 end
 
--- Put back a tag's rows and Unsorted list, keeping its name, icon, and folder
+-- Restore rows and Unsorted items without changing tag settings
 function TagStoreLayouts:RestoreLayoutState(tag, state)
     if self.data.tags[tag] == nil then return false, "The tag no longer exists." end
     local nextData = copy(self.data)
@@ -290,23 +283,25 @@ function TagStoreLayouts:RestoreLayoutState(tag, state)
     return self:Commit(nextData, "Could not save the layout.")
 end
 
--- Move one arranged item to Unsorted, leaving a blank in its place
-function TagStoreLayouts:UnarrangeLayoutItem(tag, layoutKey)
-    local record = self.data.tags[tag]
-    for _, slot in ipairs(record ~= nil and TagLayouts.RowSlots(record.rows) or {}) do
-        if slot.layoutKey == layoutKey then
-            local nextData = copy(self.data)
-            local moved = self.TakeSlot(nextData.tags[tag], layoutKey)
-            local unsorted = nextData.tags[tag].unsorted
-            unsorted[#unsorted + 1] = moved
-            return self:Commit(nextData, "Could not save the layout.")
-        end
+-- Move selected layout items to Unsorted together
+function TagStoreLayouts:UnarrangeLayoutItems(tag, layoutKeys)
+    if self.data.tags[tag] == nil or #layoutKeys == 0 then
+        return false, "The item is no longer in the preserved layout."
     end
-    return false, "The item is no longer in the preserved layout."
+    local nextData = copy(self.data)
+    local record = nextData.tags[tag]
+    local moved = self.TakeSlots(record, layoutKeys, true)
+    if #moved ~= #layoutKeys then return false, "The item is no longer in the preserved layout." end
+    for _, slot in ipairs(moved) do record.unsorted[#record.unsorted + 1] = slot end
+    return self:Commit(nextData, "Could not save the layout.")
 end
 
--- Add slots for copied objects, the first copied item at a grid index
--- Each keeps its line and column offset; every cell they take must be empty, or none is added
+-- Move one layout item to Unsorted
+function TagStoreLayouts:UnarrangeLayoutItem(tag, layoutKey)
+    return self:UnarrangeLayoutItems(tag, { layoutKey })
+end
+
+-- Paste item copies only when every destination is empty
 function TagStoreLayouts:PasteLayoutItems(tag, items, destinationIndex, columnCount)
     destinationIndex = math.tointeger(tonumber(destinationIndex))
     if self.data.tags[tag] == nil or destinationIndex == nil or destinationIndex < 1

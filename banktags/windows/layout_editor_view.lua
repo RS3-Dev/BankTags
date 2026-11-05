@@ -1,4 +1,4 @@
--- Build and render the layout editor's columns, cells, item sprites, and selection marks.
+-- Draw the layout editor's panels, items, and selection outlines
 
 local NativeUi = require("banktags/ui/native_ui")
 local BankControls = require("banktags/ui/bank_controls")
@@ -21,8 +21,7 @@ local GRID_SLOT_SPRITE = id.Sprite.RS3_ICON_SLOT_40PX_1
 local ITEM_X = (Size.GRID_SLOT_SIZE - Size.ITEM_WIDTH) // 2
 local ITEM_Y = (Size.GRID_SLOT_SIZE - Size.ITEM_HEIGHT) // 2
 
--- Remember each object's best stack, restyling the drawn items
--- Quantities change without a layout change, so the grids keep their sprites
+-- Update item quantities without rebuilding the grids
 function LayoutEditorView:SetBankItems(items)
     local styles = {}
     for _, item in ipairs(items) do
@@ -55,7 +54,7 @@ function LayoutEditorView:StyleItem(sprite, objectID, absentIsPlaceholder)
     sprite.alpha = style.placeholder and PLACEHOLDER_ALPHA or 1
 end
 
--- Draw an item with its client sprite, as the native bank does
+-- Draw an item using its native bank sprite
 function LayoutEditorView:ItemSprite(parent, objectID, absentIsPlaceholder)
     local sprite = ui.Sprite.new(parent)
     sprite:SetSize(Size.ITEM_WIDTH, Size.ITEM_HEIGHT)
@@ -66,14 +65,13 @@ function LayoutEditorView:ItemSprite(parent, objectID, absentIsPlaceholder)
     return sprite
 end
 
--- Draw a column's item area under its header, one surface inside one frame
+-- Draw the frame and background around an item pane
 local function itemArea(parent, width, y)
     rectangle(parent, 0, y, width, Size.AREA_HEIGHT, Theme.VIEW_BACKGROUND, true)
     rectangle(parent, 0, y, width, Size.AREA_HEIGHT, FRAME, false)
 end
 
--- Create one scrolling grid in a column, with its own columns
--- Marks outline cells above the grid's drawn cells
+-- Create an independently scrolling item grid
 function LayoutEditorView:CreatePane(name, parent, y, columnX, width, columns)
     local view = prettyui.SimpleView.new(parent, {
         x = Size.VIEW_INSET,
@@ -110,12 +108,13 @@ local function panelHeading(parent, width, text)
     return heading
 end
 
--- Bank tabs replace the layout title; the left tray keeps its heading.
+-- Draw the Unsorted heading and Layout tag tabs
 function LayoutEditorView:CreateHeader()
     self.unsortedTitle = panelHeading(self.unsortedPanel, Size.UNSORTED_WIDTH, "Unsorted")
     self.tagTabs = TagTabs.new(self.content, {
         x = Size.CENTER_X + Size.TABS_INSET, y = Size.TABS_Y,
         width = Size.CENTER_WIDTH - 2 * Size.TABS_INSET,
+        -- Release grid shortcuts and follow the chosen tag
         onChange = function(_, tag)
             self.keysOnGrid = false
             self:HideItemName()
@@ -186,12 +185,12 @@ function LayoutEditorView:CreatePanels()
     self.unsortedPanel = Parts.layer(self.content, Size.UNSORTED_X, Size.PANEL_TOP,
         Size.UNSORTED_WIDTH, Size.COLUMN_HEIGHT)
     for _, panel in ipairs({ self.searchPanel, self.centerPanel, self.unsortedPanel }) do
-        -- Bank tabs sit directly on the window background.
+        -- Bank tabs sit directly on the window background
         if panel ~= self.centerPanel then
             tiledSprite(panel, 0, 0, panel.width, Size.COLUMN_HEIGHT, NativeUi.SPRITES.PANEL_BACKGROUND)
             rectangle(panel, 0, 0, panel.width, Size.COLUMN_HEIGHT, FRAME, false)
         end
-        -- Core's sidebar keeps its tiled 8082 background visible through the body.
+        -- Keep the sidebar's tiled background visible
         if panel ~= self.searchPanel then itemArea(panel, panel.width, Size.TAB_HEADER) end
     end
     self:CreateHeader()
@@ -208,8 +207,7 @@ function LayoutEditorView:CreatePanels()
     self:CreateItemNames()
 end
 
--- Layout keeps blank drop rows; Unsorted draws only rows that contain items.
--- The previous layer goes with everything drawn on it
+-- Rebuild one grid and keep empty layout drop rows
 function LayoutEditorView:DrawPane(pane, rowCount, labels)
     local columns = pane.columns
     pane.labels = labels
@@ -251,7 +249,7 @@ function LayoutEditorView:DrawPane(pane, rowCount, labels)
     pane.marks:MoveToFront()
 end
 
--- Outline the selected items and the paste cell, keeping the drawn grids
+-- Reuse outlines to show selected items and paste cells
 function LayoutEditorView:ShowSelection()
     for name, pane in pairs(self.panes) do
         local count = 0
@@ -275,13 +273,13 @@ function LayoutEditorView:ShowSelection()
     end
 end
 
--- Return the grid row under a point in a pane's view, counting its scroll
+-- Find a grid row, allowing for the pane's scroll
 function LayoutEditorView:RowAt(pane, x, y)
     if x < pane.gridLeft or y < 0 or x >= pane.width or y >= pane.height then return nil end
     return BankGrid.RowAtContentY(y + pane.view.scrollY, pane.labels)
 end
 
--- Return the label row under a pane point; only the sorted pane has labels
+-- Find a label row within the sorted pane
 function LayoutEditorView:LabelRowAt(pane, x, y)
     if pane.name ~= "sorted" then return nil end
     local row = self:RowAt(pane, x, y)
@@ -291,7 +289,7 @@ function LayoutEditorView:LabelRowAt(pane, x, y)
     return nil
 end
 
--- Convert a pane point to its grid slot, skipping label rows
+-- Find an item cell while skipping label rows
 function LayoutEditorView:SlotIndexAt(pane, x, y)
     local row = self:RowAt(pane, x, y)
     if row == nil or self:LabelRowAt(pane, x, y) ~= nil then return nil end
@@ -300,7 +298,7 @@ function LayoutEditorView:SlotIndexAt(pane, x, y)
     return row * pane.columns + column + 1
 end
 
--- Find the shown pane under an editor content point, and the point in its view
+-- Find a visible pane and the point within it
 function LayoutEditorView:PaneAt(x, y)
     for _, pane in pairs(self.panes) do
         if not pane.hidden and x >= pane.x and x < pane.x + pane.width

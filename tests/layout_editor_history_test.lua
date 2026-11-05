@@ -1,8 +1,8 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 local BankGrid = require("banktags/ui/bank_grid")
 
--- Move sorted items with the arrow keys, once turned on, and undo or redo layout edits with Ctrl+Z and Ctrl+Y
--- FAKE HOST: stand-in key events, keyboard, pointer, and drags, not the game client
+-- Check optional arrow movement, undo, and redo
+-- FAKE HOST: stand-in keyboard, pointer, and drags
 
 local Harness = require("tools/test_support/tags_harness")
 local Geometry = require("banktags/ui/geometry")
@@ -22,13 +22,15 @@ local TagLayouts = h:TagsModule("banktags/tags/tag_layouts")
 local store = app.store
 -- Each object's first slot key, and the second slot of object 1
 local keys, secondOne = {}, nil
+-- Create a saved item slot for the test
 local function item(objectID)
     local slot = TagLayouts.Item(objectID)
     keys[objectID] = keys[objectID] or slot.layoutKey
     return slot
 end
+-- Build a layout row from the supplied slots
 local function row(...) return { kind = "row", slots = { ... } } end
--- Line 0 holds 1 2 3 4, line 1 is a label, line 2 holds 5 and a second 1; 99 is unsorted
+-- Restore the test's original rows and Unsorted items
 local function resetGear()
     for _, tag in ipairs({ "gear", "food" }) do
         if store.data.tags[tag] ~= nil then assert(store:DeleteTag(tag)) end
@@ -80,19 +82,21 @@ end
 -- GameKey values from the client docs
 local LEFT, RIGHT, UP, DOWN, Z, Y, C, V, DELETE = 96, 97, 98, 99, 64, 37, 66, 67, 101
 local NONE, SHIFT_HELD, CONTROL_HELD, CONTROL_SHIFT = 0, 1, 2, 3
--- Send a key press as the client's KeyDown payload, optionally as the OS's held-key repeat
+-- Send a key press, optionally as a held-key repeat
 local function press(gameKey, modifiers, isRepeat)
     listener("KeyDown")({ gameKey = gameKey, systemKey = 0, modifiers = modifiers or NONE,
         isRepeat = isRepeat == true, timestamp = 0 })
 end
--- The editor acts on presses alone, so a tap is one press
+-- Send a single keyboard press
 local function tap(gameKey, modifiers)
     press(gameKey, modifiers)
 end
+-- Press the editor's Undo shortcut
 local function undo() tap(Z, CONTROL_HELD) end
+-- Press the editor's Redo shortcut
 local function redo() tap(Y, CONTROL_HELD) end
 
--- Point at a pane's grid slot, counted from zero, through its scroll
+-- Point at a pane cell through its scroll
 local function pointAt(paneName, column, line)
     local left, top = Geometry.absolutePosition(editor.content)
     local pane = editor.panes[paneName]
@@ -100,20 +104,25 @@ local function pointAt(paneName, column, line)
     h:PointEditor(pane.x + x, pane.y + y)
     return x, y
 end
+-- Press the chosen pane's grid cell
 local function pressSlot(paneName, column, line)
     h:PressEditor(editor.panes[paneName].surface, pointAt(paneName, column, line))
 end
+-- Move the held pointer over another grid cell
 local function dragOver(paneName, column, line)
     pointAt(paneName, column, line)
     editor.panes.sorted.surface.hooks.drag()
 end
+-- Release the current pane drag
 local function releaseSlot(paneName)
     h:ReleaseEditor()
 end
+-- Press and release a grid cell
 local function click(paneName, column, line)
     pressSlot(paneName, column, line)
     releaseSlot(paneName)
 end
+-- Click a grid cell while holding Shift
 local function shiftClick(paneName, column, line)
     host.shiftDown = true
     click(paneName, column, line)
@@ -125,7 +134,7 @@ local function drag(fromPane, fromColumn, fromLine, toPane, toColumn, toLine)
     dragOver(toPane, toColumn, toLine)
     releaseSlot(fromPane)
 end
--- Describe the gear tag's lines as the editor lays them out, and its Unsorted items
+-- Describe the saved layout in reading order
 local function lines()
     local view = TagLayouts.Render(store.data.tags.gear.rows, COLUMNS)
     local out = {}
@@ -144,12 +153,14 @@ local function lines()
     for _, slot in ipairs(store.data.tags.gear.unsorted) do unsorted[#unsorted + 1] = tostring(slot.objectID) end
     return table.concat(out, " | ") .. " / " .. table.concat(unsorted, " ")
 end
--- The part of gear the editor changes: its rows and Unsorted items
+-- Copy the gear tag's rows and Unsorted items
 local function gearState()
     local record = store.data.tags.gear or store.data.tags.kit
     return Json.encode({ rows = record.rows, unsorted = record.unsorted })
 end
+-- Encode the current tag data for comparison
 local function saved() return Json.encode(store.data) end
+-- Check the items in the current group selection
 local function grouped(...)
     local wanted = { ... }
     if editor:GroupCount() ~= #wanted then return false end
@@ -244,6 +255,7 @@ assert(saved() == before and changes == 0 and editor.status.content == "")
 
 -- Every edit is one step; undo and redo walk back and forth through them
 local states, names = { gearState() }, {}
+-- Run an edit and check its undo and redo
 local function step(name, action)
     local count = changes
     action()

@@ -42,7 +42,7 @@ function Windows:Close(name)
     self:SyncEditorOverlays()
 end
 
--- Keep prompts, tag settings, and the sprite picker in front of the layout editor
+-- Keep editor dialogs and the tutorial in front
 function Windows:SyncEditorOverlays()
     if self.layoutEditor == nil then return end
     local overlays = {}
@@ -82,7 +82,7 @@ function Windows:OpenTextPrompt(options)
     self.textPrompt:Show()
 end
 
--- Ask for a folder name and file the tag under it
+-- Ask for a folder name and file the tag
 function Windows:OpenCreateFolderPrompt(tag)
     local app = self.app
     self:OpenTextPrompt({
@@ -91,10 +91,15 @@ function Windows:OpenCreateFolderPrompt(tag)
         placeholder = "Folder name",
         maxLength = TagRules.MAX_FOLDER_NAME,
         saveLabel = "Create",
+        -- Save the entered name only when accepted
         onSave = function(value)
-            local saved, folderKey, reason = app.store:CreateFolder(value, tag)
+            -- Save folder creation and expansion together
+            local saved, reason = app.store:SaveTogether(function()
+                local created, folderKey, problem = app.store:CreateFolder(value, tag)
+                if not created then return false, problem end
+                return app.store:SetFolderCollapsed(folderKey, false)
+            end)
             if not saved then return false, reason end
-            app.store:SetFolderCollapsed(folderKey, false)
             app:Changed()
             return true, nil
         end,
@@ -117,10 +122,12 @@ function Windows:OpenRenameFolderPrompt(folderKey)
         tag = folder.name,
         spriteObjectID = app.store:GetFolderSprite(folderKey),
         maxLength = TagRules.MAX_FOLDER_NAME,
+        -- Open a picker only for this settings editor
         onChooseSprite = function()
             if self.tagSettingsEditor ~= editor then return end
             self:OpenSpritePicker(editor, function(result) editor:SetSprite(result.objectId) end)
         end,
+        -- Save the folder's chosen name and icon
         onSave = function(value, spriteObjectID)
             local saved, _, reason = app.store:RenameFolder(folderKey, value, spriteObjectID)
             if not saved then return false, reason end
@@ -142,6 +149,7 @@ function Windows:OpenPageLabelPrompt(options)
         placeholder = "e.g. Weapons",
         maxLength = TagRules.MAX_LABEL_TEXT,
         saveLabel = options.text ~= nil and "Save" or "Add",
+        -- Save the entered name only when accepted
         onSave = function(value)
             if string.match(value, "%S") == nil then return false, "Enter the label text." end
             return options.onSave(value)
@@ -177,7 +185,7 @@ function Windows:OpenLayoutEditor(tag)
         onBankCheck = function() self:CheckBankBounds() end,
         onPromptLabel = function(options) self:OpenPageLabelPrompt(options) end,
         onConfirmRemoveRow = function(options) self:OpenRowRemoveConfirm(options) end,
-        -- A label prompt or row removal edits this editor's tag, so it closes too, even when reopening
+        -- Close pending row and label dialogs with their editor
         onClose = function(value)
             if self.layoutEditor == value then self.layoutEditor = nil end
             self:Close("textPrompt")
@@ -194,8 +202,7 @@ function Windows:TagRenamed(oldTag, newTag)
     if self.layoutEditor ~= nil then self.layoutEditor:TagRenamed(oldTag, newTag) end
 end
 
--- Move the editor with the bank, reopening it after a resize
--- The open editor calls this every few ticks, since Core reports no bank move
+-- Follow the bank and reopen the editor after resizing
 function Windows:CheckBankBounds()
     local editor = self.layoutEditor
     local bounds = editor ~= nil and self:BankBounds() or nil
@@ -212,8 +219,7 @@ function Windows:BankItemsChanged()
     if self.layoutEditor ~= nil then self.layoutEditor:SetBankItems(self.app:BankItems()) end
 end
 
--- Show store changes in the open editor and Import/Share
--- A tag names the only tag whose items or layout changed
+-- Refresh relevant editor items and share codes
 function Windows:StoreChanged(tag)
     if self.layoutEditor ~= nil then self.layoutEditor:StoreChanged(tag) end
     if self.importShare ~= nil then self.importShare:RefreshExports() end
@@ -231,6 +237,7 @@ function Windows:OpenTagDeleteConfirm(tag)
             .. "\"</col> from every tagged item?<br><br>Do you wish to continue?",
         confirmLabel = "Delete",
         failureText = "Could not delete the tag.",
+        -- Delete the tag and refresh its views
         onConfirm = function()
             local saved, reason = app.store:DeleteTag(tag)
             if not saved then return false, reason end
@@ -241,7 +248,7 @@ function Windows:OpenTagDeleteConfirm(tag)
     self.tagDeleteConfirm:Show()
 end
 
--- Ask before removing a layout editor row, in front of the editor
+-- Ask before removing a populated editor row
 function Windows:OpenRowRemoveConfirm(options)
     self:Close("rowRemoveConfirm")
     local parent = parentFor("row removal confirmation")
@@ -265,6 +272,7 @@ function Windows:OpenSpritePicker(owner, onSelected)
     self.spritePickerOwner = owner
     self.spritePicker = SpritePicker.new(parent, {
         bankItems = function() return self.app:BankItems() end,
+        -- Apply the icon only to the picker owner
         onSelect = function(result)
             if self.spritePickerOwner == owner then onSelected(result) end
         end,
@@ -284,10 +292,12 @@ function Windows:OpenTagSettings(tag, isNew, onSaved)
         title = isNew and "Create Bank Tag" or "Rename Bank Tag",
         tag = tag,
         spriteObjectID = not isNew and app.store:GetTagSprite(tag) or nil,
+        -- Open a picker only for this settings editor
         onChooseSprite = function()
             if self.tagSettingsEditor ~= editor then return end
             self:OpenSpritePicker(editor, function(result) editor:SetSprite(result.objectId) end)
         end,
+        -- Create or rename the tag with its chosen icon
         onSave = function(newName, spriteObjectID)
             local saved, finalName, reason
             if isNew then
@@ -306,7 +316,7 @@ function Windows:OpenTagSettings(tag, isNew, onSaved)
     self:SyncEditorOverlays()
 end
 
--- Open Import/Share
+-- Open the Import/Share window
 function Windows:OpenImportShare()
     local app = self.app
     self:Close("importShare")
@@ -316,13 +326,16 @@ function Windows:OpenImportShare()
     window = ImportShare.new(parent, {
         onGetTagExports = function() return app.store:TagExports() end,
         onGetFolders = function() return app.store:GetFolders() end,
+        -- Open an icon picker for the current import window
         onChooseImportSprite = function(onSelected)
             if self.importShare ~= window then return end
             self:OpenSpritePicker(window, function(result) onSelected(result.objectId) end)
         end,
+        -- Close the picker owned by this import window
         onClose = function()
             if self.spritePickerOwner == window then self:Close("spritePicker") end
         end,
+        -- Save the imported tags before refreshing their views
         onImport = function(source, overrides)
             local saved, summary, reason = app.store:ImportText(source, overrides)
             if not saved then return false, nil, reason end

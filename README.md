@@ -4,7 +4,7 @@ Bank Tags lets you group bank items into named tags and arrange them into your o
 
 ## Before you start
 
-Enable **PrettyUI**, **Bank Core**, and **Bank Tags** in the client's plugin manager. **RuneQL** is optional: it lets item and icon searches cover its full catalog. Without it, those searches cover your bank, exact item IDs, and config names.
+Enable **PrettyUI**, **Bank Core 1.5.0 or later**, and **Bank Tags** in the client's plugin manager. **RuneQL** is optional: it lets item and icon searches cover its full catalog. Without it, those searches cover your bank, exact item IDs, and config names.
 
 Open a bank and click **Bank Tags** on the left rail. There is no separate Bank Tags ribbon panel.
 
@@ -21,11 +21,11 @@ Opening an empty tag list offers an eight-step tutorial, starting with **New Tag
 
 Right-click a tag and choose **Select items**. Click bank items to add them to that tag. Click **Done** in the sidebar to finish. Select mode works in any bank tab.
 
-Items already in the tag have a gold outline during select mode. Adding another copy outlines its next stack, with stocked stacks before placeholders. Leaving select mode restores the items' normal appearance.
+Items already in the tag have a gold outline during select mode. Adding another copy outlines its next available stack, with stocked stacks before placeholders. Leaving select mode restores the items' normal appearance.
 
 You can also drag a bank item onto a tag's row in the sidebar to add it to that tag.
 
-A tag lists items, not particular stacks. Clicking an item that is already in the tag adds it again: the tag then shows that item's next stack too, with stacks that hold items first and placeholders after. An item listed more times than you have stacks shows as an empty placeholder.
+A tag lists items, not particular stacks. Clicking an item already in the tag adds another layout slot. Items that stack in the bank show the same stack in every slot. Other repeated items use their next available stack, with stocked stacks before placeholders; extra slots show an empty item picture.
 
 To remove an item, view the tag, right-click the item, and choose **Remove from**.
 
@@ -68,7 +68,7 @@ Click an item before using a shortcut. Click an empty layout cell to choose wher
 | Undo | Ctrl+Z | Reverses the last layout edit |
 | Redo | Ctrl+Y | Reapplies an undone edit |
 
-Pasting lists the same items again, so the tag shows each one's next stack; it does not duplicate real items. Every destination cell must be empty for a paste to succeed. **Cut is not implemented.**
+Pasting adds layout slots for the same items; it does not duplicate real items. Stackable items share their bank stack across slots, while other items use successive stacks. Every destination cell must be empty for a paste to succeed. **Cut is not implemented.**
 
 Undo keeps up to 50 steps for the current tag while the editor stays open. Switching tags or closing the editor clears undo and the clipboard. Renaming the tag keeps them. Changes made elsewhere to that tag end its undo history.
 
@@ -90,7 +90,7 @@ Sharing a tag shares its layout, labels, icon, and folder information, not bank 
 Open **Plugin Hub → Manage → Bank Tags → settings cog** to change tag icons, new-item placement, arrow-key movement, or debug logging.
 
 - **Nothing appears:** check that Bank Core and PrettyUI are enabled.
-- **Cannot open a tag:** the error appears at the top center of the bank, over its title. Close the preset selector, switch to the native All Items tab, and try again. A tag with more than 10,000 rows, labels, and items cannot be shown; remove some in the layout editor.
+- **Cannot open a tag:** the error appears at the top center of the bank, over its title. Close the preset selector, clear native bank search and filters, switch to All Items, and try again. These controls also close a shown tag; clearing them lets you select it again. A tag with more than 10,000 rows, labels, and items cannot be shown; remove some in the layout editor.
 - **Limited item search:** enable RuneQL for the full catalog.
 - **Shortcut does nothing:** close dialogs, click the grid, and release Shift/Alt before using Ctrl.
 - **Save error:** read the displayed message. Unreadable saved data is protected from being overwritten; do not delete it without a backup.

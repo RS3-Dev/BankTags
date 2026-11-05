@@ -21,19 +21,32 @@ App.__index = App
 local OPEN_REFUSALS = {
     not_all_items = 'Select "All Items" to view this tag.',
     preset_open = 'Close the preset selector to view this tag.',
+    search_active = "Clear the bank search to view this tag.",
+    filter_active = "Clear the bank filter to view this tag.",
     bank_closed = "Open your bank to view this tag.",
     busy = "The bank is still updating. Try again.",
 }
 -- Bank Tags' preferences draw on its own Plugin Hub settings page
 local SETTINGS_EVENT = Config.PLUGIN_REF .. "_settings"
 
--- Find Bank Core's API, trying the one passed in before the global copy
+-- Find the native state blocking tag pages
+local function bankStateBlocker(state)
+    if state == nil then return "stale" end
+    if not state.bankOpen then return "bank_closed" end
+    if state.presetOpen then return "preset_open" end
+    if state.searchActive then return "search_active" end
+    if state.filterActive then return "filter_active" end
+    if not state.viewAll then return "not_all_items" end
+    return nil
+end
+
+-- Find Bank Core's available public API
 local function findBank()
     local api = bankcore or rawget(_G, Config.CORE_API_KEY)
     return type(api) == "table" and type(api.Register) == "function" and api or nil
 end
 
--- Build the store, windows, tab, and import API before connecting to Bank Core
+-- Build the plugin's store, windows, and sidebar
 function App.new()
     local settings = Settings.load()
     DebugLog.SetEnabled(settings.enableDebug)
@@ -44,7 +57,7 @@ function App.new()
         settings = settings,
         -- This plugin's extension with Bank Core
         ext = nil,
-        -- The tag whose page was set last, counted by revision, with each page slot's layout key
+        -- The last page, its revision, and its item keys
         pageTag = nil,
         revision = 0,
         pageKeys = {},
@@ -66,7 +79,7 @@ function App.new()
     return app
 end
 
--- Draw preferences on the Plugin Hub settings page and connect to Bank Core if it runs
+-- Show preferences and connect to Bank Core
 function App:Start()
     if self.shutDown or self.started then return end
     self.started = true
@@ -87,6 +100,8 @@ function App:Connect()
         column = self.tab.callbacks,
         onClose = function() self.tab:Refresh() end,
         onBankItems = function() self:OnBankItems() end,
+        onBankStateChanged = function(state) self:OnBankStateChanged(state) end,
+        -- Stop bank tools when the bank closes
         onBankClose = function()
             self.nativeItems:Stop()
             self.tutorial:Stop(false)
@@ -99,6 +114,7 @@ function App:Connect()
         return false, reason
     end
     self.ext = ext
+    self:OnBankStateChanged(ext:GetBankState())
     self.nativeItems:Start()
     self.menus:Start()
     debugLog("Bank Tags connected to Bank Core")
@@ -122,7 +138,17 @@ function App:ShownTag()
     return self.ext ~= nil and self.ext:IsOpen() and self.pageTag or nil
 end
 
--- Read bank items, keeping the last good copy while Bank Core cannot read them
+-- Close tag pages when native controls restrict the bank
+function App:OnBankStateChanged(state)
+    local blocked = bankStateBlocker(state)
+    if blocked ~= nil and self.ext:IsOpen() then
+        self.ext:Close()
+        self.tab:Refresh()
+    end
+    return blocked
+end
+
+-- Refresh bank items when a new list is available
 function App:OnBankItems()
     if self.ext == nil then return end
     self.nativeItems:Start()
@@ -135,7 +161,7 @@ function App:OnBankItems()
     self.tutorial:Offer()
 end
 
--- Return the bank's items as last read, or an empty list
+-- Return the last known bank items
 function App:BankItems()
     return self.bankItems or {}
 end
@@ -147,8 +173,7 @@ function App:ShowStatus(text)
     self.tab:RefreshStatus()
 end
 
--- Give Bank Core a tag's page, or explain why it cannot be shown
--- Each page set is a new revision, so menu entries offered over the old one are dropped
+-- Set a tag's page and retire old menu actions
 function App:SetTagPage(tag)
     local page, keys = TagPage.Build(self.store, tag)
     if page == nil then return false, keys end
@@ -165,6 +190,11 @@ end
 -- Show a tag, explaining refusals over the bank title
 function App:ShowTag(tag)
     if self.ext == nil or self.store.data.tags[tag] == nil then return false end
+    local blocked = self:OnBankStateChanged(self.ext:GetBankState())
+    if blocked ~= nil then
+        self:ShowStatus(OPEN_REFUSALS[blocked] or ("This tag could not be shown (" .. blocked .. ")."))
+        return false
+    end
     -- Core copies native sprite styles when opening a page
     self.nativeItems:RestoreHighlights()
     local shown, problem = self:SetTagPage(tag)
@@ -183,7 +213,7 @@ function App:ShowTag(tag)
     return shown
 end
 
--- Show a tag, or return to the bank's own view when that tag is already shown
+-- Toggle between a tag and the normal bank
 function App:ToggleTag(tag)
     if self:ShownTag() == tag then
         local left = self.ext:Close()
@@ -193,14 +223,13 @@ function App:ToggleTag(tag)
     return self:ShowTag(tag)
 end
 
--- Refresh what shows the store
--- A tag names the only tag whose items or layout changed; nil means anything may have
+-- Refresh views affected by a saved change
 function App:Changed(tag)
     -- The Tags tab shows only tag names and folders
     if tag == nil then self.tab:Refresh() end
     self.windows:StoreChanged(tag)
     local shown = self:ShownTag()
-    -- Redraw the shown tag in place, or leave it once it is gone or too large to show
+    -- Refresh the shown tag or close an unavailable page
     if shown ~= nil and (tag == nil or tag == shown) then
         local set, problem = false, nil
         if self.store.data.tags[shown] ~= nil then set, problem = self:SetTagPage(shown) end
@@ -250,25 +279,33 @@ end
 function App:ToggleFolder(folderKey)
     local folder = self.store:GetFolder(folderKey)
     if folder == nil then return false end
-    self.store:SetFolderCollapsed(folderKey, not folder.collapsed)
+    local saved, reason = self.store:SetFolderCollapsed(folderKey, not folder.collapsed)
+    if not saved then
+        self:ShowStatus(reason)
+        return false
+    end
     self:Changed()
     return true
 end
 
--- File a tag under a folder, or ungroup it when the folder key is nil
+-- Move a tag and expand its destination folder
 function App:MoveTagToFolder(tag, folderKey)
-    local saved, reason = self.store:SetTagFolder(tag, folderKey)
+    -- Save the move and folder expansion together
+    local saved, reason = self.store:SaveTogether(function()
+        local moved, problem = self.store:SetTagFolder(tag, folderKey)
+        if not moved then return false, problem end
+        if folderKey ~= nil then return self.store:SetFolderCollapsed(folderKey, false) end
+        return true
+    end)
     if not saved then
         self:ShowStatus(tostring(reason))
         return false
     end
-    -- Expand the destination so the moved tag stays visible
-    if folderKey ~= nil then self.store:SetFolderCollapsed(folderKey, false) end
     self:Changed()
     return true
 end
 
--- Move a tag or folder in the Tags tab, saving the new order once
+-- Move a sidebar row and save its order
 function App:MoveSidebarEntry(source, target, after)
     local saved, reason = self.store:MoveSidebarEntry(source, target, after)
     if not saved then
@@ -325,12 +362,13 @@ end
 function App:Shutdown()
     if self.shutDown then return end
     self.shutDown = true
-    -- Clean up one part, logging a failure so the others still run
+    -- Release one part while allowing other cleanup to continue
     local function cleanup(label, action)
         local ok, message = pcall(action)
         if not ok then debugLog("Bank Tags shutdown could not clean ", label, ": ", message) end
     end
     cleanup("select mode", function() self.select:Forget() end)
+    -- Release the settings listener and controls together
     cleanup("settings", function()
         Event.SettingsLayerReady.Unsubscribe(SETTINGS_EVENT)
         self:DestroySettings()

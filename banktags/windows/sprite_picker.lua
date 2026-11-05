@@ -62,6 +62,7 @@ function SpritePicker.new(parent, options)
         placeholder = "Search item names...",
         onSubmit = function(_, value) self:RunSearch(value) end,
     })
+    -- Search using the text currently entered
     self.button = prettyui.SimpleButton.new(content, "Search", function()
         self:RunSearch(self.field:GetText())
     end, {
@@ -136,14 +137,17 @@ function SpritePicker:ShowResults(results, totalMatches, limited)
             hit:MoveToFront()
             local tooltipText = tostring(result.displayName)
             local tooltip = prettyui.Tooltip.attach(slot.root, self.grid.root, tooltipText)
+            -- Show the hovered search item's name
             hit:Subscribe(ui.Hook.ONMOUSEOVER, function()
                 tooltip:Show()
                 return true
             end)
+            -- Hide the name when the pointer leaves
             hit:Subscribe(ui.Hook.ONMOUSELEAVE, function()
                 tooltip:Hide()
                 return true
             end)
+            -- Choose the item icon and close the picker
             hit:Subscribe(ui.Hook.ONCLICK, function()
                 if self.onSelect ~= nil then self.onSelect(result) end
                 if self.window ~= nil then self.window:Close() end

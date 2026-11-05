@@ -1,8 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Drag Tags rows to reorder them, as a player would
--- FAKE HOST: stand-in loader, components, mouse, and menus, not the game client
--- The client's own event order and pointer capture during a hold are not modelled
+-- Check sidebar row reordering through drag gestures
+-- FAKE HOST: client event order and held-pointer capture need verification
 
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("sidebar_drag")
@@ -38,15 +37,18 @@ Chunks.Write = function(...)
     return write(...)
 end
 
+-- Read the currently mounted tag list
 local function tagList() return app.tab.controls.list end
+-- Read the tags in their current sidebar order
 local function order() return table.concat(app.store:AllTags(), ",") end
+-- List the currently drawn sidebar row names
 local function rowIDs()
     local ids = {}
     for _, row in ipairs(tagList().list.rows) do ids[#ids + 1] = row.entry.id end
     return table.concat(ids, ",")
 end
 
--- Hover a row so the native hover event calibrates raw pixels, as the client does
+-- Calibrate the pointer by hovering a sidebar row
 local function hover(entryID)
     local row = tagList():RowFor(entryID)
     local x, y = Geometry.absolutePosition(row.root)
@@ -56,28 +58,27 @@ local function hover(entryID)
     row.root.hooks.mouserepeat(row.root, 20, 10)
 end
 
--- Put the raw pointer at a height in the list's rows
+-- Place the pointer at a height in the list
 local function pointAt(contentY, x)
     local list = tagList().list
     local left, top = Geometry.absolutePosition(list.viewport)
     h.bankHost.mouse = { x = (left + (x or 40)) * rawScale, y = (top + contentY - list.scrollY) * rawScale }
 end
 
--- Press a row through PrettyUI's own row click, at a height in the rows
+-- Press a sidebar row through its own click handler
 local function press(entryID, contentY)
     pointAt(contentY)
     assert(tagList().list:Click(entryID))
     return tagList():RowFor(entryID).root
 end
 
--- Hold the pressed row with the pointer at a height in the rows
+-- Move the held row pointer within the list
 local function holdAt(root, contentY, x)
     pointAt(contentY, x)
     root.hooks.hold()
 end
 
--- Drag a row from its middle to a height and release it there
--- The client's drag events carry screen positions that are wrong under Windows scaling
+-- Drag a sidebar row and release at the target
 local function drag(entryID, toY)
     local index
     for rowIndex, row in ipairs(tagList().list.rows) do
@@ -285,6 +286,7 @@ assert(viewportHeight == 4 * ENTRY, viewportHeight)
 -- Scroll as PrettyUI does, resizing only the rows it lists
 local rowCount = #list.list.rows
 local scrolls = 0
+-- Scroll the list and record the resulting movement
 function list.list:_OnScrollWheel(_, delta)
     scrolls = scrolls + 1
     self.scrollY = math.max(0, math.min(rowCount * ENTRY - viewportHeight, self.scrollY + delta * ENTRY))

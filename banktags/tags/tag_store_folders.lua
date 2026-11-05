@@ -20,7 +20,7 @@ local function treeTagOrder(nodes)
     return order
 end
 
--- Return the key of the folder a tag is in, if any
+-- Find the folder containing a tag
 function TagStoreFolders:GetTagFolder(tag)
     local record = self.data.tags[tag]
     return record ~= nil and record.folder or nil
@@ -39,7 +39,7 @@ function TagStoreFolders:GetFolderSprite(key)
     return folder ~= nil and ItemIdentity.ObjectID(folder.icon) or nil
 end
 
--- Group the ordered tags so each folder sits where its first member appears
+-- Group ordered tags under their first folder member
 function TagStoreFolders:TagTree()
     local nodes = {}
     local folderNodes = {}
@@ -67,8 +67,7 @@ function TagStoreFolders:TagTree()
     return nodes
 end
 
--- Find the list holding a tag or folder in the tree, and its place there
--- A folder's tags are listed in the folder; other tags and folders in the tree
+-- Find a tag or folder among its siblings
 local function locate(tree, entry)
     for index, node in ipairs(tree) do
         if entry.kind == "folder" then
@@ -84,10 +83,7 @@ local function locate(tree, entry)
     return nil, nil
 end
 
--- Move a tag or folder before or after another in one save
--- Entries are { kind = "tag", tag = name } or { kind = "folder", key = key }
--- A folder moves with its tags, and a folder's tags move only within it
--- A move that changes nothing saves nothing and gives no reason
+-- Move a sidebar entry among its siblings
 function TagStoreFolders:MoveSidebarEntry(source, target, after)
     local tree = self:TagTree()
     local siblings, from = locate(tree, source)
@@ -102,7 +98,7 @@ function TagStoreFolders:MoveSidebarEntry(source, target, after)
     return self:SaveTagOrder(treeTagOrder(tree))
 end
 
--- Work out the tag order after filing a tag, leaving the rest in place
+-- Place a filed tag without moving unrelated entries
 function TagStoreFolders:FolderTagOrder(tag, folderKey)
     local tree = self:TagTree()
     local destination, source
@@ -143,7 +139,7 @@ function TagStoreFolders:GetFolders()
     return folders
 end
 
--- Move a tag into a folder, or out of every folder when the key is nil
+-- Move a tag into or out of a folder
 function TagStoreFolders:SetTagFolder(tag, folderKey)
     if self.data.tags[tag] == nil then return false, "The tag is invalid." end
     if folderKey ~= nil and type(self.data.folders[folderKey]) ~= "table" then
@@ -156,7 +152,7 @@ function TagStoreFolders:SetTagFolder(tag, folderKey)
     return self:Commit(nextData, "Could not save the folder.")
 end
 
--- Create a folder holding the tag, joining an existing folder with the same name
+-- Create or reuse a folder for a tag
 function TagStoreFolders:CreateFolder(folder, tag)
     local key, display = folderName(folder)
     if key == nil then
@@ -176,7 +172,7 @@ function TagStoreFolders:CreateFolder(folder, tag)
     return true, key, nil
 end
 
--- Rename a folder, moving its tags to the new name's key
+-- Rename a folder while keeping its member tags
 function TagStoreFolders:RenameFolder(key, folder, spriteObjectID)
     local current = type(key) == "string" and self.data.folders[key] or nil
     if type(current) ~= "table" then return false, nil, "The folder no longer exists." end
@@ -223,16 +219,23 @@ function TagStoreFolders:DeleteFolder(key)
     return self:Commit(nextData, "Could not delete the folder.")
 end
 
--- Toggle the flag in place rather than copying every tag
+-- Save whether a folder is expanded or collapsed
 function TagStoreFolders:SetFolderCollapsed(key, collapsed)
     local folder = type(key) == "string" and self.data.folders[key] or nil
-    if type(folder) ~= "table" then return false end
+    if type(folder) ~= "table" then return false, "The folder no longer exists." end
     local previous = folder.collapsed
-    folder.collapsed = collapsed == true
-    if previous == folder.collapsed then return true end
-    if not self:Save() then
+    collapsed = collapsed == true
+    if previous == collapsed then return true end
+    if self.holdSave then
+        local nextData = copyTable(self.data)
+        nextData.folders[key].collapsed = collapsed
+        return self:Commit(nextData, "Could not save the folder.")
+    end
+    folder.collapsed = collapsed
+    local saved, reason = self:Save()
+    if not saved then
         folder.collapsed = previous
-        return false
+        return false, reason
     end
     return true
 end

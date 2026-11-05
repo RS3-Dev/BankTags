@@ -5,8 +5,7 @@ local Size = Parts.size
 
 local LayoutEditorClipboard = {}
 
--- Copy the selected item or group, keeping each one's offset from the group's top-left cell
--- Nothing is saved; each paste adds more slots for the same objects
+-- Copy selected items while keeping their positions relative
 function LayoutEditorClipboard:CopySelected()
     local entry, paneName = self:SelectedEntry()
     if entry == nil then
@@ -37,8 +36,7 @@ function LayoutEditorClipboard:CopySelected()
     return true
 end
 
--- Paste the copied objects with the top-left one at the outlined empty cell
--- Every cell they take must be empty, or nothing is pasted
+-- Paste copies at the selected empty cell
 function LayoutEditorClipboard:PasteClipboard()
     local clipboard = self.clipboard
     if clipboard == nil or clipboard.tag ~= self.selectedTag then
@@ -50,6 +48,7 @@ function LayoutEditorClipboard:PasteClipboard()
         return false
     end
     local tag, cell = self.selectedTag, self.pasteCell
+    -- Save the copies before selecting their new slots
     return (self:SaveEdit("Could not paste the items.", function()
         local saved, keys, reason = self.store:PasteLayoutItems(tag, clipboard.items, cell, Size.CENTER_COLUMNS)
         -- The copies are selected before the grids redraw

@@ -216,4 +216,33 @@ session, layout = h:OpenBank()
 h:Tick(2)
 assert(app.select:Tag() == nil)
 
+-- Save folder filing and expansion together
+assert(app.store:CreateTag("folder source"))
+assert(app.store:CreateFolder("Saved folder", "fighting"))
+assert(app.store:SetFolderCollapsed("saved folder", true))
+app:Changed()
+local chunks = h:TagsModule("banktags/core/chunked_string_store")
+local write = chunks.Write
+local saves, failSave = 0, true
+chunks.Write = function(...)
+    saves = saves + 1
+    if failSave then return false, { stage = "manifest", reason = "disk full" } end
+    return write(...)
+end
+assert(not app:MoveTagToFolder("folder source", "saved folder"))
+assert(app.store:GetTagFolder("folder source") == nil)
+assert(app.store:GetFolder("saved folder").collapsed and saves == 1)
+assert(app.status:find("disk full", 1, true))
+failSave = false
+saves = 0
+assert(app:MoveTagToFolder("folder source", "saved folder"))
+assert(saves == 1 and app.store:GetTagFolder("folder source") == "saved folder")
+assert(not app.store:GetFolder("saved folder").collapsed)
+failSave = true
+app:ShowStatus(nil)
+h:ClickRow("__banktags_folder:saved folder")
+assert(not app.store:GetFolder("saved folder").collapsed)
+assert(app.status:find("disk full", 1, true))
+chunks.Write = write
+
 print("tag_actions_test: ok")

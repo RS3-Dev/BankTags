@@ -34,16 +34,15 @@ function Catalog.IsFull()
     return runeqlFind() ~= nil
 end
 
--- Describe one object as a search result, or nil when the client does not know it
-local function result(objectID)
-    local name = ObjectConfig.DisplayName(objectID)
+-- Describe a known item as a search result
+local function result(objectID, name)
+    name = name or ObjectConfig.DisplayName(objectID)
     if name == nil then return nil end
     return { objectId = objectID, configName = ObjectConfig.ConfigName(objectID),
         displayName = name, name = name }
 end
 
--- Search RuneQL's catalog and keep the results this client can resolve
--- Every result has a display name, the client's when RuneQL gives none
+-- Search RuneQL and keep items this client recognizes
 local function findFull(find, query, limit)
     local results, total = find(query, limit)
     local resolved = {}
@@ -62,7 +61,7 @@ local function findFull(find, query, limit)
     return resolved, total
 end
 
--- Search an exact item ID or config name, then the names of items in the bank
+-- Search exact references and unique bank item names
 local function findLimited(query, limit, bankItems)
     local resolved, seen = {}, {}
     -- Add one object once, while there is room
@@ -77,10 +76,16 @@ local function findLimited(query, limit, bankItems)
     add(math.tointeger(tonumber((string.gsub(query, "^#", "")))))
     add(ObjectConfig.ObjectID(query))
     local wanted = string.lower(query)
+    local checked = {}
     for _, item in ipairs(bankItems or {}) do
-        local name = ObjectConfig.DisplayName(item.objectID)
-        if name ~= nil and string.find(string.lower(name), wanted, 1, true) ~= nil then
-            add(item.objectID)
+        if #resolved >= limit then break end
+        if not seen[item.objectID] and not checked[item.objectID] then
+            checked[item.objectID] = true
+            local name = ObjectConfig.DisplayName(item.objectID)
+            if name ~= nil and string.find(string.lower(name), wanted, 1, true) ~= nil then
+                seen[item.objectID] = true
+                resolved[#resolved + 1] = result(item.objectID, name)
+            end
         end
     end
     return resolved, #resolved

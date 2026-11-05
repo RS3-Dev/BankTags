@@ -1,5 +1,4 @@
--- Build the tag list shown in the Tags tab and layout editor
--- A row pressed and released selects it; dragged, it moves to a new place
+-- Draw selectable, draggable tags and folders in the sidebar
 
 local Geometry = require("banktags/ui/geometry")
 local SidebarRows = require("banktags/ui/sidebar_rows")
@@ -51,7 +50,7 @@ function TagList.new(parent, options)
         width = options.width,
         isSelected = options.isSelected,
         onSelect = options.onSelect,
-        onChanged = options.onChanged,
+        onToggleFolder = options.onToggleFolder,
         onReorder = options.onReorder,
         entries = {},
         entriesByID = {},
@@ -64,6 +63,7 @@ function TagList.new(parent, options)
     self.search = SidebarRows.CreateSearch(parent, contentWidth - HELP_BUTTON_SIZE - HELP_BUTTON_GAP, {
         placeholder = "Search tags...",
         text = self.state.searchQuery,
+        -- Keep the search text while refreshing visible rows
         onChange = function(_, _, content)
             self.state.searchQuery = tostring(content or "")
             self:Refresh()
@@ -79,7 +79,7 @@ function TagList.new(parent, options)
     return self
 end
 
--- Describe the rows in sidebar order, with folders where they start
+-- List visible tags and folders in sidebar order
 function TagList:Entries()
     local query = string.lower(self.state.searchQuery)
     local entries, rowNumber = {}, 0
@@ -163,8 +163,7 @@ function TagList:Refresh()
     self:DecorateRows()
 end
 
--- Decorate rows with chevrons, accents, icons, and frames
--- Each row keeps its drawn parts so a drag can hide them
+-- Add folder arrows, icons, and selection outlines
 function TagList:DecorateRows()
     local rows = self.list.rows or {}
     -- Extend the folder bar across gaps until its last member
@@ -233,17 +232,7 @@ function TagList:DecorateRows()
     end
 end
 
--- Collapse or expand a folder
-function TagList:ToggleFolder(folderKey)
-    local folder = self.store:GetFolder(folderKey)
-    if folder == nil then return false end
-    self.store:SetFolderCollapsed(folderKey, not folder.collapsed)
-    self.onChanged()
-    return true
-end
-
--- Find the row the client currently highlights
--- A dragged row is not listed, since it covers the whole list
+-- Find the visible row under the pointer
 function TagList:HoveredEntry()
     if self.list.root.hidden or self.list.root.visibleGlobal == false then return nil end
     for _, row in ipairs(self.list.rows or {}) do

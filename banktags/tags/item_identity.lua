@@ -4,8 +4,7 @@ local ObjectConfig = require("banktags/core/object_config")
 
 local ItemIdentity = {}
 
--- Saved data names items by config name since IDs can change
--- Unnamed IDs save as "#<id>"
+-- Save stable names where available; use #<id> otherwise
 local ID_PREFIX = "#"
 
 local namesByID = {}
@@ -26,7 +25,7 @@ function ItemIdentity.Reference(objectID)
     return name or (ID_PREFIX .. tostring(objectID))
 end
 
--- Resolve a saved reference to this client's object ID, or nil when it is unknown
+-- Find the current item ID for a saved reference
 function ItemIdentity.ObjectID(reference)
     if type(reference) ~= "string" or reference == "" then return nil end
     if string.sub(reference, 1, #ID_PREFIX) == ID_PREFIX then

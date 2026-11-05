@@ -25,6 +25,7 @@ function TagTab.new(app)
     local self = setmetatable({ app = app, ctx = nil, controls = nil, listState = { searchQuery = "" } },
         TagTab)
     self.callbacks = {
+        -- Keep the mounted column and build its controls
         mount = function(ctx)
             self.ctx = ctx
             self:Build()
@@ -44,7 +45,7 @@ function TagTab:Arrangement()
     return tostring(self.app.select:Tag()) .. "\n" .. tostring(self.app:ShownTag() ~= nil)
 end
 
--- Destroy the column's controls; Bank Core destroys the layers they sit in
+-- Release the controls owned by this sidebar column
 function TagTab:DestroyControls()
     local controls = self.controls
     self.controls = nil
@@ -159,6 +160,7 @@ function TagTab:BuildFooter(controls, height, width)
     local newTagX = FOOTER_X + ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP
     local newTagWidth = width - ICON_BUTTON_SIZE - FOOTER_BUTTON_GAP
         - (editing and ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP or 0)
+    -- Clear any notice before asking for a new tag
     controls.newTagButton = BankControls.button(parent, "New Tag", function()
         app:ShowStatus(nil)
         app.windows:OpenTagSettings(app.store:NextPlaceholderTagName(), true)
@@ -192,18 +194,22 @@ function TagTab:BuildFooter(controls, height, width)
     icon.spriteID = NativeUi.SPRITES.HELP_BUTTON
     icon.clickthrough = true
     owned[#owned + 1] = icon
+    -- Show the Help icon's hovered appearance
     help:Subscribe(ui.Hook.ONMOUSEOVER, function()
         icon.spriteID = NativeUi.SPRITES.HELP_BUTTON + 1
         return false
     end)
+    -- Restore the Help icon after the pointer leaves
     help:Subscribe(ui.Hook.ONMOUSELEAVE, function()
         icon.spriteID = NativeUi.SPRITES.HELP_BUTTON
         return false
     end)
+    -- Show the Help icon's pressed appearance
     help:Subscribe(ui.Hook.ONCLICK, function()
         icon.spriteID = NativeUi.SPRITES.HELP_BUTTON + 2
         return false
     end)
+    -- Restore the Help icon after release
     help:Subscribe(ui.Hook.ONRELEASE, function()
         icon.spriteID = NativeUi.SPRITES.HELP_BUTTON + (help.isMouseOver and 1 or 0)
         return false
@@ -235,11 +241,12 @@ function TagTab:Build()
         width = ctx.width,
         listHeight = math.max(1, bottom - SidebarRows.LIST_TOP - 4),
         isSelected = function(tag) return tag == app:ShownTag() or tag == app.select:Tag() end,
+        -- Clear the notice and toggle the clicked tag
         onSelect = function(tag)
             app:ShowStatus(nil)
             app:ToggleTag(tag)
         end,
-        onChanged = function() app:Changed(nil) end,
+        onToggleFolder = function(key) return app:ToggleFolder(key) end,
         onReorder = function(source, target, after) app:MoveSidebarEntry(source, target, after) end,
     })
     self.controls = controls
@@ -261,12 +268,12 @@ function TagTab:Refresh()
     end
 end
 
--- Find the drawn row for a tag, if the column shows it
+-- Find a tag's visible sidebar row
 function TagTab:RowFor(tag)
     return self.controls ~= nil and self.controls.list:RowFor(tag) or nil
 end
 
--- Native item drops target only tags in the currently mounted sidebar column
+-- Find a visible tag that accepts an item drop
 function TagTab:ItemDropTarget()
     return self.controls ~= nil and self.controls.list:ItemDropTarget() or nil
 end

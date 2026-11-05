@@ -6,9 +6,13 @@ Run every test, the build, and the compile and globals check from the repository
 lua54 tools/check.lua
 ```
 
+The check also requires a short summary above every named function in the plugin, tools, and current tests. It ignores comments and string literals when finding functions, and leaves the `reference/` archive unchanged.
+
+Data tests cover damaged or unreadable chunked saves, failed replacement writes, Unicode and empty JSON values, invalid numbers, save limits, and batch item edits. Folder changes and nested edits must save together or roll back. Search tests check duplicate bank stacks and stop work when the result limit is reached. Editor lifecycle tests also reject label prompts after the saved layout changes.
+
 Tests that load Bank Core read it, unchanged, from the checkout named by `BANKCORE_ROOT`, or from `../bank-utils-core` when it is unset. They use Bank Core's own stand-in host (`tools/test_support/fake_bank_host.lua` and `fake_plugin_host.lua` in that checkout) and load Bank Core's `main.lua` with its own module cache, beside the Bank Tags folder the build writes under `dist/test/`. Nothing from Bank Core is copied into Bank Tags or its package.
 
-The runtime must support omitted page titles (Core 1.4.0). To test an installed package without its test tools, set `BANKCORE_ROOT` to that package and add the Core checkout's `?.lua` path to `LUA_PATH` for the stand-in host. This runs the installed runtime unchanged; it does not adapt the older runtime to accept title-free pages.
+The runtime must support omitted page titles and Core 1.5.0's native bank-state API, including `filterActive`. To test an installed package without its test tools, set `BANKCORE_ROOT` to that package and add the Core checkout's `?.lua` path to `LUA_PATH` for the stand-in host. This runs the installed runtime unchanged; it does not adapt older runtimes to accept newer APIs.
 
 ```text
 set BANKCORE_ROOT=C:\path\to\bank-utils-core
@@ -24,6 +28,8 @@ set PRETTYUI_ROOT=C:\path\to\prettyui-checkout
 The check prints which Bank Core and PrettyUI checkouts and commits the tests loaded. A checkout whose `docs/API.md` lacks the public API Bank Tags uses (`bankcore.Register(spec)`, `GetBankBounds`, and the menu item's `slot`) is refused with a message rather than tested against, so an older sibling checkout cannot fail or pass the tests for the wrong reason. New test files run before they are committed, too.
 
 The stand-in host is not the game client: these tests show Bank Tags' behavior against Bank Core's public API under that model, not how the live client draws, scrolls, or delivers input.
+
+Bank-state tests check the registration snapshot, real state-change delivery, and page closure for a closed bank, other native tabs, presets, search, and filters. They exercise Core's actual All Items sprite, preset control, and shared search/filter label reads through stand-in components. Opening checks a fresh state snapshot, including before a callback arrives and after Core has already reported the restriction. Tests also cover explicit reopening, other plugins' pages, select mode, and callback cleanup across reconnects and shutdown.
 
 The page-notice test checks that errors use the bank's top-center overlay, keep the sidebar list and footer intact, clear after a successful choice, and disappear on unmount or unload. Banner appearance and text wrapping still need a client check.
 

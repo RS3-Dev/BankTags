@@ -1,4 +1,4 @@
--- Choose tag pages with native bank tabs, scrolling horizontally when they overflow.
+-- Choose tags with native bank tabs and overflow arrows
 
 local BankControls = require("banktags/ui/bank_controls")
 local Geometry = require("banktags/ui/geometry")
@@ -11,8 +11,9 @@ Tabs.__index = Tabs
 local WIDTH, HEIGHT, ICON, GAP = 48, 38, 22, 2
 local STEP, ARROW = WIDTH + GAP, 24
 
--- Tooltips belong to the editor overlay, outside the tab's clipping bounds.
+-- Keep tab tooltips outside their clipping area
 local function tooltipContext(collection, parent)
+    -- Place tab tooltips relative to the editor
     prettyui.Tooltip.registerContext(collection, parent, function(target)
         local x, y = Geometry.absolutePosition(target)
         local parentX, parentY = Geometry.absolutePosition(parent)
@@ -20,6 +21,7 @@ local function tooltipContext(collection, parent)
     end)
 end
 
+-- Create the editor's scrolling tag tabs
 function Tabs.new(parent, options)
     local self = setmetatable({ options = options, entries = {}, byID = {}, rows = {}, first = 1 }, Tabs)
     self.root = Parts.layer(parent, options.x, options.y, options.width, HEIGHT)
@@ -37,6 +39,7 @@ function Tabs.new(parent, options)
     return self
 end
 
+-- Release the drawn tabs and their tooltips
 function Tabs:ClearRows()
     for _, row in ipairs(self.rows) do
         prettyui.Tooltip.unbind(row)
@@ -46,6 +49,7 @@ function Tabs:ClearRows()
     self.rows = {}
 end
 
+-- Show each tab's selected or hovered appearance
 function Tabs:ShowSelection()
     for _, row in ipairs(self.rows) do
         row.background.spriteID = row.entry.id == self.selectedID and id.Sprite.BANK_TABS_HORIZONTAL_1
@@ -53,6 +57,7 @@ function Tabs:ShowSelection()
     end
 end
 
+-- Draw visible tabs and any overflow arrows
 function Tabs:Draw()
     self:ClearRows()
     local full = math.max(1, (self.options.width + GAP) // STEP)
@@ -90,9 +95,11 @@ function Tabs:Draw()
             row.label.clickthrough = true
         end
         root:Subscribe(ui.Hook.ONCLICK, function() self:Select(entry.id, true); return false end)
+        -- Show the tab's hovered appearance
         root:Subscribe(ui.Hook.ONMOUSEOVER, function()
             row.hovered = true; self:ShowSelection(); return true
         end)
+        -- Restore the tab after the pointer leaves
         root:Subscribe(ui.Hook.ONMOUSELEAVE, function()
             row.hovered = false; self:ShowSelection(); return true
         end)
@@ -103,6 +110,7 @@ function Tabs:Draw()
     self:ShowSelection()
 end
 
+-- Scroll until the selected tag is visible
 function Tabs:RevealSelected()
     for index, entry in ipairs(self.entries) do
         if entry.id == self.selectedID then
@@ -115,6 +123,7 @@ function Tabs:RevealSelected()
     end
 end
 
+-- Replace tag tabs and reveal the selection
 function Tabs:SetEntries(entries, selectedID)
     self.entries, self.byID = entries, {}
     for _, entry in ipairs(entries) do self.byID[entry.id] = entry end
@@ -123,6 +132,7 @@ function Tabs:SetEntries(entries, selectedID)
     self:RevealSelected()
 end
 
+-- Select a tag and optionally notify the editor
 function Tabs:Select(entryID, notify)
     if self.byID[entryID] == nil then return false end
     self.selectedID = entryID
@@ -132,6 +142,7 @@ function Tabs:Select(entryID, notify)
     return true
 end
 
+-- Scroll the tabs without changing the selected tag
 function Tabs:Scroll(delta)
     local first = math.max(1, math.min(self.first + delta, #self.entries - self.capacity + 1))
     if first == self.first then return true end
@@ -140,8 +151,10 @@ function Tabs:Scroll(delta)
     return false
 end
 
+-- Read the selected tag's name
 function Tabs:GetSelectedID() return self.selectedID end
 
+-- Release the tab strip and its arrows
 function Tabs:Destroy()
     if self.root == nil then return end
     self:ClearRows()

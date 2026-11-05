@@ -22,7 +22,7 @@ function LayoutEditorHistory:ClearHistory()
     self.history = nil
 end
 
--- Forget the steps if the open tag changed outside the editor
+-- Discard undo steps after an outside layout change
 function LayoutEditorHistory:CheckHistory()
     local history = self.history
     if history == nil then return end
@@ -32,9 +32,7 @@ function LayoutEditorHistory:CheckHistory()
     end
 end
 
--- Run one edit of the open tag, keeping it as one undo step if it changed the layout
--- Returns whether the layout changed, then the edit's results
--- Failed and unchanged edits leave the steps as they were, even when they saved a fresh copy
+-- Keep a changed layout as one undo step
 function LayoutEditorHistory:RecordEdit(edit)
     local tag = self.selectedTag
     local before = self.store:LayoutState(tag)
@@ -60,9 +58,7 @@ function LayoutEditorHistory:RecordEdit(edit)
     return true, table.unpack(results, 1, results.n)
 end
 
--- Save one edit of the open tag as an undo step, redrawing when the layout changed
--- A failure shows its reason, or the given text, unless the caller shows it itself
--- Returns whether it saved, the failure reason, and whether the layout changed
+-- Save an undoable edit and redraw changed layouts
 function LayoutEditorHistory:SaveEdit(failure, edit)
     local changed, saved, reason = self:RecordEdit(edit)
     if not saved then
@@ -82,7 +78,7 @@ function LayoutEditorHistory:CanStepHistory(step)
         and history.states[history.index + step] ~= nil
 end
 
--- Restore the layout one step back or forward in one save
+-- Save the previous or next layout in one step
 function LayoutEditorHistory:StepHistory(step)
     if not self:CanStepHistory(step) then return false end
     local history = self.history

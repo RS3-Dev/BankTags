@@ -12,7 +12,7 @@ local REFUSED_COLOUR = 0xC0392B66
 
 local LayoutEditorGroup = {}
 
--- Select one item, or nothing, ending any group and the cell to paste into
+-- Select one item and clear group and paste targets
 function LayoutEditorGroup:SelectOnly(layoutKey)
     self.selectedLayoutKey = layoutKey
     self.groupKeys = nil
@@ -50,7 +50,7 @@ function LayoutEditorGroup:SortedKeys(keys)
     return ordered
 end
 
--- Drop group items no longer sorted, ending a group of one
+-- Keep only group items still in the layout
 function LayoutEditorGroup:PruneSelection()
     if self.groupKeys == nil then return end
     local kept = self:SortedKeys(self.groupKeys)
@@ -63,7 +63,7 @@ function LayoutEditorGroup:PruneSelection()
     if not self.groupKeys[self.selectedLayoutKey] then self.selectedLayoutKey = kept[1] end
 end
 
--- Add a sorted item to the selection, or take it out
+-- Add or remove a sorted item from the selection
 function LayoutEditorGroup:ToggleGroupItem(layoutKey)
     self.pasteCell = nil
     local keys = {}
@@ -84,7 +84,7 @@ function LayoutEditorGroup:ToggleGroupItem(layoutKey)
     self:PruneSelection()
 end
 
--- Start dragging the selected group by one of its items, its count on the item's corner
+-- Drag the selected group by its grabbed item
 function LayoutEditorGroup:BeginGroupDrag(slot)
     self.selectedLayoutKey = slot.layoutKey
     local keys = self:SortedKeys(self.groupKeys)
@@ -114,7 +114,7 @@ function LayoutEditorGroup:ClearGroupPreview(drag)
     drag.previewIndex = nil
 end
 
--- Shade every cell the group would take, all red when it cannot drop there
+-- Shade proposed group cells gold or red
 function LayoutEditorGroup:ShowGroupPreview(x, y)
     local drag = self.drag
     local destination = self:GroupDestination(x, y)
@@ -138,7 +138,7 @@ function LayoutEditorGroup:ShowGroupPreview(x, y)
     end
 end
 
--- Save the group at its drop, or explain why it cannot go there
+-- Save the group drop or explain its refusal
 function LayoutEditorGroup:FinishGroupDrag(drag, x, y)
     local destination, pane = self:GroupDestination(x, y)
     if pane ~= nil and pane.name == "unsorted" then
@@ -146,6 +146,7 @@ function LayoutEditorGroup:FinishGroupDrag(drag, x, y)
         return
     end
     if destination == nil then return end
+    -- Save the whole group move as one undo step
     self:SaveEdit("Could not move the items.", function()
         return self.store:MoveLayoutItems(
             self.selectedTag, drag.keys, drag.anchorKey, destination, Size.CENTER_COLUMNS)

@@ -1,4 +1,4 @@
--- Decode import drafts and manage their name, icon, folder, and save state.
+-- Preview imported tags and manage their chosen settings
 
 local TagData = require("banktags/tags/tag_data")
 local ItemIdentity = require("banktags/tags/item_identity")
@@ -52,7 +52,7 @@ function ImportDraft:RefreshImportPreview(input)
     end
 end
 
--- Show one import state, enabling Import only for a readable draft
+-- Show the preview and enable only valid imports
 function ImportDraft:ShowImportResult(state, value)
     local imported, reason = nil, value
     if state == "ready" then
@@ -129,6 +129,7 @@ end
 function ImportDraft:ChooseImportSprite()
     if self.closed or self.importSingleTag == nil then return end
     local revision = self.importRevision
+    -- Ignore icon choices from an older import draft
     self.options.onChooseImportSprite(function(objectID)
         if self.importRevision == revision then self:SetImportSprite(objectID) end
     end)

@@ -26,14 +26,15 @@ function Settings.copy(value)
     return copy
 end
 
--- Read the saved preferences, or the defaults when there are none
+-- Load saved preferences or use the defaults
 function Settings.load()
     local ok, saved = pcall(function() return PersistentDB:GetStructuredData(Config.SETTINGS_KEY) end)
     return Settings.copy(ok and saved or nil)
 end
 
--- Save a copy of the preferences, reporting whether the host accepted it
+-- Save preferences and report any failure
 function Settings.save(value)
+    -- Catch a rejected preference write
     local ok, saved = pcall(function()
         return PersistentDB:SetStructuredData(Config.SETTINGS_KEY, Settings.copy(value))
     end)

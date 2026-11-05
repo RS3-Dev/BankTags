@@ -5,10 +5,12 @@ local Theme = require("banktags/ui/theme")
 local ConfirmWindow = {}
 ConfirmWindow.__index = ConfirmWindow
 
+-- Create a dialog asking to confirm a removal
 function ConfirmWindow.new(parent, options)
     local self = setmetatable({ closed = false }, ConfirmWindow)
     self.dialog = prettyui.Dialog.new(parent, {
         title = options.title, width = 340, height = 164, modal = false,
+        -- Draw the removal question inside the dialog
         content = function(window)
             self.message = window:AddText({
                 text = options.message, x = 16, y = 18, width = 292, height = 52, maxLines = 4,
@@ -18,6 +20,7 @@ function ConfirmWindow.new(parent, options)
         onDismiss = function() self.closed = true end,
         actions = {
             { label = "Cancel", onClick = function() self.closed = true; return true end },
+            -- Keep rejected removals open with their failure reason
             { label = options.confirmLabel, onClick = function()
                 local saved, reason = options.onConfirm()
                 if saved then self.closed = true; return true end
@@ -31,10 +34,12 @@ function ConfirmWindow.new(parent, options)
     return self
 end
 
+-- Show the removal confirmation
 function ConfirmWindow:Show()
     self.window:Show()
 end
 
+-- Release the confirmation and its message
 function ConfirmWindow:Destroy()
     self.closed = true
     self.dialog:Destroy()

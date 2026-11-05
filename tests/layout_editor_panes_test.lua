@@ -1,10 +1,8 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 local BankGrid = require("banktags/ui/bank_grid")
 
--- Move items across persistent Search, Layout, and Unsorted columns
--- The central grid follows the bank; the right tray packs four columns
--- Each grid scrolls on its own; drops count the scroll of both
--- FAKE HOST: stand-in components, pointer, and scroll views, not the game client
+-- Check independent Search, Layout, and Unsorted panes
+-- FAKE HOST: stand-in components, pointer, and scrolling
 
 local Harness = require("tools/test_support/tags_harness")
 local Geometry = require("banktags/ui/geometry")
@@ -21,7 +19,7 @@ h:OpenBank()
 h:Tick(12)
 
 local store = app.store
--- Find the key of gear's slot for an object, each object being in it once
+-- Find the saved key for an item
 local function key(objectID)
     for _, slot in ipairs(store:GetTaggedItems("gear")) do
         if slot.objectID == objectID then return slot.layoutKey end
@@ -56,7 +54,7 @@ end }
 local function gear() return store.data.tags.gear end
 local sorted, unsorted = editor.panes.sorted, editor.panes.unsorted
 
--- Point at a pane's grid slot by its content row, as its scroll shows it
+-- Point at a pane cell through its scroll
 local function pointAt(paneName, column, row)
     local pane = editor.panes[paneName]
     local x, y = pane.gridLeft + column * 44 + 20, BankGrid.RowItemY(row, pane.labels) + 20 - pane.view.scrollY
@@ -71,11 +69,12 @@ local function pointAtContent(x, y)
     local left, top = Geometry.absolutePosition(editor.content)
     h:PointEditor(x, y)
 end
--- Press on a slot; finish over a slot, or over a content point
+-- Press the chosen grid cell
 local function press(paneName, column, row)
     h:PressEditor(editor.panes[paneName].surface, pointAt(paneName, column, row))
     assert(editor.drag ~= nil or editor.selectedLayoutKey == nil)
 end
+-- Drag between the chosen grid cells
 local function drag(fromPane, fromColumn, fromRow, toPane, toColumn, toRow)
     local surface = editor.panes[fromPane].surface
     press(fromPane, fromColumn, fromRow)
@@ -84,7 +83,9 @@ local function drag(fromPane, fromColumn, fromRow, toPane, toColumn, toRow)
 end
 -- Select a tag through the native rail
 local function openTag(tag) assert(editor.tagTabs:Select(tag, true)) end
+-- Scroll the chosen pane with the wheel
 local function wheel(paneName, delta) editor.panes[paneName].surface.hooks.wheel(nil, delta) end
+-- Encode the current tag data for comparison
 local function saved() return Json.encode(store.data) end
 -- Count the gold outlines drawn on either grid
 local function outlines()
@@ -96,6 +97,7 @@ local function outlines()
     end
     return count
 end
+-- Find an item in the Unsorted list
 local function unsortedIndex(layoutKey)
     for index, slot in ipairs(gear().unsorted) do
         if slot.layoutKey == layoutKey then return index end
@@ -176,8 +178,8 @@ wheel("sorted", -30)
 wheel("sorted", 3)
 assert(sorted.view.scrollY == 132 and unsorted.view.scrollY == unsortedMost - 44)
 
--- With both scrolled, an Unsorted item drops into the exact sorted cell
--- Unsorted row 25, column 2 is item 2103; sorted row 5, column 4 is the blank
+-- Drop Unsorted item 2103 into the scrolled layout
+-- Use Unsorted cell (2, 25) and Layout cell (4, 5)
 drag("unsorted", 102 % unsorted.columns, 102 // unsorted.columns, "sorted", 4, 5)
 assert(gear().rows[2].slots[45].layoutKey == key(2103) and unsortedIndex(key(2103)) == nil)
 assert(#gear().unsorted == 134 and key(2103) ~= nil and changes == 1)
@@ -240,6 +242,7 @@ assert(#editor.searchResults == 4 and unsorted.view.scrollY == unsortedScroll)
 
 -- A scrolled result list drags the row under the press
 local resultsTop = editorSize.PANEL_TOP + editorSize.SEARCH_LIST_TOP
+-- Begin dragging a visible search result
 local function pressResult(listY)
     pointAtContent(editorSize.SEARCH_X + editorSize.SEARCH_INSET + 16, resultsTop + listY)
     h:PressEditor(editor.searchDragSurface, 16, listY)
@@ -324,7 +327,7 @@ assert(#unsorted.slots == 0 and cells(unsorted) == 0 and not unsorted.view.scrol
 assert(editor.unsortedTitle.content == "Unsorted (0)")
 wheel("unsorted", 1)
 assert(unsorted.view.scrollY == 0)
--- A partial row stays compact and centered, with no excess scrolling.
+-- A partial row stays compact and centered, with no excess scrolling
 assert(store:AddTag("food", 3001) and store:AddTag("food", 3002))
 app:Changed()
 assert(#unsorted.slots == 2 and cells(unsorted) == unsorted.columns)

@@ -1,9 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- A tag lists one stackable item in several sections over Bank Core's shared stack:
--- every picture shows the bank's one stack and reaches it, and Remove from takes out
--- only the placement that was clicked
--- FAKE HOST: stand-in loader, components, and menus, not the game client
+-- Check repeated stackable placements and removal of only the clicked slot
+-- FAKE HOST: stand-in components, loader, and menus
 
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("shared_stacks")
@@ -43,6 +41,7 @@ h:Tick(2)
 
 -- Hover each vial slot and describe its quantity, the stack beneath, and its menu
 local REMOVE = "Remove from <col=f2c66d>Super Sets</col>"
+-- Find the page slots showing vials
 local function vialSlots()
     local parts = {}
     for _, slot in ipairs(layout.pageState.view.slots) do

@@ -1,8 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Choose a saved tag too large for Bank Core through the running app
--- It is not shown; the bank banner says why
--- FAKE HOST: stand-in loader, components, and saved data, not the game client
+-- Check the banner for tags too large to show
+-- FAKE HOST: stand-in components, loader, and saved data
 
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("notice_page")
@@ -14,8 +13,8 @@ local TagData = require("banktags/tags/tag_data")
 local TagStore = require("banktags/tags/tag_store")
 local item = require("banktags/tags/tag_layouts").Item
 
--- Save a small tag and one at Bank Tags' full stored limit, which edits can no longer reach
--- Its page adds the Unsorted label and row, so it is two entries over Bank Core's limit
+-- Load an old tag at the full storage limit
+-- Its Unsorted heading and row exceed the page limit
 local db = h.bankHost.db
 local store = TagStore.new()
 assert(store:CreateTag("small") and store:AddTag("small", 385))

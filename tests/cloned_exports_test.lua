@@ -1,8 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Run every plugin on plain data clones of the others' exports
--- Bank Tags connects and reloads through Core's injected clone
--- FAKE HOST: stand-in loader, clone, components, and menus, not the game client
+-- Check connections and reloads through cloned plugin exports
+-- FAKE HOST: stand-in exports, components, loader, and menus
 
 local Harness = require("tools/test_support/tags_harness")
 
@@ -37,7 +36,7 @@ _, layout = h:OpenBank()
 h:Tick(2)
 assert(h:TabParent() ~= nil and app:ShowTag("melee") and app:ShownTag() == "melee")
 
--- Bank Tags reloads and reconnects through Core's injected clone.
+-- Bank Tags reloads and reconnects through Core's injected clone
 h.host:Reload("banktags", { shutdown = true, freshEnvironment = true })
 assert(h:Connected() and app.shutDown)
 assert(h.tags.result == nil and rawget(h.tags.env._G, "__banktags_api") == nil)

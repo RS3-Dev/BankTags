@@ -1,8 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Change Bank Tags' preferences on its own Plugin Hub settings page
--- Each saves under Bank Tags' key, applies at once, and reverts if refused
--- FAKE HOST: stand-in loader, components, and menus, not the game client
+-- Check preference saving, immediate changes, and rejected writes
+-- FAKE HOST: stand-in components, loader, and menus
 
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("bank_settings")
@@ -21,7 +20,7 @@ assert(manifest:match('"hasSettingsIcon"%s*:%s*true'), "the Plugin Hub settings 
 assert(h.hostSubscriptions.ContentLayerReady.banktags_content == nil,
     "preferences should mount through the settings cog, not the ribbon content layer")
 
--- Draw Bank Tags' Plugin Hub settings page as the host does
+-- Open the plugin's settings page through the host event
 local function openPanel()
     local parent = ui.Layer.new(nil)
     parent:SetSize(300, 400)

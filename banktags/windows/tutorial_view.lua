@@ -1,4 +1,4 @@
--- Draw the tutorial window, step controls, animated highlight, and target pointer.
+-- Draw the guide, step buttons, and target highlight
 
 local Geometry = require("banktags/ui/geometry")
 local NativeUi = require("banktags/ui/native_ui")
@@ -14,6 +14,7 @@ local function position(component)
     return Geometry.absolutePosition(component)
 end
 
+-- Read the position and size of a visible control
 local function bounds(component)
     if component == nil or component.hidden == true or component.visibleGlobal == false then return nil end
     local x, y = position(component)
@@ -54,7 +55,7 @@ local function sizeFrame(frame, width, height)
     end
 end
 
--- Build the view after the walkthrough has chosen its parent and current tag.
+-- Build the guide, step buttons, and target highlight
 function TutorialView:CreateView(stepCount, rootKey)
     local parent = self.parent
     local STEP_START = WIDTH - 66 - stepCount * 31
@@ -114,6 +115,7 @@ function TutorialView:CreateView(stepCount, rootKey)
         outline.fill, outline.rgba, outline.clickthrough = false, Theme.SELECTED_BORDER, true
         self.stepButtons[index].outline = outline
     end
+    -- Advance the guide or finish its last step
     self.next = button("", 463, function()
         if self.step == stepCount then self:Stop(true) else self:Go(self.step + 1) end
     end)

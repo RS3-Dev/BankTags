@@ -1,19 +1,20 @@
--- Edit labels and rows, validating deferred prompts and context-menu targets.
+-- Edit labels and rows while checking pending actions
 
 local Parts = require("banktags/windows/layout_editor_parts")
 local Size = Parts.size
 
 local LayoutEditorRows = {}
 
--- Ask for a label's text, saving it with an edit of the open tag
--- A prompt left open after the editor closes or changes tag saves nothing
+-- Ask for label text while the layout remains unchanged
 function LayoutEditorRows:PromptLabel(text, save, remove)
     local tag = self.selectedTag
     if tag == nil or self.onPromptLabel == nil then return false end
-    -- Run one prompt action while this editor still shows the tag
+    local target = { tag = tag, columns = Size.CENTER_COLUMNS, data = self.store.data }
+    -- Run a prompt action only while its target remains valid
     local function current(edit)
+        -- Refuse label edits after their captured layout changes
         return function(value)
-            if self.window == nil or self.selectedTag ~= tag then
+            if not self:RowTargetCurrent(target) then
                 return false, "The editor changed, so the label was not saved. Cancel and try again."
             end
             return self:SaveEdit(nil, function() return edit(tag, value) end)
@@ -27,6 +28,7 @@ end
 function LayoutEditorRows:EditLabel(row)
     local current = self.store:GetLabel(self.selectedTag, row, Size.CENTER_COLUMNS)
     if current == nil then return false end
+    -- Save the new text for this label
     return self:PromptLabel(current, function(tag, value)
         return self.store:SetLabel(tag, row, value, Size.CENTER_COLUMNS)
     end, function(tag)
@@ -34,22 +36,22 @@ function LayoutEditorRows:EditLabel(row)
     end)
 end
 
--- Ask for a new label's text, adding it at a row once saved
+-- Ask for a new label at the chosen row
 function LayoutEditorRows:PromptNewLabel(row)
+    -- Insert the new label at the captured row
     return self:PromptLabel(nil, function(tag, value)
         return self.store:InsertLabel(tag, row, value, Size.CENTER_COLUMNS)
     end)
 end
 
--- Pick a new label's row: above the selection or paste cell, or after the items
+-- Choose a label row from the selection or paste cell
 function LayoutEditorRows:DefaultLabelRow()
     local index = self.layout.sortedIndex[self.selectedLayoutKey] or self.pasteCell
     -- The store puts rows past the layout at its end
     return index ~= nil and (index - 1) // Size.CENTER_COLUMNS or math.maxinteger
 end
 
--- Find an editor row or Unsorted item under the pointer for a context menu.
--- Scrollbars, Search, empty Unsorted cells, and covering windows offer nothing.
+-- Find an uncovered editor row or Unsorted item
 function LayoutEditorRows:RowMenuTarget()
     if self.window == nil or self.window.root.hidden or self.drag ~= nil
         or self.selectedTag == nil or self:OverlayShown() then return nil end
@@ -73,7 +75,7 @@ function LayoutEditorRows:RowMenuTarget()
     }
 end
 
--- Check that a menu's row still means the same place in this editor
+-- Check whether a captured layout target is still valid
 function LayoutEditorRows:RowTargetCurrent(target)
     return self.window ~= nil and not self.window.root.hidden and self.drag == nil
         and self.selectedTag == target.tag
@@ -81,8 +83,9 @@ function LayoutEditorRows:RowTargetCurrent(target)
         and Size.CENTER_COLUMNS == target.columns
 end
 
--- Insert an empty row at a grid line, moving the rows below it down
+-- Add an empty row above the chosen grid line
 function LayoutEditorRows:InsertEmptyRow(line)
+    -- Save the row insertion as one undo step
     return (self:SaveEdit("Could not add the row.", function()
         return self.store:InsertLayoutRow(self.selectedTag, line, Size.CENTER_COLUMNS)
     end))
@@ -106,14 +109,14 @@ local function removeRowMessage(tag, contents)
         .. "?<br>Only the tag changes; your bank keeps every item."
 end
 
--- Remove a grid line and everything on it, moving the rows below it up
--- An empty line goes at once; anything else asks first
+-- Remove an empty row or ask before removing contents
 function LayoutEditorRows:RemoveRow(line)
     local tag = self.selectedTag
     local contents = tag ~= nil and self.store:LayoutLineContents(tag, line, Size.CENTER_COLUMNS) or nil
     if contents == nil then return false end
     -- Save a line's removal as one undo step
     local function remove()
+        -- Save the row removal as one undo step
         return self:SaveEdit("Could not remove the row.", function()
             return self.store:RemoveLayoutRow(tag, line, Size.CENTER_COLUMNS)
         end)
@@ -123,6 +126,7 @@ function LayoutEditorRows:RemoveRow(line)
     local target = { tag = tag, row = line, columns = Size.CENTER_COLUMNS, data = self.store.data }
     self.onConfirmRemoveRow({
         message = removeRowMessage(tag, contents),
+        -- Refuse removal if the confirmed row has changed
         onConfirm = function()
             -- Any save, another tag or size, or a closed editor makes it out of date
             if not self:RowTargetCurrent(target) then

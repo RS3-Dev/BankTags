@@ -1,8 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Drive Bank Tags' menus beside Bank Core's guard under every entry placement
--- Covers select mode, Remove on each slot kind, rows, and stale entries
--- FAKE HOST: stand-in loader, components, and menus, not the game client
+-- Check item and sidebar actions across menu insertion orders
+-- FAKE HOST: stand-in components, loader, and menus
 
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("menu_orders")
@@ -22,6 +21,7 @@ assert(session.publicAPI.Register({ id = "other", name = "Other", icon = "STAR",
 h:Tick(2)
 -- Select mode's left click names the clicked item
 local NAMES = { "Abyssal whip", "Abyssal whip", "Shark" }
+-- Read an item's Add to menu label
 local function addLabel(slot)
     return "Add to Ranged <col=f2c66d>" .. NAMES[slot] .. "</col>"
 end
@@ -31,7 +31,7 @@ local function pointAtRow(tag)
     app.tab.controls.list.list.scrollY = row.root.y
     h:PointAt(row.root, 20, 10 - row.root.y)
 end
--- Give melee both whip stacks, a third whip with no stack left, and an item missing from the bank
+-- Restore test tags with duplicate and absent bank items
 local function resetTags()
     for _, tag in ipairs({ "melee", "ranged" }) do
         if app.store.data.tags[tag] ~= nil then assert(app.store:DeleteTag(tag)) end
@@ -43,7 +43,7 @@ local function resetTags()
     app:Changed()
     h:Tick(2)
 end
--- Report the menu's left click, which must not be a native withdraw
+-- Run the menu's default action without native withdrawal
 local function leftClick(menu)
     return Harness.LeftClick(menu)
 end
@@ -57,6 +57,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         -- Rows show their actions top down above Cancel; chosen entries run next tick
         assert(app.store:CreateFolder("Combat", "melee"))
         app:Changed()
+        -- Check a tag's Add to menu label
         local function shows(id, expected)
             pointAtRow(id)
             local menu = h:ContentMenu()
@@ -64,6 +65,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
             assert(shown == table.concat(expected, "|") .. "|Cancel", shown .. where)
             return menu
         end
+        -- Check whether a menu contains a named entry
         local function named(labels, name)
             local out = {}
             for index, label in ipairs(labels) do out[index] = label .. " <col=f2c66d>" .. name .. "</col>" end
@@ -86,6 +88,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         if app.store.data.tags.magic ~= nil then assert(app.store:DeleteTag("magic")) end
         assert(app.store:CreateTag("magic") and app.store:CreateFolder("Archery", "magic"))
         app:Changed()
+        -- Read the actions in the named submenu
         local function children(id, label)
             pointAtRow(id)
             menu = h:ContentMenu()
@@ -183,8 +186,9 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         h:Tick(2)
         assert(app.store:GetFolder("combat").collapsed, where)
         menu = shows(folderRow, named({ "Expand", "Rename folder", "Ungroup folder" }, "Combat"))
-        -- A left click runs the default and the row's own click; the row answers it once
+        -- Deliver both the menu default and row click
         local function click(id) h:ClickRow(id) end
+        -- Deliver the row's native press and release
         local function leftClickRow(id)
             pointAtRow(id)
             local default = leftClick(h:ContentMenu())
@@ -199,7 +203,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         assert(leftClickRow(folderRow) == "Expand <col=f2c66d>Combat</col>", where)
         assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app:ShownTag() == "ranged", where)
         assert(leftClickRow("ranged") == "Select <col=f2c66d>Ranged</col>" and app:ShownTag() == nil, where)
-        -- The row may hear the click first, with the default from that menu or one rebuilt after it
+        -- Deliver the row click before its menu action
         local function rowThenMenu(id, rebuilt)
             pointAtRow(id)
             local menu = h:ContentMenu()
@@ -222,7 +226,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
             rowThenMenu(folderRow, rebuilt)
             assert(not app.store:GetFolder("combat").collapsed, where)
         end
-        -- The default may run ticks before the row hears the click, or more than once
+        -- Deliver the menu action before the row click
         local function menuThenLateRow(id, repeats)
             pointAtRow(id)
             local menu = h:ContentMenu()
@@ -264,7 +268,7 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
         assert(leftClick(h:ContentMenu()) == "Select <col=f2c66d>Ranged</col>", where)
         h:Tick(4)
         assert(app:ShownTag() == nil and leaves == 0, where)
-        -- Select chosen from the opened menu toggles once, even if heard twice
+        -- Check that an explicit Select choice runs once
         local function chooseSelect(id, label)
             pointAtRow(id)
             local menu = h:ContentMenu()

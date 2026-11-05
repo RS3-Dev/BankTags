@@ -6,10 +6,12 @@ local raw
 Mouse = { GetPosition = function() return raw end }
 game = { options = { InterfaceScale = { setting = 100 } } }
 
+-- Report a scaled native pointer position
 local function point(x, y, factor)
     raw = { x = x * factor, y = y * factor }
 end
 
+-- Check the converted pointer position
 local function expect(x, y)
     local actualX, actualY = Geometry.interfaceMousePosition()
     assert(math.abs(actualX - x) < 0.000001)

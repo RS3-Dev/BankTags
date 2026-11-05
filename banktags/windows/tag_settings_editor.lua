@@ -21,7 +21,6 @@ local SLOT_X = MARGIN + FIELD_WIDTH + SLOT_GAP
 -- Create the tag name and icon editor
 function TagSettingsEditor.new(parent, options)
     local self = setmetatable({
-        originalTag = options.tag,
         spriteObjectID = options.spriteObjectID,
         onChooseSprite = options.onChooseSprite,
         onSave = options.onSave,
@@ -68,6 +67,7 @@ function TagSettingsEditor.new(parent, options)
         clickthrough = false,
         tooltip = "Click to edit",
     })
+    -- Open the item icon picker
     self.spriteSlot.root:Subscribe(ui.Hook.ONCLICK, function()
         if self.onChooseSprite ~= nil then self.onChooseSprite() end
         return false
@@ -82,6 +82,7 @@ function TagSettingsEditor.new(parent, options)
         alignHorizontal = ui.AlignMode.CENTRE,
     })
     self.status.hidden = true
+    -- Close the editor without saving its draft
     self.cancelButton = prettyui.SimpleButton.new(content, "Cancel", function()
         self.window:Close()
     end, {
@@ -90,6 +91,7 @@ function TagSettingsEditor.new(parent, options)
         width = BUTTON_WIDTH,
         height = 28,
     })
+    -- Save the current name and chosen icon
     self.saveButton = prettyui.SimpleButton.new(content, "Save", function()
         self:Save(self.field:GetText())
     end, {

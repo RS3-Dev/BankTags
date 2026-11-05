@@ -49,13 +49,15 @@ Favor straightforward Lua that is easy to follow and modify. Code should make th
 ## Comments
 
 - Give named functions a short summary directly above their declaration
-- Keep function summaries between 3 and 10 words when practical
+- Keep function summaries between 3 and 10 words
 - Start function summaries with a plain action such as `Find`, `Save`, or `Restore`
 - Keep comments short, plain, and non-technical
 - Put detailed contracts and historical context in project documentation
 - Use inline comments only when an operation order would otherwise be unclear
 - Do not restate parameters or individual code lines
 - Do not end code comments with a period
+
+`lua54 tools/check.lua` checks summaries above named functions in the plugin, tools, and tests. Describe longer callbacks when their purpose is not clear from the surrounding code. The historical `reference/` archive is excluded.
 
 ```lua
 -- Wait for the context to finish loading

@@ -1,8 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Choose tags through native buttons and keep search typing from editing the layout,
--- and tear the editor down cleanly during a drag, a prompt, a reopen, and shutdown
--- FAKE HOST: native components and PrettyUI leaf controls, not the game client
+-- Check tag switching, shortcut focus, and editor cleanup
+-- FAKE HOST: native components and PrettyUI leaf controls
 
 local Harness = require("tools/test_support/tags_harness")
 local Json = require("banktags/core/json")
@@ -23,6 +22,7 @@ h:OpenBank()
 h:Tick(2)
 local Size = h:TagsModule("banktags/windows/layout_editor_parts").size
 local editor
+-- Open the layout editor for a tag
 local function openEditor(tag)
     app.windows:OpenLayoutEditor(tag)
     editor = assert(app.windows.layoutEditor)
@@ -66,7 +66,7 @@ local function key(gameKey, modifiers)
     end
 end
 local DELETE, Z, V = 101, 64, 67
--- Press and release the first sorted item, which gives the grid the keys
+-- Select the first item and give the grid shortcuts
 local function pressGrid()
     local pane = editor.panes.sorted
     h:PointEditor(pane.x + Size.GRID_LEFT + 20, pane.y + 24)
@@ -74,6 +74,7 @@ local function pressGrid()
     h:ReleaseEditor()
     assert(editor.keysOnGrid and editor.selectedLayoutKey ~= nil)
 end
+-- Encode the current tag data for comparison
 local function saved() return Json.encode(store.data) end
 
 -- Navigation takes the keys, including clicking the selected tag again
@@ -155,7 +156,7 @@ local function listeners()
     end
     return table.concat(found, ", ")
 end
--- Check that closing released every control's tooltip, the name tooltip, and the window
+-- Check that closing released editor controls and tooltips
 local function released(closed)
     for _, control in ipairs({ closed.copyButton, closed.pasteButton, closed.removeButton,
         closed.unsortButton, closed.newLabelButton, closed.closeButton }) do
@@ -186,6 +187,19 @@ assert(saved() == before)
 
 -- Reopening, as a resize does, closes the label prompt; its stale save changes neither editor nor tag
 openEditor("gear")
+-- A saved row edit also invalidates an open label prompt
+assert(editor:PromptNewLabel(0))
+local changedPrompt = assert(app.windows.textPrompt)
+assert(store:InsertLayoutRow("gear", 0, editor.columns))
+app:Changed("gear")
+before = saved()
+changedPrompt.field:SetText("Stale label")
+Harness.Click(changedPrompt.window.content, "Add")
+assert(saved() == before and not changedPrompt.closed)
+assert(changedPrompt.status.content:find("editor changed", 1, true))
+Harness.Click(changedPrompt.window.content, "Cancel")
+assert(store:RemoveLayoutRow("gear", 0, editor.columns))
+app:Changed("gear")
 local asked
 local promptLabel = editor.onPromptLabel
 editor.onPromptLabel = function(options)

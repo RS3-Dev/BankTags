@@ -2,8 +2,6 @@
 
 local BankGrid = {}
 
--- Left inset of the first column inside the bank item layer
-BankGrid.LEFT = 8
 -- Top inset of the first row
 BankGrid.TOP = 4
 -- Distance from one row or column to the next
@@ -15,16 +13,15 @@ BankGrid.DEFAULT_COLUMNS = 10
 
 -- Heading text sits above a separator this far down the row
 BankGrid.LABEL_LINE_OFFSET = 22
--- Match Core's section-label headspace inside each label row.
+-- Match the bank's space above section labels
 BankGrid.LABEL_TOP = 3
--- Core reserves a 28px heading plus its 3px top inset.
+-- Allow 28px for the heading and 3px above it
 BankGrid.LABEL_HEIGHT = 28 + BankGrid.LABEL_TOP
-BankGrid.UNSORTED_LABEL = "Unsorted"
 
 local GRID_TOP = BankGrid.TOP
 local GRID_STEP = BankGrid.STEP
 
--- Find where a row's items sit below the top of the content
+-- Find the height of a grid row
 function BankGrid.RowItemY(row, labels)
     local y = GRID_TOP + row * GRID_STEP
     for _, label in ipairs(labels or {}) do
@@ -34,7 +31,7 @@ function BankGrid.RowItemY(row, labels)
     return y
 end
 
--- Place the label just below the top of its reserved row.
+-- Place a label within its reserved row
 function BankGrid.LabelY(row, labels)
     return BankGrid.RowItemY(row, labels) + BankGrid.LABEL_TOP
 end

@@ -20,12 +20,15 @@ local Json = require("banktags/core/json")
 local TagLayouts = h:TagsModule("banktags/tags/tag_layouts")
 -- Each object appears once here, so its slot's key names it
 local keys = {}
+-- Create a saved item slot for the test
 local function item(objectID)
     local slot = TagLayouts.Item(objectID)
     keys[objectID] = slot.layoutKey
     return slot
 end
+-- Find the saved key for an item
 local function key(objectID) return keys[objectID] end
+-- Build a layout row from the supplied slots
 local function row(...) return { kind = "row", slots = { ... } } end
 assert(app.store:CreateTag("gear"))
 assert(app.store:CreateTag("food"))
@@ -54,7 +57,7 @@ editor.window.tooltipContext = { position = function()
     return Geometry.absolutePosition(editor.content)
 end }
 
--- Point at a pane's grid slot, counted from zero, through its scroll
+-- Point at a pane cell through its scroll
 local function pointAt(paneName, column, line)
     local left, top = Geometry.absolutePosition(editor.content)
     local pane = editor.panes[paneName]
@@ -62,21 +65,25 @@ local function pointAt(paneName, column, line)
     h:PointEditor(pane.x + x, pane.y + y)
     return x, y
 end
+-- Press the chosen grid cell
 local function press(paneName, column, line)
     h:PressEditor(editor.panes[paneName].surface, pointAt(paneName, column, line))
 end
--- Move a held drag over another slot, as the client's drag hook does
+-- Move the held pointer over another grid cell
 local function dragOver(paneName, column, line)
     pointAt(paneName, column, line)
     editor.panes.sorted.surface.hooks.drag()
 end
+-- Release the current editor drag
 local function release(paneName)
     h:ReleaseEditor()
 end
+-- Press and release a grid cell
 local function click(paneName, column, line)
     press(paneName, column, line)
     release(paneName)
 end
+-- Click a grid cell while holding Shift
 local function shiftClick(paneName, column, line)
     host.shiftDown = true
     click(paneName, column, line)
@@ -92,7 +99,7 @@ local function outlines()
     end
     return count
 end
--- Describe the gear tag's lines as the editor lays them out
+-- Describe the saved layout in reading order
 local function lines()
     local view = TagLayouts.Render(app.store.data.tags.gear.rows, COLUMNS)
     local out = {}
@@ -107,6 +114,7 @@ local function lines()
     end
     return table.concat(out, " | ")
 end
+-- Check the items in the current group selection
 local function grouped(...)
     local wanted = { ... }
     if editor:GroupCount() ~= #wanted then return false end
@@ -244,7 +252,7 @@ assert(editor.groupKeys == nil and editor.selectedLayoutKey == nil)
 editor:SelectTag("gear")
 assert(editor.groupKeys == nil and outlines() == 0)
 
--- Delete removes the whole selection atomically and one Undo restores every slot.
+-- Press Delete to remove the current selection
 local function deleteSelection()
     for name, action in pairs(h.keySubscriptions.KeyDown) do
         if string.find(name, "layout_editor_keys", 1, true) then
@@ -256,15 +264,11 @@ editor:SelectItems({ key(1), key(4) })
 editor.keysOnGrid = true
 before = Json.encode(app.store.data)
 local noticeCount = changes
-local removeTag = app.store.RemoveTag
-local removals = 0
-app.store.RemoveTag = function(self, tag, layoutKey)
-    removals = removals + 1
-    if removals == 2 then return false, "Could not save the selection." end
-    return removeTag(self, tag, layoutKey)
-end
+local chunks = h:TagsModule("banktags/core/chunked_string_store")
+local write = chunks.Write
+chunks.Write = function() return false, { stage = "manifest", reason = "disk full" } end
 deleteSelection()
-app.store.RemoveTag = nil
+chunks.Write = write
 assert(Json.encode(app.store.data) == before and grouped(1, 4) and changes == noticeCount)
 assert(editor.status.content ~= "")
 editor:ClearStatus()
@@ -280,13 +284,13 @@ assert(changes == noticeCount + 1 and editor.status.content == "")
 assert(editor:Undo() and Json.encode(app.store.data) == before)
 assert(editor:Redo() and Json.encode(app.store.data) == deleted)
 assert(editor:Undo() and Json.encode(app.store.data) == before)
--- The Remove button uses the same group action.
+-- The Remove button uses the same group action
 editor:SelectItems({ key(1), key(4) })
 editor.removeButton.root.hooks.pressed()
 assert(Json.encode(app.store.data) == deleted)
 assert(editor:Undo() and Json.encode(app.store.data) == before)
 
--- Move to Unsorted batches a group in reading order, preserving existing Unsorted slots.
+-- Move to Unsorted batches a group in reading order, preserving existing Unsorted slots
 before = Json.encode(app.store.data)
 editor:SelectItems({ key(4), key(1) })
 local unsortedCount = #app.store.data.tags.gear.unsorted
@@ -314,26 +318,27 @@ assert(editor:Undo() and Json.encode(app.store.data) == before)
 assert(editor:Redo() and Json.encode(app.store.data) == moved)
 assert(editor:Undo() and Json.encode(app.store.data) == before)
 
+-- Choose Move to Unsorted for a layout item
 local function moveFromMenu(layoutKey)
     local index = editor.layout.sortedIndex[layoutKey] - 1
     pointAt("sorted", index % COLUMNS, index // COLUMNS)
     Harness.Choose(h:ContentMenu(), "Move to Unsorted")
     h:Tick(2)
 end
--- Right-clicking another selected member keeps the entire group as the target.
+-- Right-clicking another selected member keeps the entire group as the target
 editor:SelectItems({ key(4), key(1) })
 moveNotices = changes
 moveFromMenu(key(1))
 assert(Json.encode(app.store.data) == moved and changes == moveNotices + 1)
 assert(editor:Undo() and Json.encode(app.store.data) == before)
--- Right-clicking an unselected item moves only that item.
+-- Right-clicking an unselected item moves only that item
 editor:SelectItems({ key(4), key(1) })
 moveFromMenu(key(5))
 assert(editor.layout.sortedIndex[key(1)] ~= nil and editor.layout.sortedIndex[key(4)] ~= nil)
 assert(editor.layout.sortedIndex[key(5)] == nil and #app.store.data.tags.gear.unsorted == unsortedCount + 1)
 assert(editor:Undo() and Json.encode(app.store.data) == before)
 
--- Compact labels pull all following content up, including clicks after scrolling.
+-- Compact labels pull all following content up, including clicks after scrolling
 app.store.data.tags.gear.rows = {
     { kind = "label", text = "First" }, row(item(31)),
     { kind = "label", text = "Second" }, row(item(32)),

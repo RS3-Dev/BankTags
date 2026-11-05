@@ -15,8 +15,9 @@ local CHECK_TICKS = 10
 local OUTLINE_WIDTH = 2
 local SHADOW_RGBA = 0xF2C66DFF
 
--- The bank's components can disappear while the client rebuilds its interface
+-- Find the bank's current item area
 local function itemLayer()
+    -- Allow the bank to disappear while finding its items
     local ok, layer = pcall(function()
         if ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__BANK_WINDOW) == nil then return nil end
         return ui.Interfaces:GetComponent(BANK_INTERFACE, ITEM_LAYER)
@@ -24,7 +25,7 @@ local function itemLayer()
     return ok and layer or nil
 end
 
--- Keep hooks and original item looks together for one running plugin
+-- Prepare bank item hooks and original appearance settings
 function NativeItems.new(app)
     return setmetatable({ app = app, items = {}, visuals = {}, pending = {}, ticks = 0 }, NativeItems)
 end
@@ -32,6 +33,7 @@ end
 -- Restore only the sprite properties changed by select mode
 function NativeItems:RestoreHighlights()
     for _, visual in ipairs(self.visuals) do
+        -- Allow item controls to disappear during cleanup
         pcall(function()
             visual.component.outlineWidth = visual.outlineWidth
             visual.component.shadowRGBA = visual.shadowRGBA
@@ -40,7 +42,7 @@ function NativeItems:RestoreHighlights()
     self.visuals = {}
 end
 
--- Outline as many stacks as the tag lists, stocked stacks before placeholders
+-- Outline selected stacks, placing stocked items first
 function NativeItems:RefreshHighlights()
     self:RestoreHighlights()
     local tag = self.app.select:Tag()
@@ -50,6 +52,7 @@ function NativeItems:RefreshHighlights()
         if slot.objectID ~= nil then counts[slot.objectID] = (counts[slot.objectID] or 0) + 1 end
     end
     for _, entry in ipairs(self.items) do stacks[#stacks + 1] = entry end
+    -- Place stocked stacks first, then follow bank order
     table.sort(stacks, function(a, b)
         local aStocked = (a.component.associatedObjectQuantity or 0) > 0
         local bStocked = (b.component.associatedObjectQuantity or 0) > 0
@@ -71,10 +74,11 @@ function NativeItems:RefreshHighlights()
     end
 end
 
--- Remove this plugin's hooks before binding a replacement generation of wrappers
+-- Release old item hooks and restore their appearance
 function NativeItems:ClearItems()
     self:RestoreHighlights()
     for _, entry in ipairs(self.items) do
+        -- Allow item controls to disappear during cleanup
         pcall(function()
             entry.component:Unsubscribe(ui.Hook.ONDRAG, ITEM_HOOK)
             entry.component:Unsubscribe(ui.Hook.ONDRAGCOMPLETE, ITEM_HOOK)
@@ -83,7 +87,7 @@ function NativeItems:ClearItems()
     self.items = {}
 end
 
--- Capture the source and visible target now; save after native drag handling finishes
+-- Capture the drop before saving on the next tick
 function NativeItems:Drop(entry)
     local app = self.app
     local objectID = entry.dragObjectID or entry.objectID
@@ -93,6 +97,7 @@ function NativeItems:Drop(entry)
     if tag == nil then return true end
     self.pending[#self.pending + 1] = { objectID = objectID, tag = tag,
         controls = app.tab.controls, ext = app.ext }
+    -- Save pending drops after native drag handling finishes
     Event.Logic.Subscribe(DROP_EVENT, function()
         Event.Logic.Unsubscribe(DROP_EVENT)
         local pending = self.pending
@@ -112,6 +117,7 @@ end
 function NativeItems:Refresh()
     local layer, items = itemLayer(), {}
     if layer ~= nil then
+        -- Collect the bank's current item controls
         layer:IterateDynamicComponents(function(component)
             local objectID = component.associatedObjectID
             if objectID ~= nil and objectID >= 0 then
@@ -132,10 +138,12 @@ function NativeItems:Refresh()
         self:ClearItems()
         self.items = items
         for _, entry in ipairs(items) do
+            -- Remember the item before native dragging changes its sprite
             entry.component:Subscribe(ui.Hook.ONDRAG, ITEM_HOOK, function()
                 if self.items == items then entry.dragObjectID = entry.component.associatedObjectID end
                 return true
             end)
+            -- Accept completion only from the current item controls
             entry.component:Subscribe(ui.Hook.ONDRAGCOMPLETE, ITEM_HOOK, function()
                 -- The host can change the source sprite before delivering this hook
                 if self.items ~= items then return true end
@@ -146,18 +154,19 @@ function NativeItems:Refresh()
     self:RefreshHighlights()
 end
 
--- Follow the client's native items even when Core has no inventory update to report
+-- Watch bank items while the bank is open
 function NativeItems:Start()
     self:Refresh()
     if self.running then return end
     self.running = true
+    -- Check for replacement bank controls every few ticks
     Event.Logic.Subscribe(WATCH_EVENT, function()
         self.ticks = self.ticks + 1
         if self.ticks % CHECK_TICKS == 0 then self:Refresh() end
     end)
 end
 
--- Cancel queued drops and release native wrappers on bank close or plugin disconnect
+-- Cancel pending drops and release bank item hooks
 function NativeItems:Stop()
     Event.Logic.Unsubscribe(WATCH_EVENT)
     Event.Logic.Unsubscribe(DROP_EVENT)

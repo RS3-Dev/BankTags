@@ -1,8 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Turn saved tags into pages that the real Bank Core accepts
--- Also check the entry budget and that failures never change saved data
--- FAKE HOST: stand-in components and saved data, not the game client
+-- Check page conversion, size limits, and safe failures
+-- FAKE HOST: stand-in components and storage
 
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("tag_page")
@@ -17,8 +16,11 @@ local TagStore = require("banktags/tags/tag_store")
 local item = require("banktags/tags/tag_layouts").Item
 
 local db = h.bankHost.db
+-- Create an open layout slot
 local function blank() return { kind = "blank" } end
+-- Build a layout row from the supplied slots
 local function row(...) return { kind = "row", slots = { ... } } end
+-- Create a layout label for the test
 local function label(text) return { kind = "label", text = text } end
 
 -- A test extension passes pages to Core's public API, as Bank Tags does

@@ -1,6 +1,4 @@
--- Add Bank Tags' entries to bank menus
--- Chosen entries run on the next tick, and only if their target is still there
--- A Tags row handles its own left click, so its entries only act when picked from the open menu
+-- Add bank menu actions that check their target before running
 
 local Config = require("banktags/core/config")
 local MenuEntries = require("banktags/ui/menu_entries")
@@ -19,23 +17,24 @@ local function subject(tag)
     return Text.plain(Text.titleCase(tag))
 end
 
--- Create the menus for an app; nothing is subscribed until Start
+-- Prepare menu handling for this plugin
 function TagMenus.new(app)
-    -- rowMenu is the newest Tags row menu, which is the one shown if the menu opens
+    -- Keep the latest row menu until it opens
     return setmetatable({ app = app, pending = {}, started = false, rowMenu = nil }, TagMenus)
 end
 
--- Answer bank menus while Bank Tags is connected to Bank Core
+-- Listen for bank menus while connected
 function TagMenus:Start()
     if self.started then return end
     self.started = true
+    -- Add this plugin's actions to each new menu
     Event.MiniMenuReady.Subscribe(MENU_EVENT, function(event)
         local menu = event and event.miniMenu
         if menu == nil then return end
         local ok, message = pcall(function() self:HandleMenu(menu) end)
         if not ok then debugLog("Bank Tags could not add its menu entries: ", message) end
     end)
-    -- The client stops rebuilding an opened menu, so the newest row menu is the one opened
+    -- Opening freezes the latest menu until a choice is made
     Event.MiniMenuOpened.Subscribe(MENU_EVENT, function()
         local rowMenu = self.rowMenu
         if rowMenu == nil then return end
@@ -44,7 +43,7 @@ function TagMenus:Start()
     end)
 end
 
--- Stop answering menus and drop chosen entries that have not run
+-- Stop listening and discard queued menu actions
 function TagMenus:Stop()
     if self.started then
         Event.MiniMenuReady.Unsubscribe(MENU_EVENT)
@@ -61,16 +60,18 @@ function TagMenus:EditorOpen()
     return self.app.windows.layoutEditor ~= nil
 end
 
--- Run an action next tick if current() still returns true
--- Bank entries also need the editor to stay closed; editor entries check their editor in current()
+-- Queue an action while its target remains valid
 function TagMenus:Defer(current, action, forEditor)
     -- Recheck occlusion and the target before queued actions run
     local function live() return (forEditor or not self:EditorOpen()) and current() end
+    -- Keep the action tied to its captured target
     return function()
         if not live() then return end
+        -- Recheck the target before running a queued action
         self.pending[#self.pending + 1] = function()
             if live() then action() end
         end
+        -- Run queued actions after native menu handling finishes
         Event.Logic.Subscribe(ACTION_EVENT, function()
             Event.Logic.Unsubscribe(ACTION_EVENT)
             local pending = self.pending
@@ -83,8 +84,7 @@ function TagMenus:Defer(current, action, forEditor)
     end
 end
 
--- Answer one menu: entries for the bank item beneath the pointer, or for the Tags row
--- The layout editor covers the bank, so nothing beneath it gets entries; only its own grid does
+-- Build actions for the visible item or row
 function TagMenus:HandleMenu(menu)
     self.rowMenu = nil
     local ext = self.app.ext
@@ -101,8 +101,7 @@ function TagMenus:HandleMenu(menu)
     end
 end
 
--- Add select mode's Add to, or Remove from on the shown tag's page
--- Remove from takes the clicked slot, and only while the page set when it was offered shows
+-- Offer item selection or removal for the current tag
 function TagMenus:AddItemEntries(menu, item)
     local app, ext = self.app, self.app.ext
     local session = app.select.session
@@ -117,6 +116,7 @@ function TagMenus:AddItemEntries(menu, item)
     local tag, layoutKey = app:ShownTag(), item.slot ~= nil and app.pageKeys[item.slot] or nil
     if tag == nil or not layoutKey then return end
     local revision = app.revision
+    -- Check that the menu still names the same target
     local current = function()
         return app.ext == ext and app.revision == revision and app:ShownTag() == tag
     end
@@ -124,7 +124,7 @@ function TagMenus:AddItemEntries(menu, item)
         action = self:Defer(current, function() app:RemoveFromTag(tag, layoutKey) end) } })
 end
 
--- Find the Tags row beneath the pointer, with the mounted context it was found in
+-- Find the hovered row and its mounted column
 function TagMenus:RowAtPointer()
     local tab = self.app.tab
     local ctx, controls = tab.ctx, tab.controls
@@ -132,10 +132,7 @@ function TagMenus:RowAtPointer()
     return controls.list:HoveredEntry(), ctx
 end
 
--- Add actions for the tag or folder row under the pointer, the first shown as the left click
--- The row handles left clicks itself, no matter when the client runs this menu's default
--- An entry picked from the open menu, or its folder submenu, acts once
--- A row click, a rebuilt tab, or a removed tag makes the menu out of date
+-- Offer actions for the hovered tag or folder
 function TagMenus:AddRowEntries(menu)
     local entry, ctx = self:RowAtPointer()
     if entry == nil then return end
@@ -143,6 +140,7 @@ function TagMenus:AddRowEntries(menu)
     local tab = app.tab
     local list = tab.controls.list
     local clicks = list.clicks
+    -- Check that the menu still names the same target
     local current = function()
         return tab.ctx == ctx and tab.controls ~= nil and tab.controls.list == list and list.clicks == clicks
     end
@@ -151,9 +149,10 @@ function TagMenus:AddRowEntries(menu)
         current = function() return mounted() and app.store.data.tags[entry.tag] ~= nil end
     end
     local rowMenu = { id = tostring(entry.tag or entry.key), opened = false, used = false }
-    -- Run an action once, next tick, if picked from the opened menu and still current
+    -- Accept one explicit choice from the opened menu
     local function chosen(label, action, check)
         local deferred = self:Defer(check or current, action)
+        -- Keep the action tied to its captured target
         return function()
             debugLog("Bank Tags row entry ", label, " for ", rowMenu.id, ": opened ", tostring(rowMenu.opened),
                 ", used ", tostring(rowMenu.used), ", clicks ", clicks, " now ", list.clicks,
@@ -183,12 +182,14 @@ function TagMenus:AddRowEntries(menu)
         offer("Select", name, function() app:ToggleTag(tag) end)
         offer("Edit", name, function() app.windows:OpenLayoutEditor(tag) end)
         offer("Rename", name, function() app.windows:OpenTagSettings(tag, false) end)
+        -- Toggle choosing bank items for this tag
         offer(app.select:Tag() == tag and "Stop selecting items" or "Select items", name, function()
             app.select:Toggle(tag)
         end)
         local folderKey = app.store:GetTagFolder(tag)
         if folderKey ~= nil then
             local folder = app.store:GetFolder(folderKey)
+            -- Move the tag out of its current folder
             offer("Remove from folder", Text.plain(folder ~= nil and folder.name or folderKey), function()
                 app:MoveTagToFolder(tag, nil)
             end)
@@ -200,9 +201,7 @@ function TagMenus:AddRowEntries(menu)
     if entry.kind == "tag" then self:AddFolderSubmenu(menu, entry.tag, 5, chosen, current) end
 end
 
--- Add item actions and row editing for the sorted grid
--- Actions run once, only when picked from the opened menu
--- Another save, tag, size, drag, or a closed editor makes the menu out of date
+-- Offer item and row actions for the editor
 function TagMenus:AddEditorEntries(menu)
     local windows = self.app.windows
     local editor = windows.layoutEditor
@@ -214,17 +213,19 @@ function TagMenus:AddEditorEntries(menu)
     local current = function() return windows.layoutEditor == editor and editor:RowTargetCurrent(target) end
     local rowMenu = { id = "editor row " .. target.row, opened = false, used = false }
     local children = {}
-    -- Accept one explicit choice from this opened editor menu
+    -- Accept one explicit choice from the opened menu
     local function chosen(action)
         local deferred = self:Defer(current, action, true)
+        -- Keep the action tied to its captured target
         return function()
             if not rowMenu.opened or rowMenu.used then return end
             rowMenu.used = true
             deferred()
         end
     end
-    -- Move a selected group together; an unselected item becomes the sole target.
+    -- Keep a selected group or select the clicked item
     local function itemAction(action, useSelection)
+        -- Select the clicked item before applying its action
         return chosen(function()
             if not useSelection or not editor:IsSelected(target.layoutKey) then
                 editor:SelectOnly(target.layoutKey)
@@ -270,8 +271,7 @@ function TagMenus:AddEditorEntries(menu)
     self.rowMenu = rowMenu
 end
 
--- Add the folder submenu between selection and removal actions
--- It lists the other folders, Create new folder, and Cancel
+-- Offer folders and a new-folder action
 function TagMenus:AddFolderSubmenu(menu, tag, position, chosen, isCurrent)
     local MiniMenu = prettyui.MiniMenu
     if MiniMenu == nil then

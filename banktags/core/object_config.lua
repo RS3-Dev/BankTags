@@ -2,7 +2,7 @@
 
 local ObjectConfig = {}
 
--- Resolve a config name to its client object, allowing missing or renamed configs
+-- Find an item by its saved name
 function ObjectConfig.Object(configName)
     if type(configName) ~= "string" or configName == ""
         or config == nil or config.Obj == nil then return nil end
@@ -19,7 +19,7 @@ function ObjectConfig.ObjectID(configName)
     return ok and math.tointeger(tonumber(objectID)) or nil
 end
 
--- Read an object's stable config name, falling back to its printed form
+-- Read the stable name used in item saves
 function ObjectConfig.ConfigName(objectID)
     local object = ObjectConfig.FromID(objectID)
     if object == nil then return nil end
@@ -37,7 +37,7 @@ function ObjectConfig.FromID(objectID)
     return ok and object or nil
 end
 
--- Read an object's display name, or nil when the client has none
+-- Read an item's name for display
 function ObjectConfig.DisplayName(objectID)
     local object = ObjectConfig.FromID(objectID)
     if object == nil then return nil end

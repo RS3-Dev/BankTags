@@ -1,7 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Show each saved change once, only where it shows, and add search results in one save
--- FAKE HOST: stand-in loader, components, pointer, and saves, not the game client
+-- Check focused redraws and single-save search additions
+-- FAKE HOST: stand-in components, pointer, and storage
 
 local Harness = require("tools/test_support/tags_harness")
 local Geometry = require("banktags/ui/geometry")
@@ -21,6 +21,7 @@ local App = getmetatable(app)
 local Size = h:TagsModule("banktags/windows/layout_editor_parts").size
 local COLUMNS = Size.CENTER_COLUMNS
 local item = TagLayouts.Item
+-- Build a layout row from the supplied slots
 local function row(...) return { kind = "row", slots = { ... } } end
 -- Count a tag's slots for an object
 local function count(tag, objectID)
@@ -38,6 +39,7 @@ app:Changed()
 
 -- Count every redraw and save from here on
 local counts
+-- Reset the counters before the next check
 local function reset()
     counts = { center = 0, rail = 0, tab = 0, pages = {}, exports = 0, writes = 0 }
 end
@@ -83,12 +85,13 @@ local function sharedGear()
         if shareRow.tag == "gear" then return shareRow.field:GetText() end
     end
 end
+-- Encode the gear tag for comparison
 local function storedGear()
     for _, export in ipairs(store:TagExports()) do
         if export.tag == "gear" then return export.value end
     end
 end
--- Check one editor edit of gear redrew the grids once and only what shows gear
+-- Check that one edit refreshes only affected views
 local function editedOnce(where)
     assert(counts.center == 1, where .. ": grids redrew " .. counts.center .. " times")
     assert(counts.rail == 0 and counts.tab == 0, where .. ": the rail or Tags tab redrew")
@@ -96,7 +99,7 @@ local function editedOnce(where)
     assert(counts.exports == 1 and sharedGear() == storedGear(), where .. ": Import/Share is stale")
 end
 
--- Point at a pane's grid slot, counted from zero, through its scroll
+-- Point at a pane cell through its scroll
 local function pointAt(paneName, column, line)
     local left, top = Geometry.absolutePosition(editor.content)
     local pane = editor.panes[paneName]
@@ -104,6 +107,7 @@ local function pointAt(paneName, column, line)
     h:PointEditor(pane.x + x, pane.y + y)
     return x, y
 end
+-- Drag between the chosen grid cells
 local function drag(fromColumn, fromLine, toColumn, toLine)
     h:PressEditor(editor.panes.sorted.surface, pointAt("sorted", fromColumn, fromLine))
     pointAt("sorted", toColumn, toLine)
@@ -155,6 +159,7 @@ assert(counts.tab == 1 and counts.rail == 1 and counts.center == 1 and #counts.p
 -- A search result is added and placed in one save and one undo step ------------------
 
 local before = store.data
+-- Check that no views or saved data changed
 local function unchanged(where)
     assert(store.data == before and count("gear", 385) == 0, where .. ": the data changed")
     assert(editor.history == nil, where .. ": an undo step was kept")
@@ -210,8 +215,7 @@ app:Renamed("gear", "kit")
 assert(#counts.pages == 1 and counts.pages[1] == "kit" and app:ShownTag() == "kit")
 assert(editor.selectedTag == "kit" and counts.center == 1)
 
--- A change to the shown tag never takes the bank from another plugin's page,
--- even before Bank Core says its page closed; the player's click shows the tag again
+-- Keep another plugin's page until the player chooses this tag
 local layout = h:Session().layout
 local other = assert(core.result.Register({ id = "test.other", name = "Other" }))
 assert(other:SetPage({ rows = { { slots = { 385 } } } }) and other:Open())

@@ -1,13 +1,12 @@
--- Build Bank Tags, run every test, and check the built files
--- Usage, from the repository root: lua54 tools/check.lua
--- Tests read Bank Core from BANKCORE_ROOT and PrettyUI's MiniMenu from PRETTYUI_ROOT; see tests/README.md
--- Each test runs in its own process because the tests install different host stand-ins
+-- Build and check the plugin, then run each test separately
+-- Run from the repository root: lua54 tools/check.lua
+-- See tests/README.md for Bank Core and PrettyUI paths
 
 package.path = "./?.lua;" .. package.path
 
 local interpreter = arg[-1] or "lua54"
 -- luac sits beside the interpreter in the Lua binary distribution
-local compiler = interpreter:gsub("lua(%d*)%.exe$", "luac%1.exe"):gsub("lua(%d*)$", "luac%1")
+local compiler = interpreter:gsub("lua([%d.]*)%.exe$", "luac%1.exe"):gsub("lua([%d.]*)$", "luac%1")
 
 -- Globals the game host and Lua itself provide, and the dependency globals it injects
 local ALLOWED = {}
@@ -19,7 +18,7 @@ pcall error select next setmetatable getmetatable rawget rawset require print os
 assert collectgarbage package _G utf8 coroutine debug
 ]]):gmatch("%S+") do ALLOWED[name] = true end
 
--- Run a command and return whether it succeeded and what it printed
+-- Run a command and collect its result
 local function run(command)
     local handle = io.popen(command .. " 2>&1")
     local output = handle:read("a")
@@ -27,7 +26,7 @@ local function run(command)
     return ok == true, output
 end
 
--- List tracked and new files still present, including uncommitted additions and removals.
+-- List existing tracked and uncommitted files
 local function trackedFiles(...)
     local _, output = run("git ls-files --cached --others --exclude-standard " .. table.concat({ ... }, " "))
     local files = {}
@@ -82,6 +81,9 @@ else
 end
 
 local tests = trackedFiles('"tests/*_test.lua"')
+local commentProblems, namedFunctions = require("tools/comments").Check(
+    trackedFiles('"plugins/*.lua"', '"banktags/*.lua"', '"tools/*.lua"', '"tests/*.lua"'))
+print(("%d of %d named functions have short summaries"):format(namedFunctions - commentProblems, namedFunctions))
 for _, path in ipairs(tests) do
     local ok, output = run(('"%s" %s'):format(interpreter, path))
     if not ok then
@@ -115,4 +117,4 @@ end
 print(("%d of %d built runtime files compile with no unexpected globals"):format(
     #runtime - globalProblems, #runtime))
 
-os.exit(failures == 0 and globalProblems == 0 and orphans == 0 and strays == 0 and 0 or 1)
+os.exit(failures == 0 and globalProblems == 0 and commentProblems == 0 and orphans == 0 and strays == 0 and 0 or 1)

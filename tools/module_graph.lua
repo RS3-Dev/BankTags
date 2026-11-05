@@ -1,10 +1,9 @@
--- Find every module the plugin entry loads
--- Adapted from Bank Core's build tools
--- Run from the repository root; module names are paths without ".lua"
+-- Find the plugin's required modules from the repository root
+-- Use module paths without .lua, following Bank Core's build tools
 
 local ModuleGraph = {}
 
--- Read a module's source, or nil when the file does not exist
+-- Read a module's source when it exists
 function ModuleGraph.Source(moduleName)
     local file = io.open(moduleName .. ".lua", "r")
     if file == nil then return nil end
@@ -14,14 +13,13 @@ function ModuleGraph.Source(moduleName)
 end
 
 -- List a module's required names in source order
--- Unusual require calls raise an error, so no module is quietly missed
 function ModuleGraph.Requires(moduleName)
     local source = ModuleGraph.Source(moduleName)
     if source == nil then error("module " .. moduleName .. " has no file", 2) end
     return ModuleGraph.RequiresIn(source, moduleName)
 end
 
--- List the modules a source text requires; moduleName only labels errors
+-- Find required modules and reject unsupported calls
 function ModuleGraph.RequiresIn(source, moduleName)
     local code = ModuleGraph.Code(source)
     local names, position = {}, 1
@@ -80,24 +78,24 @@ end
 -- Blank comments and string contents, keeping every position
 function ModuleGraph.Code(source)
     local out, index, length = {}, 1, #source
+    -- Blank a source span while keeping its line breaks
     local function blank(first, last)
         out[#out + 1] = (string.gsub(string.sub(source, first, last), "[^\n]", " "))
     end
     while index <= length do
-        local rest = string.sub(source, index)
-        local longOpen = string.match(rest, "^%-%-%[(=*)%[")
+        local longOpen = string.match(source, "^%-%-%[(=*)%[", index)
         if longOpen ~= nil then
             local close = string.find(source, "]" .. longOpen .. "]", index, true)
             local last = close and close + #longOpen + 1 or length
             blank(index, last)
             index = last + 1
-        elseif string.sub(rest, 1, 2) == "--" then
+        elseif string.sub(source, index, index + 1) == "--" then
             local lineEnd = string.find(source, "\n", index, true) or length + 1
             blank(index, lineEnd - 1)
             index = lineEnd
         else
-            local stringOpen = string.match(rest, "^%[(=*)%[")
-            local quote = string.sub(rest, 1, 1)
+            local stringOpen = string.match(source, "^%[(=*)%[", index)
+            local quote = string.sub(source, index, index)
             if stringOpen ~= nil then
                 local close = string.find(source, "]" .. stringOpen .. "]", index, true)
                 local last = close and close + #stringOpen + 1 or length

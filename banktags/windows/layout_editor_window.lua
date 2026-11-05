@@ -1,4 +1,4 @@
--- Build the bank editor: Unsorted, tabbed Layout, and Search.
+-- Build the bank editor's Unsorted, Layout, and Search panels
 
 local Config = require("banktags/core/config")
 local Text = require("banktags/core/text")
@@ -9,7 +9,7 @@ local Size = Parts.size
 
 local LayoutEditorWindow = {}
 LayoutEditorWindow.__index = LayoutEditorWindow
--- Compose the editor from lifecycle-independent view and interaction modules.
+-- Combine the editor's drawing and input helpers
 for _, methods in ipairs({
     require("banktags/windows/layout_editor_view"),
     require("banktags/windows/layout_editor_rows"),
@@ -49,7 +49,7 @@ function LayoutEditorWindow.new(parent, options)
         groupKeys = nil,
         -- The empty sorted cell Paste fills, outlined in gold
         pasteCell = nil,
-        -- The copied items of the open tag, kept until the tag changes or the editor closes
+        -- Keep copied items until the tag or editor changes
         clipboard = nil,
         actionTooltips = {
             copyButton = "Copy the selected item or group (Ctrl+C)",
@@ -81,7 +81,7 @@ function LayoutEditorWindow.new(parent, options)
         -- PrettyUI destroys the window after this returns
         onClose = function() self:Destroy(true) end,
     })
-    -- PrettyUI has no option to fix a window in place, so its title-bar drag is removed
+    -- Remove title-bar dragging so the editor follows the bank
     if self.window.titleDrag ~= nil then
         self.window.titleDrag:Destroy()
         self.window.titleDrag = nil
@@ -108,8 +108,7 @@ function LayoutEditorWindow:MoveTo(bounds)
     if moved then self:Show() end
 end
 
--- Show saved changes, keeping the open tag if it still exists
--- A named tag means only that tag's items or layout changed
+-- Refresh the open tag after relevant saved changes
 function LayoutEditorWindow:StoreChanged(tag)
     if tag ~= nil and tag ~= self.selectedTag then return end
     if tag == nil then self:RefreshTags() end
@@ -120,7 +119,7 @@ function LayoutEditorWindow:StoreChanged(tag)
     self:RefreshCenter()
 end
 
--- Show the editor aligned with the bank, then its windows and the tutorial in front, in order
+-- Align the editor and keep its dialogs in front
 function LayoutEditorWindow:Show()
     local window = self.window
     if window == nil then return end
@@ -143,8 +142,7 @@ function LayoutEditorWindow:SetOverlays(windows, guideLayer)
     self:Show()
 end
 
--- Show a failure beside the footer actions
--- Saves happen on every change, so only problems and copying are shown
+-- Show an error beside the footer actions
 function LayoutEditorWindow:ShowError(message, colour)
     self.status.content = message or "Something went wrong."
     self.status.rgba = colour or Theme.ERROR_TEXT
@@ -173,7 +171,7 @@ function LayoutEditorWindow:RefreshTags()
     self:ShowChosenTag()
 end
 
--- Keep the open tag's tab selected and visible.
+-- Keep the open tag selected and visible
 function LayoutEditorWindow:ShowChosenTag()
     self.tagTabs:Select(self.selectedTag)
 end
@@ -187,7 +185,7 @@ end
 
 -- End drags and load the selected tag's layout
 function LayoutEditorWindow:SelectTag(tag)
-    -- Another tag starts both grids at the top, with no undo steps, copied items, or message
+    -- Reset scrolling and editing state when switching tags
     if tag ~= self.selectedTag then
         self:ClearHistory()
         self:ClearStatus()
@@ -200,7 +198,7 @@ function LayoutEditorWindow:SelectTag(tag)
     self:RefreshCenter()
 end
 
--- Redraw both grids from the saved layout, keeping each one's scroll
+-- Redraw both grids while keeping their scroll positions
 function LayoutEditorWindow:RefreshCenter()
     self:CancelDrag()
     local layout = self.store:EditorLayout(self.selectedTag, Size.CENTER_COLUMNS)
@@ -217,8 +215,7 @@ function LayoutEditorWindow:RefreshCenter()
     self:ShowSelection()
 end
 
--- Follow the hovered item's name and, every few ticks, the bank's bounds
--- The bank check runs last, since it may close this editor and open another
+-- Follow item names and periodically check the bank's position
 function LayoutEditorWindow:FollowHoverAndBank()
     self:UpdateItemName()
     self.bankCheckTicks = self.bankCheckTicks + 1
@@ -235,7 +232,7 @@ function LayoutEditorWindow:SelectedEntry()
     return nil
 end
 
--- Move the selected item or group to Unsorted in one save and undo step.
+-- Move selected items to Unsorted in one undo step
 function LayoutEditorWindow:UnarrangeSelected()
     local entry, paneName = self:SelectedEntry()
     if entry == nil then self:ShowError("Select a layout item first."); return false end
@@ -245,20 +242,15 @@ function LayoutEditorWindow:UnarrangeSelected()
     end
     local keys = self.groupKeys ~= nil and self:SortedKeys(self.groupKeys) or { entry.layoutKey }
     if #keys == 0 then return false end
+    -- Move the entire selection before clearing its outlines
     return (self:SaveEdit("Could not move the selected items to Unsorted.", function()
-        local saved, reason = self.store:SaveTogether(function()
-            for _, layoutKey in ipairs(keys) do
-                local moved, moveReason = self.store:UnarrangeLayoutItem(self.selectedTag, layoutKey)
-                if not moved then return false, moveReason end
-            end
-            return true
-        end)
+        local saved, reason = self.store:UnarrangeLayoutItems(self.selectedTag, keys)
         if saved then self:SelectOnly(nil) end
         return saved, reason
     end))
 end
 
--- Place the selected Unsorted item in the first open cell, skipping labels and reserved slots.
+-- Place the Unsorted selection in the first open cell
 function LayoutEditorWindow:ArrangeSelected()
     local entry, paneName = self:SelectedEntry()
     if entry == nil or paneName ~= "unsorted" then return false end
@@ -271,12 +263,13 @@ function LayoutEditorWindow:ArrangeSelected()
             break
         end
     end
+    -- Save the first available layout position
     return (self:SaveEdit("Could not move the item to the layout.", function()
         return self.store:MoveLayoutItem(self.selectedTag, entry.layoutKey, destination, Size.CENTER_COLUMNS)
     end))
 end
 
--- Untag the selection in one save and undo step, keeping other grid positions.
+-- Remove selected items from the tag in one step
 function LayoutEditorWindow:RemoveSelected()
     local keys
     if self.groupKeys ~= nil then
@@ -286,26 +279,20 @@ function LayoutEditorWindow:RemoveSelected()
         keys = entry ~= nil and { entry.layoutKey } or {}
     end
     if #keys == 0 then return false end
+    -- Remove the entire selection before clearing its outlines
     return (self:SaveEdit("Could not remove the selected items.", function()
-        local saved, reason = self.store:SaveTogether(function()
-            for _, layoutKey in ipairs(keys) do
-                local removed, removeReason = self.store:RemoveTag(self.selectedTag, layoutKey)
-                if not removed then return false, removeReason end
-            end
-            return true
-        end)
+        local saved, reason = self.store:RemoveTags(self.selectedTag, keys)
         if saved then self:SelectOnly(nil) end
         return saved, reason
     end))
 end
 
--- Tell the app the open tag's items or layout changed, which redraws the grids
+-- Notify the app that the open tag changed
 function LayoutEditorWindow:NotifyChanged()
     if self.onChanged ~= nil then self.onChanged(self.selectedTag) end
 end
 
--- Stop events and drags, release the controls and callbacks, then the window
--- A window closing itself is destroyed by PrettyUI once its onClose returns
+-- Stop listeners and release editor controls before its window
 function LayoutEditorWindow:Destroy(closing)
     local window = self.window
     if window == nil then return end

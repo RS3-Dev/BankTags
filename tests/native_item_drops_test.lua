@@ -1,17 +1,19 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Drop native bank items onto visible tag rows, independently of Core's item APIs
--- FAKE HOST: the client delivers the hooks; native hover during drags needs live checks
+-- Check native bank item drops onto visible tag rows
+-- FAKE HOST: real drag hover still needs client checks
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("native_item_drops")
 local host = h.bankHost
 
 -- Model named native hooks so Core and another plugin keep their own listeners
 local setItems = host.SetItems
+-- Replace items while recording their named native hooks
 function host:SetItems(specs)
     setItems(self, specs)
     for _, item in ipairs(self.items) do
         local listeners = {}
+        -- Keep native and named listeners for one item
         function item:Subscribe(hook, name, action)
             if action == nil then action, name = name, "default" end
             listeners[hook] = listeners[hook] or {}
@@ -26,6 +28,7 @@ function host:SetItems(specs)
                 return true
             end
         end
+        -- Remove only the named item listener
         function item:Unsubscribe(hook, name)
             local actions = listeners[hook]
             if actions == nil then return end
@@ -44,12 +47,14 @@ h:Tick(2)
 for _, tag in ipairs({ "melee", "food", "ranged" }) do assert(app.store:CreateTag(tag)) end
 assert(app.store:CreateFolder("Combat", "melee"))
 app:Changed()
+-- Mark the visible tag row as hovered
 local function pointAtTag(tag)
     local row = assert(app.tab:RowFor(tag), tag)
     local list = app.tab.controls.list.list
     list.scrollY = row.root.y
     h:PointAt(row.root, 20, 10 - list.scrollY)
 end
+-- Drag a native item onto a sidebar row
 local function drop(slot, target)
     pointAtTag(target)
     local readMouse = Mouse.GetPosition

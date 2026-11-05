@@ -1,8 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Click tag rows and bank items the way the live client delivers clicks
--- Covers showing and leaving tags and select mode's plain left clicks
--- FAKE HOST: stand-in loader, components, and menus, not the game client
+-- Check tag toggles and select mode through native clicks
+-- FAKE HOST: stand-in components, loader, and menus
 
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("bank_clicks")
@@ -76,7 +75,7 @@ Harness.Choose(h:ContentMenu(), "Select items <col=f2c66d>Ranged</col>")
 h:Tick(2)
 assert(app.select:Tag() == "ranged")
 assert(app:ShownTag() == nil and layout.shownPage == nil)
--- Consecutive left clicks on native items add a slot each and withdraw nothing
+-- Add the clicked bank item without withdrawing it
 local function pickItem(slot, name)
     local default = Harness.LeftClick(h:MenuFor(host.items[slot]))
     assert(default == "Add to Ranged <col=f2c66d>" .. name .. "</col>", tostring(default))

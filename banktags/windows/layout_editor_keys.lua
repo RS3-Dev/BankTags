@@ -18,7 +18,7 @@ function LayoutEditorKeys:StartShortcuts()
     self.keysOnGrid = false
     self.menuOnGrid = false
     Event.KeyDown.Subscribe(KEY_EVENT, function(event) self:KeyPressed(event) end)
-    -- Another menu may lead to a window with its own text field; the grid's own row menu does not
+    -- Keep grid shortcuts only for the editor's own menus
     Event.MiniMenuOpened.Subscribe(KEY_EVENT, function()
         if not self.menuOnGrid then self.keysOnGrid = false end
     end)
@@ -49,7 +49,7 @@ function LayoutEditorKeys:OverlayShown()
     return false
 end
 
--- Name what keeps the keys from the grids, or nil when they have them
+-- Explain why the grids cannot receive shortcut keys
 function LayoutEditorKeys:KeysBlocker()
     if not self.keysOnGrid then return "no grid press since focus moved" end
     if self.window == nil or self.window.root.hidden then return "hidden editor" end
@@ -65,8 +65,7 @@ function LayoutEditorKeys:KeysReady()
     return self:KeysBlocker() == nil
 end
 
--- Move the selected sorted item or group one cell, as a drag there would
--- The grid's edges stop it quietly; a label's line says why
+-- Move the sorted selection by one cell
 function LayoutEditorKeys:NudgeSelected(columnStep, lineStep)
     local entry, paneName, anchor = self:SelectedEntry()
     if paneName ~= "sorted" then return false end
@@ -78,14 +77,14 @@ function LayoutEditorKeys:NudgeSelected(columnStep, lineStep)
     local destination = line * columns + column + 1
     local plan = self.store:PlanLayoutItemsMove(self.selectedTag, keys, entry.layoutKey, destination, columns)
     if plan ~= nil and plan.offGrid then return false end
+    -- Save the keyboard move as one undo step
     local _, _, changed = self:SaveEdit("Could not move the items.", function()
         return self.store:MoveLayoutItems(self.selectedTag, keys, entry.layoutKey, destination, columns)
     end)
     return changed
 end
 
--- Read the held modifiers from the event and the keyboard
--- Either may report a held key; AltGr arrives as Ctrl and Alt, so it is never Ctrl alone
+-- Combine the held modifiers reported by event and keyboard
 local function heldModifiers(event)
     local held = event.modifiers & ANY_MODIFIER
     if Keyboard.IsShiftDown() then held = held | SHIFT_MODIFIER end
@@ -94,7 +93,7 @@ local function heldModifiers(event)
     return held
 end
 
--- Name the shortcut a key and its modifiers make, with arrow steps
+-- Find the shortcut matching a key and its modifiers
 local function shortcutFor(key, held)
     if held == CONTROL_MODIFIER then
         if key == GameKey.Z then return "undo" end
@@ -112,7 +111,7 @@ local function shortcutFor(key, held)
     return nil
 end
 
--- Log a chord or shortcut key while debugging, with what blocked it
+-- Log a shortcut and what prevented it
 function LayoutEditorKeys:TraceKey(event, held, shortcut)
     if held == 0 and shortcut == nil and event.gameKey ~= GameKey.CONTROL then return end
     DebugLog.Write("Bank Tags editor key ", tostring(GameKey.FromID(event.gameKey)),
@@ -122,7 +121,7 @@ function LayoutEditorKeys:TraceKey(event, held, shortcut)
         " selected ", tostring(self.selectedLayoutKey))
 end
 
--- Run each shortcut once per press, never on the OS's held-key repeats
+-- Run each shortcut once per key press
 function LayoutEditorKeys:KeyPressed(event)
     if event.isRepeat then return end
     local held = heldModifiers(event)

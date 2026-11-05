@@ -1,7 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 local BankGrid = require("banktags/ui/bank_grid")
 
--- Native press coordinates must place drag ghosts consistently across rows and scroll.
+-- Native press coordinates must place drag ghosts consistently across rows and scroll
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("editor_pointer")
 h.bankHost:SetItems({ { 385, 20, "Shark" }, { 1944, 1, "Egg" } })
@@ -22,9 +22,10 @@ local editor = app.windows.layoutEditor
 local pane = editor.panes.sorted
 assert(editor.dragCapture == nil, "a held press must not depend on a second hover target")
 editor.content.xyGlobal = { x = 700, y = 400 }
--- The pointer conversion must not rely on PrettyUI's private tooltip context.
+-- The pointer conversion must not rely on PrettyUI's private tooltip context
 editor.window.tooltipContext = { position = function() return -1000, -1000 end }
 
+-- Report a scaled native pointer position
 local function point(surface, x, y, scale)
     local clip = editor.surfaceClips[surface]
     surface.xyGlobal = { x = 700 + clip.x + surface.x, y = 400 + clip.y + surface.y }
@@ -63,7 +64,7 @@ for _, row in ipairs({ 1, 3 }) do
     end
 end
 
--- A group uses the same native grab point as a single item.
+-- A group uses the same native grab point as a single item
 pane.view:SetScrollPosition(0)
 editor:SelectOnly(nil)
 editor:ToggleGroupItem(pane.slots[21].layoutKey)
@@ -74,7 +75,7 @@ assert(editor.drag.kind == "group")
 assert(editor.drag.ghost.x == pane.x + 24 - 18 and editor.drag.ghost.y == pane.y + 112 - 16)
 editor:CancelDrag()
 
--- Search's surface is a viewport overlay: its click is already unscrolled.
+-- Search's surface is a viewport overlay: its click is already unscrolled
 editor:RunSearch("Shark")
 local result = editor.searchResults[1]
 editor.searchResults = { result, result, result, result }
@@ -88,7 +89,7 @@ local searchX, searchY = size.SEARCH_X + size.SEARCH_INSET + 30, size.PANEL_TOP 
 assert(drag.ghost.x == searchX - 18 and drag.ghost.y == searchY - 16)
 editor:CancelDrag()
 
--- Native click coordinates are sufficient even if the global pointer is unavailable.
+-- Native click coordinates are sufficient even if the global pointer is unavailable
 h.bankHost.mouse = nil
 h:PressEditor(editor.searchDragSurface, 30, 12)
 assert(editor.drag ~= nil and editor.drag.ghost.y == searchY - 16)
@@ -119,7 +120,7 @@ editor.panes.unsorted.surface.hooks.dragcomplete(editor.panes.unsorted.surface, 
 editor.panes.unsorted.surface.hooks.release(editor.panes.unsorted.surface, 0, 0)
 assert(editor.drag ~= nil and editor.drag.sourceSurface == pane.surface)
 editor:CancelDrag()
--- A completed drag after leaving the capture must not save at the last hovered cell.
+-- A completed drag after leaving the capture must not save at the last hovered cell
 h:PressEditor(pane.surface, 24, 112)
 assert(editor.drag ~= nil)
 local before = require("banktags/core/json").encode(app.store.data)

@@ -2,9 +2,13 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 
 local TagLayouts = require("banktags/tags/tag_layouts")
 
+-- Create a saved item slot for the test
 local function item(name) return { kind = "item", layoutKey = name } end
+-- Create an open layout slot
 local function blank() return { kind = "blank" } end
+-- Build a layout row from the supplied slots
 local function row(...) return { kind = "row", slots = { ... } } end
+-- Create a layout label for the test
 local function label(text) return { kind = "label", text = text } end
 
 -- A short row leaves the rest of its line empty; a label takes a whole line

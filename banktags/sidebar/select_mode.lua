@@ -1,5 +1,4 @@
--- Run select mode, where left-clicking bank items adds them to a tag
--- It runs over the bank's own view and ends when a tag is shown or the bank closes
+-- Choose bank items to add to a tag
 
 local Config = require("banktags/core/config")
 local Text = require("banktags/core/text")
@@ -11,7 +10,7 @@ SelectMode.__index = SelectMode
 local PULSE_EVENT = Config.PLUGIN_REF .. "_select_pulse"
 local PULSE_PERIOD = 100
 
--- Create select mode for an app; no session runs until Start
+-- Prepare a session for choosing bank items
 function SelectMode.new(app)
     return setmetatable({ app = app, session = nil, pulseTicks = 0 }, SelectMode)
 end
@@ -26,13 +25,13 @@ function SelectMode:Label()
     return "Add to " .. Text.plain(Text.titleCase(self.session.tag))
 end
 
--- Start choosing items for a tag, or stop if already choosing
+-- Start or stop choosing items for a tag
 function SelectMode:Toggle(tag)
     if self:Tag() == tag then return self:Stop() end
     return self:Start(tag)
 end
 
--- Start the session over the bank's own view, leaving a shown tag
+-- Start choosing items in the normal bank view
 function SelectMode:Start(tag)
     local app = self.app
     local ext = app.ext
@@ -70,7 +69,7 @@ function SelectMode:Forget()
     self:StopPulse()
 end
 
--- Follow a renamed tag, keeping the session running under its new name
+-- Keep choosing items after a tag is renamed
 function SelectMode:Rename(oldTag, newTag)
     if self:Tag() == oldTag then self.session.tag = newTag end
 end

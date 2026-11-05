@@ -31,6 +31,7 @@ tags.env.audio = {
 }
 -- One-shot cues finish while the player takes the next action
 local tick = h.Tick
+-- Advance the host and keep the tutorial under test
 function h:Tick(count)
     if currentSound ~= nil then currentSound.dead = true end
     tick(self, count)

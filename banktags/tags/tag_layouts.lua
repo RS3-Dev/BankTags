@@ -6,7 +6,7 @@ local TagLayouts = {}
 
 -- Width used when a caller gives none
 local DEFAULT_COLUMNS = 10
--- The last key given to a slot; keys tell slots apart in this session and are never saved
+-- Keep slot keys unique for this session only
 local lastKey = 0
 
 -- Return a new empty slot
@@ -14,7 +14,7 @@ local function blank()
     return { kind = "blank" }
 end
 
--- Return a new slot for an object, with its own key
+-- Create an item slot with its own key
 function TagLayouts.Item(objectID)
     lastKey = lastKey + 1
     return { kind = "item", objectID = objectID, layoutKey = lastKey }
@@ -23,14 +23,6 @@ end
 -- Check whether a slot is empty and reserves no item
 function TagLayouts.IsOpen(slot)
     return type(slot) == "table" and slot.kind == "blank" and slot.dormant == nil
-end
-
--- Check whether a row holds no items or reserved positions
-local function rowIsEmpty(entry)
-    for _, slot in ipairs(entry.slots) do
-        if not TagLayouts.IsOpen(slot) then return false end
-    end
-    return true
 end
 
 -- Trim trailing open slots and trailing empty rows
@@ -69,7 +61,7 @@ function TagLayouts.Render(entries, columns)
     return view
 end
 
--- Find the entry a new entry should precede to start at a line
+-- Find the saved entry containing a grid line
 function TagLayouts.EntryAtLine(view, entries, line)
     for index = 1, #entries do
         local nextStart = view.starts[index + 1] or view.lines
@@ -78,9 +70,13 @@ function TagLayouts.EntryAtLine(view, entries, line)
     return #entries + 1
 end
 
--- Check whether an entry is a row with nothing in it
+-- Check whether a row contains only open slots
 function TagLayouts.IsEmptyRow(entry)
-    return entry ~= nil and entry.kind == "row" and rowIsEmpty(entry)
+    if entry == nil or entry.kind ~= "row" then return false end
+    for _, slot in ipairs(entry.slots) do
+        if not TagLayouts.IsOpen(slot) then return false end
+    end
+    return true
 end
 
 -- List every slot in a layout's rows, in order

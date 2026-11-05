@@ -8,8 +8,7 @@ local Parts = {}
 local Size = {}
 Parts.size = Size
 
--- Default sizes match the bank and Bank Core's sidebar
--- Bank Core's sidebar: its tab rail, the gap after it, and its tag column
+-- Match the bank and sidebar's default size
 Size.SIDEBAR_WIDTH = 32 + 8 + 244
 Size.DEFAULT_WIDTH = 714 + Size.SIDEBAR_WIDTH
 Size.DEFAULT_HEIGHT = 650
@@ -19,7 +18,7 @@ Size.DEFAULT_PANEL_HEIGHT = 600
 -- Each column draws its items in one framed area, its view inset alike
 Size.VIEW_INSET = 4
 Size.COLUMN_GAP = 6
--- Unsorted stays five columns wide, leaving the remaining space for Search.
+-- Keep Unsorted five columns wide
 Size.UNSORTED_X = 8
 Size.UNSORTED_COLUMNS = 5
 -- The right column ends where the window's border begins
@@ -39,11 +38,11 @@ Size.LABEL_GHOST_HEIGHT = 28
 Size.DEFAULT_CENTER_WIDTH = 474
 -- PrettyUI reserves this much for a scroll list's scrollbar and its gap
 Size.SCROLLBAR_RESERVE = 18
--- Fit exactly five cells, their gaps, the scrollbar, and 5px of inner padding per side.
+-- Fit five cells, their gaps, padding, and a scrollbar
 Size.UNSORTED_WIDTH = (Size.UNSORTED_COLUMNS - 1) * Size.GRID_STEP + Size.GRID_SLOT_SIZE
     + Size.SCROLLBAR_RESERVE + 2 * Size.VIEW_INSET + 10
 Size.CENTER_X = Size.UNSORTED_X + Size.UNSORTED_WIDTH + Size.COLUMN_GAP
--- Anchor the layout and Unsorted headings just above their content areas.
+-- Place Layout and Unsorted headings above their items
 Size.TAB_HEADER = 42
 Size.HEADER_HEIGHT = 20
 Size.HEADER_Y = Size.TAB_HEADER - Size.HEADER_HEIGHT - 4
@@ -65,8 +64,7 @@ Size.BUTTON_GROUP_GAP = 16
 Size.ACTIONS_GAP = 8
 Size.ACTION_WIDTH = { 72, 72, 88, 144, 96, 80 }
 
--- Size the editor to cover the bank at Bank Core's columns
--- Only one editor is open, so sizes live in Size
+-- Fit the editor to the bank's columns and size
 function Parts.SizeToBank(columns, bankWidth, bankHeight)
     local columnWidth = (columns - BankGrid.DEFAULT_COLUMNS) * Size.GRID_STEP
     local extraWidth = math.max(columnWidth, (bankWidth or 0) - Size.DEFAULT_WIDTH)
@@ -79,7 +77,7 @@ function Parts.SizeToBank(columns, bankWidth, bankHeight)
     Size.PANEL_HEIGHT = Size.DEFAULT_PANEL_HEIGHT + extraHeight
     Size.CENTER_WIDTH = Size.DEFAULT_CENTER_WIDTH + extraWidth
     Size.CENTER_VIEW_WIDTH = Size.CENTER_WIDTH - 2 * Size.VIEW_INSET
-    -- Search occupies the former inventory column; wider banks grow only Layout.
+    -- Keep Search fixed while wider banks expand Layout
     Size.SEARCH_X = Size.CENTER_X + Size.CENTER_WIDTH + Size.COLUMN_GAP
     Size.SEARCH_WIDTH = Size.WIDTH - Size.RIGHT_MARGIN - Size.SEARCH_X
     Size.SEARCH_VIEW_WIDTH = SidebarRows.ContentWidth(Size.SEARCH_WIDTH)
@@ -91,7 +89,7 @@ function Parts.SizeToBank(columns, bankWidth, bankHeight)
     Size.AREA_HEIGHT = Size.COLUMN_HEIGHT - Size.AREA_BOTTOM - Size.TAB_HEADER
     Size.VIEW_HEIGHT = Size.AREA_HEIGHT - 2 * Size.VIEW_INSET
     Size.SEARCH_LIST_HEIGHT = Size.COLUMN_HEIGHT - Size.SEARCH_INSET - Size.SEARCH_LIST_TOP
-    -- Actions begin under Unsorted; Close follows the right edge.
+    -- Start actions below Unsorted and keep Close at the right
     Size.ACTION_X = { Size.UNSORTED_X }
     for index = 2, #Size.ACTION_WIDTH - 1 do
         Size.ACTION_X[index] = index == 4 and Size.CENTER_X + Size.VIEW_INSET
@@ -135,7 +133,7 @@ function Parts.layer(parent, x, y, width, height)
     return value
 end
 
--- Draw a heading like the bank's own, text over a line
+-- Draw a heading above a separator line
 function Parts.heading(parent, x, y, width, text)
     prettyui.Text.new(parent, {
         text = text,

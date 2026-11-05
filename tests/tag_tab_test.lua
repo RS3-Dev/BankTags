@@ -25,7 +25,7 @@ app:Changed()
 
 local tab = app.tab
 local list = tab.controls.list
--- Help shares the search row; Import/Share, a wide New Tag, and Edit fill the footer
+-- Check sidebar footer actions and Help placement
 local function checkButtons(editing)
     local controls = tab.controls
     local search = controls.list.search.root
@@ -117,7 +117,7 @@ assert(#layout.pageState:GetLayoutSections() == 1 and layout.pageState:GetLayout
 checkButtons(true)
 local entries = layout:BuildPageItems()
 assert(#entries == 1 and entries[1].objectID == 4151)
--- The footer offers the layout editor only while a tag is shown
+-- Check whether the footer offers layout editing
 local function hasEditButton()
     for _, control in ipairs(tab.controls.owned) do
         if control.spriteName == "PENCIL" then return true end
@@ -178,7 +178,7 @@ assert(tab.controls.list:RowFor("melee").selectionFrame == nil)
 assert(other:Dispose())
 h:Tick(2)
 
--- Scroll a row to the top of the list and point at it
+-- Scroll a sidebar row into view and hover it
 local function pointAtRow(entryID)
     list = tab.controls.list
     local row = nil
@@ -294,6 +294,7 @@ assert(tab.controls ~= nil and tab.controls.list.search.text == "pot")
 
 -- Bank Tags' preferences in the bank settings window apply to the tab at once
 assert(app.store:CreateTag("iconic", 385))
+-- Count item icons drawn on sidebar rows
 local function iconRows()
     local count = 0
     for _, row in ipairs(tab.controls.list.list.rows) do

@@ -1,8 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Selection and quantity changes redraw only what changed in the layout editor's grids
--- Cells, item sprites, and labels keep their components; outlines move instead
--- FAKE HOST: stand-in components and pointer, not the game client
+-- Check that selection and quantity changes reuse grid controls
+-- FAKE HOST: stand-in components and pointer
 
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("editor_redraw")
@@ -27,8 +26,10 @@ local sorted, unsorted = editor.panes.sorted, editor.panes.unsorted
 
 -- Count every native component created or destroyed, and every object rebinding
 local stats
+-- Reset the counters before the next check
 local function reset() stats = { created = 0, destroyed = 0, rebound = 0 } end
 reset()
+-- Count new hook bindings on a component
 local function watch(node)
     local destroy, bind = node.Destroy, node.SetAssociatedObject
     node.Destroy = function(self, ...)
@@ -40,6 +41,7 @@ local function watch(node)
         return bind(self, ...)
     end
 end
+-- Visit a component and all its children
 local function visit(node, action)
     if node.destroyed then return end
     action(node)
@@ -63,6 +65,7 @@ local function drawn()
     end
     return nodes
 end
+-- Check that grid components were reused
 local function same(before)
     local after, count = drawn(), 0
     for node in pairs(after) do
@@ -82,7 +85,7 @@ local function outlines(pane)
     end
     return count
 end
--- Press and release a sorted cell where it is, as a plain click does
+-- Press and release a grid cell
 local function click(pane, column, line)
     local x, y = Size.GRID_LEFT + column * 44 + 20, 4 + line * 44 + 20 - pane.view.scrollY
     h:PointEditor(pane.x + x, pane.y + y)
@@ -95,8 +98,7 @@ assert(sorted.sprites[11] ~= nil and sorted.sprites[1] == nil and unsorted.sprit
 local before = drawn()
 local whip = sorted.sprites[11]
 
--- A plain click with no move only selects, outlining its cell
--- Its press made the drag's ghost, which the release removes; nothing else is drawn again
+-- A plain click changes only the outline and temporary ghost
 reset()
 click(sorted, 0, 1)
 assert(editor.selectedLayoutKey == sorted.slots[11].layoutKey and outlines(sorted) == 1 and editor.drag == nil)
@@ -124,8 +126,7 @@ sorted.view:SetScrollPosition(math.maxinteger)
 click(sorted, columns - 1, emptyLine)
 assert(editor.pasteCell == emptyLine * columns + columns and outlines(sorted) == 1)
 assert(stats.created == 0 and stats.destroyed == 0 and stats.rebound == 0 and same(before))
--- Selecting an Unsorted item moves the outline across without redrawing either grid
--- Only its press's ghost comes and goes, and Unsorted gets its first outline
+-- Selecting Unsorted adds an outline without rebuilding either grid
 reset()
 click(unsorted, 0, 0)
 assert(outlines(sorted) == 0 and outlines(unsorted) == 1 and editor.pasteCell == nil)

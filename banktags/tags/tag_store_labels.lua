@@ -1,4 +1,4 @@
--- Edit saved section labels independently of item movement and row operations.
+-- Edit saved section labels
 
 local TagRules = require("banktags/tags/tag_rules")
 local TagLayouts = require("banktags/tags/tag_layouts")
@@ -7,7 +7,7 @@ local copy, labelText = TagRules.copy, TagRules.labelText
 
 local TagStoreLabels = {}
 
--- Copy the data and lay one tag's rows out for a label edit
+-- Copy a tag's rows before editing a label
 local function labelEdit(store, tag, columnCount)
     if store.data.tags[tag] == nil then return nil end
     local nextData = copy(store.data)
@@ -15,7 +15,7 @@ local function labelEdit(store, tag, columnCount)
     return nextData, rows, TagLayouts.Render(rows, columnCount)
 end
 
--- Find the entry index of the label on a grid row
+-- Find the saved label on a grid row
 local function labelEntryAt(view, row)
     for _, label in ipairs(view.labels) do
         if label.row == row then return label.entry end
@@ -23,13 +23,13 @@ local function labelEntryAt(view, row)
     return nil
 end
 
--- Return the labels and the grid rows they land on at a column count
+-- List labels at the current grid width
 function TagStoreLabels:GetLabels(tag, columnCount)
     local record = self.data.tags[tag]
     return TagLayouts.Render(record ~= nil and record.rows or {}, columnCount).labels
 end
 
--- Return the text of the label on a grid row, if any
+-- Read the label on a grid row
 function TagStoreLabels:GetLabel(tag, row, columnCount)
     for _, label in ipairs(self:GetLabels(tag, columnCount)) do
         if label.row == row then return label.text end
@@ -54,7 +54,7 @@ function TagStoreLabels:InsertLabel(tag, row, text, columnCount)
     return self:Commit(nextData, "Could not save the label.")
 end
 
--- Set the label on a grid row, removing it when text is empty
+-- Set a row's label or remove empty text
 function TagStoreLabels:SetLabel(tag, row, text, columnCount)
     local nextData, rows, view = labelEdit(self, tag, columnCount)
     if nextData == nil then return false, "The label position is invalid." end
@@ -104,7 +104,7 @@ function TagStoreLabels:MoveLabel(tag, fromRow, toRow, columnCount)
     return saved, reason, saved
 end
 
--- Attach label operations to the store alongside its layout and folder operations.
+-- Add label editing to the tag store
 function TagStoreLabels.install(target)
     for name, method in pairs(TagStoreLabels) do
         if name ~= "install" then target[name] = method end

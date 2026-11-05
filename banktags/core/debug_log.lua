@@ -14,7 +14,7 @@ function DebugLog.IsEnabled()
     return enabled
 end
 
--- Send a message to the host log while debugging is on
+-- Write a message when debug logging is enabled
 local function debugLog(...)
     if enabled and type(log) == "function" then log(...) end
 end

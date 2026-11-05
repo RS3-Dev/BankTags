@@ -4,25 +4,32 @@ local ChunkedStringStore = {}
 
 local CHUNK_SIZE = 12000
 
--- Read a stored string, or nil when it is missing or the read fails
+-- Read a saved string and report failures
 local function readString(key)
-    if PersistentDB == nil or PersistentDB.GetString == nil then return nil end
+    if PersistentDB == nil or PersistentDB.GetString == nil then
+        return nil, "PersistentDB is unavailable."
+    end
     local ok, value = pcall(function() return PersistentDB:GetString(key) end)
-    return ok and type(value) == "string" and value or nil
+    if not ok then return nil, tostring(value) end
+    if value ~= nil and type(value) ~= "string" then return nil, "The saved value is not text." end
+    return value, nil
 end
 
--- Read which save copy is current and how many chunks it has
+-- Read the current save's name and chunk count
 local function manifest(options)
-    local value = readString(options.manifestKey)
-    if value == nil then return nil, nil end
+    local value, reason = readString(options.manifestKey)
+    if value == nil then return nil, nil, reason end
     local generation, count = string.match(value, "^([ab]):(%d+)$")
     count = math.tointeger(tonumber(count))
-    if generation == nil or count == nil or count < 1 then return nil, nil end
-    return generation, count
+    if generation == nil or count == nil or count < 1 then
+        return nil, nil, "The saved chunk list is invalid."
+    end
+    return generation, count, nil
 end
 
--- Write a string, reading it back if the host says the write may have failed
+-- Write text and check any reported failure
 local function writeVerified(key, value)
+    -- Catch storage failures reported by the client
     local ok, result = pcall(function()
         return PersistentDB:SetString(key, value)
     end)
@@ -33,25 +40,26 @@ local function writeVerified(key, value)
     return true, nil
 end
 
--- Join the current save's chunks, or nil if any chunk is missing
+-- Join saved chunks and report missing pieces
 function ChunkedStringStore.Read(options)
-    local generation, count = manifest(options)
-    if generation == nil then return nil end
+    local generation, count, reason = manifest(options)
+    if generation == nil then return nil, reason end
 
     local chunks = {}
     for index = 1, count do
-        local chunk = readString(
+        local chunk, problem = readString(
             options.chunkPrefix .. generation .. ":" .. tostring(index)
         )
-        if chunk == nil then return nil end
+        if chunk == nil then return nil, problem or ("Saved chunk " .. index .. " is missing.") end
         chunks[index] = chunk
     end
     return table.concat(chunks)
 end
 
--- Write the spare save copy, then switch to it once complete
+-- Finish the spare save before making it current
 function ChunkedStringStore.Write(options, value)
-    local activeGeneration = manifest(options)
+    local activeGeneration, _, problem = manifest(options)
+    if problem ~= nil then return false, { stage = "manifest", reason = problem } end
     local generation = activeGeneration == "a" and "b" or "a"
     local chunkCount = math.max(1, math.ceil(#value / CHUNK_SIZE))
 

@@ -1,5 +1,4 @@
--- Show the import and sharing pages
--- Preview pasted share codes and backups before importing them
+-- Preview imported tags and display share codes
 
 local Config = require("banktags/core/config")
 local TagRules = require("banktags/tags/tag_rules")
@@ -58,6 +57,7 @@ function ImportShare.new(parent, options)
         minHeight = HEIGHT,
         maxHeight = HEIGHT,
         scrollable = false,
+        -- Mark the window closed and notify its owner
         onClose = function()
             self.closed = true
             options.onClose()
@@ -113,6 +113,7 @@ function ImportShare.new(parent, options)
         x = 430, y = 122, clickthrough = false, disabled = true,
         tooltip = "Choose tag sprite",
     })
+    -- Choose an icon for the current import draft
     self.importSpriteSlot.root:Subscribe(ui.Hook.ONCLICK, function()
         self:ChooseImportSprite()
         return false
@@ -137,6 +138,7 @@ function ImportShare.new(parent, options)
         maxLines = 1, disabled = true,
     })
     self.importFolderName.root.hidden = true
+    -- Import the preview after the player's explicit choice
     self.importButton = prettyui.SimpleButton.new(importPage.content, "Import tags", function()
         self:Import()
     end, {

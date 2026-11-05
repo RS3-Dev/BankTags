@@ -26,10 +26,17 @@ Keep ownership and lifecycle in the controller; compose related method tables fr
 
 All paths above are relative to `banktags/`. Packaging follows the entry point's require graph; new runtime modules must be loaded by that graph, and the build generates their reload eviction list. Run `tools/check.lua` after moving methods: it checks for unshipped runtime sources, runs the regressions, and compiles every shipped Lua file with the allowed host globals. Extracting a UI method must preserve its native callbacks, clipping parents, and teardown owner.
 
+The same check enforces 3–10 word summaries above named functions in current source, tools, and tests. Longer callbacks also have short explanations where helpful. Historical files in `reference/` retain their original comments and hashes.
+
+Group removal and Move to Unsorted copy the store once and scan the selected tag once. They keep reading order, save once, and remain one undo step. Folder filing and expansion share one save; nested `SaveTogether` calls wait for the outer save. A label prompt captures the saved layout it targets and refuses a later submission if that layout changed.
+
+Writes use the same 1,000-tag, 200-folder, and 1,000,000-byte limits as reads. An unreadable chunk list, missing chunk, or storage read failure blocks edits instead of creating an empty writable store. JSON imports preserve Unicode escapes and empty array positions, and reject malformed numbers, raw control characters, and excessive nesting.
+
 ## Requirements and load order
 
 - **PrettyUI** is a required dependency. Its [published documentation](https://prettyui.j3.gg/index.html) defines the API Bank Tags uses, including `Dialog`, managed text fields, and dialog actions.
 - **Bank Core** (`bankcore`) is needed for anything in the bank. It is declared as an optional dependency only because the host reports changes for optional dependencies; required dependencies get no change notification. Without Bank Core, Bank Tags loads, keeps its tags, and waits. Core is a fixed dependency; Bank Tags uses its existing public API without changes to Core.
+- Bank Core 1.5.0 or later is required. Bank Tags reads the initial state and listens for changes. Pages require an open bank on All Items with no native presets, search, or filter active. Each open attempt checks a fresh snapshot; clearing a restriction does not reopen a page automatically.
 - **RuneQL** (`runeql`) is optional. With it, the sprite picker and the editor's item search cover every item. Without it they find items in the bank by name, an exact item ID, or an exact config name, and say so. Once the host reports RuneQL unloaded, search stops reading it, even if its global remains, until the host reports it loaded again.
 
 Any load order works: Bank Tags connects when Bank Core loads, reconnects when Bank Core reloads, and lets go when Bank Core unloads, through the host's `PluginDependencyUpdate`. Reloading Bank Tags shuts down the previous copy in the same Lua state first. Each registration replaces the last one with the same ID, so a copy in another Lua state that registers later takes the rail icon over. A typical development reload is Bank Core first, then Bank Tags, but either can reload alone.

@@ -8,6 +8,7 @@ local host = h.bankHost
 host:SetItems({ { 4151, 0, "Abyssal whip" }, { 4151, 1 }, { 4151, 1 }, { 385, 20, "Shark" } })
 host.itemLayer.interfaceID = 517
 
+-- Give each bank item a distinct original appearance
 local function ownLooks()
     for index, item in ipairs(host.items) do
         item.outlineWidth, item.shadowRGBA = index, 0x11111100 + index
@@ -26,7 +27,9 @@ assert(app.store:AddTag("food", 385))
 app:Changed()
 
 local GOLD = 0xF2C66DFF
+-- Check whether a bank stack has the selection outline
 local function highlighted(index) return host.items[index].shadowRGBA == GOLD end
+-- Check that item appearances match their originals
 local function restored(items)
     for index, item in ipairs(items) do
         assert(item.outlineWidth == index and item.shadowRGBA == 0x11111100 + index,
