@@ -1,4 +1,4 @@
--- Draw Bank Tags' preferences on its plugin panel
+-- Draw Bank Tags' preferences on its Plugin Hub settings page
 
 local Settings = require("banktags/core/settings")
 local Theme = require("banktags/ui/theme")

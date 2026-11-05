@@ -1,20 +1,21 @@
 -- Build the tag list shown in the Tags tab and layout editor
 -- A row pressed and released selects it; dragged, it moves to a new place
 
-local Config = require("banktags/core/config")
 local Geometry = require("banktags/ui/geometry")
-local NativeUi = require("banktags/ui/native_ui")
 local SidebarRows = require("banktags/ui/sidebar_rows")
 local Text = require("banktags/core/text")
 local Theme = require("banktags/ui/theme")
-local debugLog = require("banktags/core/debug_log").Write
+
+local Parts = require("banktags/sidebar/tag_list_parts")
+local folderKeyOf, sidebarEntry = Parts.folderKeyOf, Parts.sidebarEntry
 
 local TagList = {}
 TagList.__index = TagList
+for name, method in pairs(require("banktags/sidebar/tag_list_drag")) do TagList[name] = method end
 
 local HELP_BUTTON_SIZE = 26
 local HELP_BUTTON_GAP = 6
-local FOLDER_ENTRY_PREFIX = "__banktags_folder:"
+local FOLDER_ENTRY_PREFIX = Parts.FOLDER_ENTRY_PREFIX
 local TAG_ROW_LEFT = SidebarRows.ROW_LEFT
 local FOLDER_CHEVRON_RIGHT = 8
 local FOLDER_CHEVRON_SIZE = 14
@@ -26,30 +27,8 @@ local FOLDER_ROW = 0x3B352DFF
 local FOLDER_ROW_ODD = 0x27231DFF
 local FOLDER_ROW_EVEN = 0x2D2823FF
 local FOLDER_ACCENT_WIDTH = 2
-local ROW_HEIGHT = 30
-local ENTRY_HEIGHT = SidebarRows.ENTRY_HEIGHT
-local DRAG_HOOK = Config.PLUGIN_REF .. "_row_drag"
--- How far the pointer moves before a press becomes a drag
-local DRAG_DISTANCE = 6
--- Reaching this close to the list's top or bottom scrolls it one row
-local SCROLL_EDGE = 12
-local GHOST_FILL = 0x403728E0
-local LINE_HEIGHT = 2
-
--- Return the folder key behind a folder header row, or nil for a tag row
-local function folderKeyOf(entryID)
-    entryID = tostring(entryID or "")
-    if string.sub(entryID, 1, #FOLDER_ENTRY_PREFIX) ~= FOLDER_ENTRY_PREFIX then return nil end
-    return string.sub(entryID, #FOLDER_ENTRY_PREFIX + 1)
-end
-
--- Name a row's tag or folder the way the store does
-local function sidebarEntry(entryID)
-    local folderKey = folderKeyOf(entryID)
-    if folderKey ~= nil then return { kind = "folder", key = folderKey } end
-    return { kind = "tag", tag = entryID }
-end
-
+local ROW_HEIGHT = Parts.ROW_HEIGHT
+local ENTRY_HEIGHT = Parts.ENTRY_HEIGHT
 -- Draw a left bar along a folder's header and members
 local function addFolderAccent(root, rowHeight)
     local accent = ui.Rectangle.new(root)
@@ -225,9 +204,9 @@ function TagList:DecorateRows()
             chevron:SetSize(FOLDER_CHEVRON_SIZE, FOLDER_CHEVRON_SIZE)
             chevron.spriteID = id.Sprite.BANK_ARROW_UP_0
             if entry.expanded then
-                NativeUi.setSpriteRotation(chevron, math.pi, 180)
+                chevron.rotationDegrees = 180
             else
-                NativeUi.setSpriteRotation(chevron, math.pi * 1.5, 270)
+                chevron.rotationDegrees = 270
             end
             chevron.clickthrough = true
             chevron:MoveToFront()
@@ -254,227 +233,6 @@ function TagList:DecorateRows()
     end
 end
 
--- Follow a pressed row's holds and releases
--- PrettyUI's row click reports the press itself, through Press
-function TagList:BindRow(row)
-    local root = row.root
-    -- The client may report a held pointer as a hold or as its own drag
-    -- Leaving the row is checked too, since holds may stop off it
-    local function move()
-        self:MoveGesture(row)
-        return true
-    end
-    root:Subscribe(ui.Hook.ONHOLD, DRAG_HOOK, move)
-    root:Subscribe(ui.Hook.ONDRAG, DRAG_HOOK, move)
-    root:Subscribe(ui.Hook.ONMOUSELEAVE, DRAG_HOOK, move)
-    -- Finish the same gesture for either release event the client sends
-    local function release()
-        self:Release(row)
-        return true
-    end
-    root:Subscribe(ui.Hook.ONRELEASE, DRAG_HOOK, release)
-    root:Subscribe(ui.Hook.ONDRAGCOMPLETE, DRAG_HOOK, release)
-end
-
--- Find the pointer in the list's visible area, or nil without a mouse
--- Native drag start and end positions are not used; they are wrong under Windows scaling
-function TagList:Pointer()
-    local x, y = Geometry.interfaceMousePosition()
-    if x == nil then return nil, nil end
-    local originX, originY = Geometry.absolutePosition(self.list.viewport)
-    return x - originX, y - originY
-end
-
--- Check whether a visible-area point is inside the list
-function TagList:Contains(x, y)
-    local viewport = self.list.viewport
-    return x ~= nil and x >= 0 and x < viewport.width and y >= 0 and y < viewport.height
-end
-
--- Begin a press; a press on a stuck drag only ends that drag
-function TagList:Press(entryID)
-    self.clicks = self.clicks + 1
-    debugLog("Bank Tags row press ", tostring(entryID), ", clicks ", self.clicks)
-    if self:CancelGesture() then return end
-    local x, y = self:Pointer()
-    self.gesture = { row = self:RowFor(entryID), id = entryID, x = x, y = y, dragging = false }
-end
-
--- Follow the held pointer, turning a press into a drag once it moves far enough
--- Searches show only some rows, so a filtered list never drags
-function TagList:MoveGesture(row)
-    local gesture = self.gesture
-    if gesture == nil or gesture.row ~= row or gesture.x == nil then return end
-    local x, y = self:Pointer()
-    -- A release outside the list may never arrive
-    if not self:Contains(x, y) then
-        self:CancelGesture()
-        return
-    end
-    if not gesture.dragging then
-        if self.state.searchQuery ~= "" then return end
-        if math.abs(x - gesture.x) < DRAG_DISTANCE and math.abs(y - gesture.y) < DRAG_DISTANCE then return end
-        self:BeginDrag()
-    end
-    self:UpdateDrag(y)
-end
-
--- Find the rows an entry spans: a folder spans its shown tags
--- A tag inside a folder spans only its own row
-function TagList:Span(rows, index, withinFolder)
-    if withinFolder then return index, index end
-    -- Name the folder or top-level tag a row belongs to
-    local function block(rowIndex)
-        local entry = self.entriesByID[rows[rowIndex].entry.id]
-        return entry.folder ~= nil and FOLDER_ENTRY_PREFIX .. entry.folder or entry.id
-    end
-    local name, first, last = block(index), index, index
-    while first > 1 and block(first - 1) == name do first = first - 1 end
-    while last < #rows and block(last + 1) == name do last = last + 1 end
-    return first, last
-end
-
--- Make the pressed row an invisible cover over the list, with a ghost and drop line
--- The press stays with that row, so its holds and release follow the pointer anywhere in the list
-function TagList:BeginDrag()
-    local gesture = self.gesture
-    local row, list = gesture.row, self.list
-    gesture.dragging = true
-    gesture.rows = {}
-    for index, value in ipairs(list.rows) do
-        gesture.rows[index] = value
-        if value == row then gesture.index = index end
-    end
-    -- Removed from PrettyUI's rows, scrolling leaves the cover's size alone
-    table.remove(list.rows, gesture.index)
-    gesture.folder = self.entriesByID[gesture.id].folder
-    gesture.first, gesture.last = self:Span(gesture.rows, gesture.index, gesture.folder ~= nil)
-    gesture.source = sidebarEntry(gesture.id)
-    gesture.width = row.root.width
-    for _, part in ipairs(row.parts) do part.hidden = true end
-    -- Moving the cover would skew hover coordinates, so calibration stays as it was
-    Geometry.untrackPointer(row.root)
-
-    local ghost = ui.Layer.new(list.viewport)
-    ghost:SetSize(gesture.width, ROW_HEIGHT)
-    ghost.clickthrough = true
-    local fill = ui.Rectangle.new(ghost)
-    fill:SetSize(gesture.width, ROW_HEIGHT)
-    fill.fill = true
-    fill.rgba = GHOST_FILL
-    fill.clickthrough = true
-    SidebarRows.AddSelectedFrame(ghost, ROW_HEIGHT)
-    local label = ui.Text.new(ghost)
-    label:SetPos(row.label.x, 0)
-    label:SetSize(gesture.width - row.label.x - 6, ROW_HEIGHT)
-    label.content = row.label.content
-    label.font = id.Font.MUSEO_SANS_11PT_REGULAR
-    label.rgba = row.label.rgba
-    label.isShadowed = true
-    label.maxLines = 1
-    label.alignVertical = ui.AlignMode.CENTRE
-    label.clickthrough = true
-    gesture.ghost = ghost
-
-    local line = ui.Rectangle.new(list.viewport)
-    line:SetSize(gesture.width, LINE_HEIGHT)
-    line.fill = true
-    line.rgba = Theme.SELECTED_BORDER
-    line.clickthrough = true
-    line.hidden = true
-    gesture.line = line
-end
-
--- Keep the cover over the visible rows as the list scrolls
-function TagList:PlaceCover()
-    local gesture, list = self.gesture, self.list
-    gesture.row.root:SetPos(0, list.scrollY)
-    gesture.row.root:SetSize(gesture.width, list.viewport.height)
-    -- Later sibling rows must not intercept the held pointer
-    gesture.row.root:MoveToFront()
-end
-
--- Find where the dragged entry would go at a height in the rows
--- Returns the entry it goes beside, whether after it, and the line's height, or nil where nothing would move
-function TagList:DropTarget(y)
-    local gesture = self.gesture
-    local rows = gesture.rows
-    local index = math.max(1, math.min(#rows, math.floor(y / ENTRY_HEIGHT) + 1))
-    -- A folder's tag stays among that folder's tags
-    if gesture.folder ~= nil and self.entriesByID[rows[index].entry.id].folder ~= gesture.folder then
-        return nil
-    end
-    local first, last = self:Span(rows, index, gesture.folder ~= nil)
-    local after = y >= (first - 1 + (last - first + 1) / 2) * ENTRY_HEIGHT
-    -- Rows are numbered from 1, so the gap before row n is n
-    local gap = after and last + 1 or first
-    if gap == gesture.first or gap == gesture.last + 1 then return nil end
-    return { entry = sidebarEntry(rows[first].entry.id), after = after, lineY = (gap - 1) * ENTRY_HEIGHT }
-end
-
--- Move the cover, ghost, and drop line to a height in the visible list
--- Each arrival at the list's top or bottom edge scrolls one row
-function TagList:UpdateDrag(y)
-    local gesture, list = self.gesture, self.list
-    local height = list.viewport.height
-    local edge = y < SCROLL_EDGE and -1 or y >= height - SCROLL_EDGE and 1 or nil
-    if edge ~= gesture.edge then
-        gesture.edge = edge
-        if edge ~= nil then list:_OnScrollWheel(gesture.row.root, edge) end
-    end
-    self:PlaceCover()
-    local top = list.scrollY
-    local ghostY = math.floor(top + y - ROW_HEIGHT / 2)
-    gesture.ghost:SetPos(0, math.max(top, math.min(top + height - ROW_HEIGHT, ghostY)))
-    gesture.ghost:MoveToFront()
-    gesture.target = self:DropTarget(top + y)
-    gesture.line.hidden = gesture.target == nil
-    if gesture.target ~= nil then
-        gesture.line:SetPos(0, math.max(0, gesture.target.lineY - LINE_HEIGHT // 2))
-        gesture.line:MoveToFront()
-    end
-end
-
--- Select or open a pressed row, or drop a dragged one where its line shows
--- Releases from bank item drags reach rows that were never pressed, so they do nothing
-function TagList:Release(row)
-    local gesture = self.gesture
-    if gesture == nil or gesture.row ~= row then return end
-    if not gesture.dragging then
-        self.gesture = nil
-        local folderKey = folderKeyOf(gesture.id)
-        if folderKey ~= nil then
-            self:ToggleFolder(folderKey)
-        else
-            self.onSelect(gesture.id)
-        end
-        return
-    end
-    local x, y = self:Pointer()
-    local target = self:Contains(x, y) and self:DropTarget(self.list.scrollY + y) or nil
-    -- Redraw the rows first; a saved move redraws them again
-    self:CancelGesture()
-    if target ~= nil then self.onReorder(gesture.source, target.entry, target.after) end
-end
-
--- Forget the press or drag in progress, reporting whether a drag was showing
-function TagList:StopGesture()
-    local gesture = self.gesture
-    self.gesture = nil
-    if gesture == nil or not gesture.dragging then return false end
-    for _, part in ipairs({ gesture.ghost, gesture.line, gesture.row.root }) do
-        pcall(function() part:Destroy() end)
-    end
-    return true
-end
-
--- End a drag without moving anything and redraw the rows
-function TagList:CancelGesture()
-    if not self:StopGesture() then return false end
-    self:Refresh()
-    return true
-end
-
 -- Collapse or expand a folder
 function TagList:ToggleFolder(folderKey)
     local folder = self.store:GetFolder(folderKey)
@@ -487,9 +245,10 @@ end
 -- Find the row the client currently highlights
 -- A dragged row is not listed, since it covers the whole list
 function TagList:HoveredEntry()
-    if self.list.root.hidden then return nil end
+    if self.list.root.hidden or self.list.root.visibleGlobal == false then return nil end
     for _, row in ipairs(self.list.rows or {}) do
-        if row.root.isMouseOver == true then return sidebarEntry(row.entry.id) end
+        if row.entry.enabled ~= false and not row.root.hidden and row.root.visibleGlobal ~= false
+            and row.root.isMouseOver == true then return sidebarEntry(row.entry.id) end
     end
     return nil
 end
@@ -500,11 +259,6 @@ function TagList:RowFor(tag)
         if row.entry.id == tag then return row end
     end
     return nil
-end
-
--- Resize the row list
-function TagList:SetListHeight(height)
-    self.list:SetSize(SidebarRows.ContentWidth(self.width), height)
 end
 
 -- Destroy the controls this list created

@@ -33,14 +33,15 @@ function LayoutEditorHistory:CheckHistory()
 end
 
 -- Run one edit of the open tag, keeping it as one undo step if it changed the layout
--- Failed and unchanged edits leave the steps as they were
-function LayoutEditorHistory:RecordEdit(tag, edit)
-    if tag == nil or tag ~= self.selectedTag then return edit() end
+-- Returns whether the layout changed, then the edit's results
+-- Failed and unchanged edits leave the steps as they were, even when they saved a fresh copy
+function LayoutEditorHistory:RecordEdit(edit)
+    local tag = self.selectedTag
     local before = self.store:LayoutState(tag)
     local results = table.pack(edit())
     local after = self.store:LayoutState(tag)
     if before == nil or after == nil or sameValue(before, after) then
-        return table.unpack(results, 1, results.n)
+        return false, table.unpack(results, 1, results.n)
     end
     local history = self.history
     -- Steps from before an outside change would overwrite it
@@ -56,7 +57,22 @@ function LayoutEditorHistory:RecordEdit(tag, edit)
         table.remove(history.states, 1)
         history.index = history.index - 1
     end
-    return table.unpack(results, 1, results.n)
+    return true, table.unpack(results, 1, results.n)
+end
+
+-- Save one edit of the open tag as an undo step, redrawing when the layout changed
+-- A failure shows its reason, or the given text, unless the caller shows it itself
+-- Returns whether it saved, the failure reason, and whether the layout changed
+function LayoutEditorHistory:SaveEdit(failure, edit)
+    local changed, saved, reason = self:RecordEdit(edit)
+    if not saved then
+        reason = reason or failure
+        if failure ~= nil then self:ShowError(reason) end
+        return false, reason, false
+    end
+    self:ClearStatus()
+    if changed then self:NotifyChanged() end
+    return true, nil, changed
 end
 
 -- Report whether there is a step to undo or redo
@@ -82,7 +98,8 @@ function LayoutEditorHistory:StepHistory(step)
         return false
     end
     history.index = history.index + step
-    self:NotifyChanged(tag)
+    self:ClearStatus()
+    self:NotifyChanged()
     return true
 end
 
@@ -94,13 +111,6 @@ end
 -- Redo the last undone layout edit
 function LayoutEditorHistory:Redo()
     return self:StepHistory(1)
-end
-
--- Attach these methods to LayoutEditorWindow
-function LayoutEditorHistory.install(target)
-    for name, method in pairs(LayoutEditorHistory) do
-        if name ~= "install" then target[name] = method end
-    end
 end
 
 return LayoutEditorHistory

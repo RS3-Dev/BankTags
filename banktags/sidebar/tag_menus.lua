@@ -223,6 +223,23 @@ function TagMenus:AddEditorEntries(menu)
             deferred()
         end
     end
+    -- Move a selected group together; an unselected item becomes the sole target.
+    local function itemAction(action, useSelection)
+        return chosen(function()
+            if not useSelection or not editor:IsSelected(target.layoutKey) then
+                editor:SelectOnly(target.layoutKey)
+            end
+            action(editor)
+        end)
+    end
+    if target.pane == "unsorted" then
+        MenuEntries.AddTop(menu, {
+            { label = "Move to Layout", action = itemAction(editor.ArrangeSelected) },
+            { label = "Remove from Tag", action = itemAction(editor.RemoveSelected) },
+        })
+        self.rowMenu = rowMenu
+        return
+    end
     -- Build row submenu entries with the same validity check
     local function offer(label, action)
         children[#children + 1] = { label = label, action = chosen(action) }
@@ -231,19 +248,17 @@ function TagMenus:AddEditorEntries(menu)
     local row = target.row
     if row < target.usedRows then offer("Add row above", function() editor:InsertEmptyRow(row) end) end
     if row + 1 < target.usedRows then offer("Add row below", function() editor:InsertEmptyRow(row + 1) end) end
-    if row < target.usedRows then offer("Remove row", function() editor:RemoveRow(row) end) end
+    -- A label below the last row goes at the end
+    if row < target.usedRows then
+        offer("Add label above", function() editor:PromptNewLabel(row) end)
+        offer("Add label below", function() editor:PromptNewLabel(row + 1) end)
+        offer("Remove row", function() editor:RemoveRow(row) end)
+    end
     if #children == 0 then return end
     children[#children + 1] = { label = "Cancel", action = function() end }
     if target.layoutKey ~= nil then
-        -- Use the clicked item, independent of the current selection
-        local function itemAction(action)
-            return chosen(function()
-                editor:SelectOnly(target.layoutKey)
-                action(editor)
-            end)
-        end
         MenuEntries.AddTop(menu, {
-            { label = "Move to Unsorted", action = itemAction(editor.UnarrangeSelected) },
+            { label = "Move to Unsorted", action = itemAction(editor.UnarrangeSelected, true) },
             { label = "Remove from Tag", action = itemAction(editor.RemoveSelected) },
         })
     end

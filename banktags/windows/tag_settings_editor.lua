@@ -1,5 +1,6 @@
 -- Edit a tag's name and icon
 
+local objectFromID = require("banktags/core/object_config").FromID
 local TagRules = require("banktags/tags/tag_rules")
 
 local TagSettingsEditor = {}
@@ -16,14 +17,6 @@ local SLOT_SIZE = 40
 local SLOT_GAP = 8
 local FIELD_WIDTH = CONTROL_WIDTH - SLOT_SIZE - SLOT_GAP
 local SLOT_X = MARGIN + FIELD_WIDTH + SLOT_GAP
-
--- Look up an item definition, allowing missing entries
-local function objectFromID(objectID)
-    local id = math.tointeger(tonumber(objectID))
-    if id == nil then return nil end
-    local ok, object = pcall(function() return config.Obj.FromID(id) end)
-    return ok and object or nil
-end
 
 -- Create the tag name and icon editor
 function TagSettingsEditor.new(parent, options)

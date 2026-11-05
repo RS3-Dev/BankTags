@@ -9,12 +9,6 @@ local rectangle = Parts.rectangle
 -- Gold over the cells a group would take, red where it cannot go
 local FITS_COLOUR = 0xD2A84D55
 local REFUSED_COLOUR = 0xC0392B66
-local COUNT_COLOUR = Theme.HEADING_TEXT
--- What the single-item actions say while a group is selected
-local GROUP_TOOLTIPS = {
-    removeButton = "Select one item to remove it",
-    unsortButton = "Select one item to move it to Unsorted",
-}
 
 local LayoutEditorGroup = {}
 
@@ -48,12 +42,11 @@ end
 
 -- List the sorted items in a set, in reading order
 function LayoutEditorGroup:SortedKeys(keys)
-    local ordered = {}
-    for _, slot in ipairs(self.panes.sorted.slots) do
-        if type(slot) == "table" and slot.kind == "item" and keys[slot.layoutKey] then
-            ordered[#ordered + 1] = slot.layoutKey
-        end
+    local ordered, indexes = {}, self.layout.sortedIndex
+    for layoutKey in pairs(keys) do
+        if indexes[layoutKey] ~= nil then ordered[#ordered + 1] = layoutKey end
     end
+    table.sort(ordered, function(left, right) return indexes[left] < indexes[right] end)
     return ordered
 end
 
@@ -91,59 +84,20 @@ function LayoutEditorGroup:ToggleGroupItem(layoutKey)
     self:PruneSelection()
 end
 
--- Refuse a single-item action while a group is selected
-function LayoutEditorGroup:RefuseForGroup()
-    if self:GroupCount() <= 1 then return false end
-    self:ShowError(self:GroupCount() .. " items are selected. Click one item, or Shift-click"
-        .. " to deselect, before using this action.")
-    return true
-end
-
--- Explain on the item actions when a group blocks them
-function LayoutEditorGroup:UpdateActionTooltips()
-    local grouped = self:GroupCount() > 1
-    if self.groupTooltips == grouped then return end
-    self.groupTooltips = grouped
-    for name, tooltip in pairs(GROUP_TOOLTIPS) do
-        self[name]:SetTooltip(grouped and tooltip or self.actionTooltips[name])
-    end
-end
-
--- Start dragging the selected group by one of its items
-function LayoutEditorGroup:BeginGroupDrag(slot, pane, hit, pointX, pointY)
+-- Start dragging the selected group by one of its items, its count on the item's corner
+function LayoutEditorGroup:BeginGroupDrag(slot)
     self.selectedLayoutKey = slot.layoutKey
     local keys = self:SortedKeys(self.groupKeys)
-    local ghost = ui.Layer.new(self.content)
-    ghost:SetSize(Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE)
-    ghost.clickthrough = true
-    local sprite = ui.Sprite.new(ghost)
-    local width, height = self:ApplyRuntimeObjectSprite(sprite, slot.objectID, true)
-    sprite:SetPos(0, 0)
-    -- The count sits on the item's corner so the whole group is named
+    local ghost = self:CreateDragGhost(Size.ITEM_WIDTH, Size.ITEM_HEIGHT)
+    self:ItemSprite(ghost, slot.objectID, true)
     prettyui.Text.new(ghost, {
         text = tostring(#keys),
-        x = width - 14, y = height - 14, width = 18, height = 14,
-        colour = COUNT_COLOUR,
+        x = Size.ITEM_WIDTH - 14, y = Size.ITEM_HEIGHT - 14, width = 18, height = 14,
+        colour = Theme.HEADING_TEXT,
         maxLines = 1,
     }).clickthrough = true
-    ghost.alpha = 0.88
-    ghost:SetPos(pointX - math.floor(width / 2), pointY - math.floor(height / 2))
-    ghost:MoveToFront()
-    self.drag = {
-        kind = "group",
-        keys = keys,
-        anchorKey = slot.layoutKey,
-        pointerX = pointX,
-        pointerY = pointY,
-        ghost = ghost,
-        ghostWidth = width,
-        ghostHeight = height,
-        preview = {},
-        sourceSurface = hit,
-        sourceSurfaceKind = pane.name,
-    }
-    self:CaptureDragSurface(hit, pane.name)
-    return false
+    return self:StartDrag({ kind = "group", keys = keys, anchorKey = slot.layoutKey, preview = {},
+        sourceKind = "sorted" }, ghost, Size.ITEM_WIDTH, Size.ITEM_HEIGHT)
 end
 
 -- Find the sorted cell a group's grabbed item would take
@@ -154,11 +108,8 @@ function LayoutEditorGroup:GroupDestination(x, y)
 end
 
 -- Remove the cells drawn for a group drop
-function LayoutEditorGroup.ClearGroupPreview(drag)
-    for index = #drag.preview, 1, -1 do
-        local node = drag.preview[index]
-        pcall(function() node:Destroy() end)
-    end
+function LayoutEditorGroup:ClearGroupPreview(drag)
+    for index = #drag.preview, 1, -1 do drag.preview[index]:Destroy() end
     drag.preview = {}
     drag.previewIndex = nil
 end
@@ -168,7 +119,7 @@ function LayoutEditorGroup:ShowGroupPreview(x, y)
     local drag = self.drag
     local destination = self:GroupDestination(x, y)
     if destination == drag.previewIndex then return end
-    self.ClearGroupPreview(drag)
+    self:ClearGroupPreview(drag)
     if destination == nil then return end
     drag.previewIndex = destination
     local plan = self.store:PlanLayoutItemsMove(
@@ -180,39 +131,25 @@ function LayoutEditorGroup:ShowGroupPreview(x, y)
         -- Cells past the grid's edges have nowhere to draw
         if move.line >= 0 and move.column >= 0 and move.column < Size.CENTER_COLUMNS then
             drag.preview[#drag.preview + 1] = rectangle(parent,
-                Size.GRID_LEFT + move.column * Size.GRID_STEP, BankGrid.RowItemY(move.line),
+                Size.GRID_LEFT + move.column * Size.GRID_STEP,
+                BankGrid.RowItemY(move.line, self.panes.sorted.labels),
                 Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE, colour, true)
         end
     end
 end
 
 -- Save the group at its drop, or explain why it cannot go there
-function LayoutEditorGroup:FinishGroupDrag(x, y)
-    local drag = self.drag
+function LayoutEditorGroup:FinishGroupDrag(drag, x, y)
     local destination, pane = self:GroupDestination(x, y)
-    self:FinishDrag(false)
     if pane ~= nil and pane.name == "unsorted" then
-        self:ShowError("A group moves only within the layout. Drag one item at a time to Unsorted.")
-        return false
+        self:ShowError("Use Move to Unsorted to move the selected group out of the layout.")
+        return
     end
-    if destination == nil then return false end
-    local saved, reason, changed = self:RecordEdit(self.selectedTag, function()
+    if destination == nil then return end
+    self:SaveEdit("Could not move the items.", function()
         return self.store:MoveLayoutItems(
             self.selectedTag, drag.keys, drag.anchorKey, destination, Size.CENTER_COLUMNS)
     end)
-    if not saved then
-        self:ShowError(reason or "Could not move the items.")
-    elseif changed then
-        self:NotifyChanged(self.selectedTag)
-    end
-    return false
-end
-
--- Attach these methods to LayoutEditorWindow
-function LayoutEditorGroup.install(target)
-    for name, method in pairs(LayoutEditorGroup) do
-        if name ~= "install" then target[name] = method end
-    end
 end
 
 return LayoutEditorGroup

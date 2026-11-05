@@ -26,21 +26,6 @@ function TagRules.normalizeTag(value)
     return name
 end
 
--- Split comma-separated tags into a sorted list of cleaned names without repeats
-function TagRules.parseTagList(text)
-    local values = {}
-    local seen = {}
-    for tag in tostring(text or ""):gmatch("([^,]+)") do
-        tag = TagRules.normalizeTag(tag)
-        if tag ~= nil and not seen[tag] then
-            seen[tag] = true
-            values[#values + 1] = tag
-        end
-    end
-    table.sort(values)
-    return values
-end
-
 -- Tidy a folder name's spaces and return it with its lowercase key
 function TagRules.folderName(value)
     local name = trim(value):gsub("%s+", " ")

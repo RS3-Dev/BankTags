@@ -51,7 +51,7 @@ assert(app:ShowTag("melee"))
 h:Tick(2)
 assert(app:ShownTag() == "melee")
 local sections = layout.pageState:GetLayoutSections()
-assert(sections[1].label == "Melee" and sections[2].label == "Weapons" and sections[3].label == "Unsorted")
+assert(#sections == 2 and sections[1].label == "Weapons" and sections[2].label == "Unsorted")
 assert(#app.pageKeys == 5 and app.pageKeys[2] == false and app.pageKeys[4] == melee[4].layoutKey)
 
 -- A ghost removes its own slot; Cancel stays its left click
@@ -109,13 +109,13 @@ h:Tick(2)
 menu = h:MenuFor(host.items[3])
 assert(tagEntries(menu) == 0)
 
--- An oversized tag is not shown; the Tags tab says why
+-- An oversized tag is not shown; the bank banner says why
 assert(app.store:CreateTag("huge"))
 local huge = {}
 for index = 1, 10001 do huge[index] = { kind = "blank" } end
 app.store.data.tags.huge.rows = { { kind = "row", slots = huge } }
 assert(not app:ShowTag("huge") and app:ShownTag() == nil and layout.shownPage == nil)
-assert(string.find(app.status, "10002", 1, true) and Harness.Find(h:TabParent(), app.status) ~= nil)
+assert(string.find(app.status, "10002", 1, true) and Harness.Find(app.tab.ctx.overlay, app.status) ~= nil)
 app.store.data.tags.huge = nil
 app.store.data.order[#app.store.data.order] = nil
 app:ShowStatus(nil)

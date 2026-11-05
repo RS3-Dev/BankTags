@@ -43,16 +43,18 @@ local function result(objectID)
 end
 
 -- Search RuneQL's catalog and keep the results this client can resolve
+-- Every result has a display name, the client's when RuneQL gives none
 local function findFull(find, query, limit)
     local results, total = find(query, limit)
     local resolved = {}
     for _, entry in ipairs(results or {}) do
         local objectID = ObjectConfig.ObjectID(entry.configName)
-        if objectID ~= nil then
+        if objectID ~= nil and #resolved < limit then
             resolved[#resolved + 1] = {
                 objectId = objectID,
                 configName = entry.configName,
-                displayName = entry.displayName or entry.name,
+                displayName = tostring(entry.displayName or entry.name
+                    or ObjectConfig.DisplayName(objectID) or ("Item " .. objectID)),
                 name = entry.name,
             }
         end

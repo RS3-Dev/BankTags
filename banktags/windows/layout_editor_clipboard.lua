@@ -8,21 +8,20 @@ local LayoutEditorClipboard = {}
 -- Copy the selected item or group, keeping each one's offset from the group's top-left cell
 -- Nothing is saved; each paste adds more slots for the same objects
 function LayoutEditorClipboard:CopySelected()
-    local entry = self:SelectedEntry()
-    if entry == nil or self.selectedTag == nil then
+    local entry, paneName = self:SelectedEntry()
+    if entry == nil then
         self:ShowError("Select a layout item first.")
         return false
     end
     local columns = Size.CENTER_COLUMNS
     local picked = {}
-    if entry.unarranged then
+    if paneName == "unsorted" then
         picked[1] = { slot = entry, line = 0, column = 0 }
     else
-        local keys = self.groupKeys or { [entry.layoutKey] = true }
-        for index, slot in ipairs(self.panes.sorted.slots) do
-            if type(slot) == "table" and slot.kind == "item" and keys[slot.layoutKey] then
-                picked[#picked + 1] = { slot = slot, line = (index - 1) // columns, column = (index - 1) % columns }
-            end
+        for _, layoutKey in ipairs(self:SortedKeys(self.groupKeys or { [entry.layoutKey] = true })) do
+            local index = self.layout.sortedIndex[layoutKey] - 1
+            picked[#picked + 1] = { slot = self.layout.slots[index + 1],
+                line = index // columns, column = index % columns }
         end
     end
     local top, left = math.huge, math.huge
@@ -31,15 +30,10 @@ function LayoutEditorClipboard:CopySelected()
     end
     local items = {}
     for _, item in ipairs(picked) do
-        items[#items + 1] = {
-            objectID = item.slot.objectID,
-            line = item.line - top,
-            column = item.column - left,
-        }
+        items[#items + 1] = { objectID = item.slot.objectID, line = item.line - top, column = item.column - left }
     end
     self.clipboard = { tag = self.selectedTag, items = items }
-    self:ShowNotice("Copied " .. #items .. (#items == 1 and " item" or " items")
-        .. ". Click an empty cell, then press Ctrl+V or Paste.")
+    self:ShowNotice("Copied " .. #items .. (#items == 1 and " item." or " items."))
     return true
 end
 
@@ -56,23 +50,12 @@ function LayoutEditorClipboard:PasteClipboard()
         return false
     end
     local tag, cell = self.selectedTag, self.pasteCell
-    local saved, keys, reason = self:RecordEdit(tag, function()
-        return self.store:PasteLayoutItems(tag, clipboard.items, cell, Size.CENTER_COLUMNS)
-    end)
-    if not saved then
-        self:ShowError(reason or "Could not paste the items.")
-        return false
-    end
-    self:SelectItems(keys)
-    self:NotifyChanged(tag)
-    return true
-end
-
--- Attach these methods to LayoutEditorWindow
-function LayoutEditorClipboard.install(target)
-    for name, method in pairs(LayoutEditorClipboard) do
-        if name ~= "install" then target[name] = method end
-    end
+    return (self:SaveEdit("Could not paste the items.", function()
+        local saved, keys, reason = self.store:PasteLayoutItems(tag, clipboard.items, cell, Size.CENTER_COLUMNS)
+        -- The copies are selected before the grids redraw
+        if saved then self:SelectItems(keys) end
+        return saved, reason
+    end))
 end
 
 return LayoutEditorClipboard

@@ -24,7 +24,15 @@ local Json = require("banktags/core/json")
 local TagStore = require("banktags/tags/tag_store")
 local TagData = require("banktags/tags/tag_data")
 local TagLayouts = require("banktags/tags/tag_layouts")
-local ItemIdentity = require("banktags/tags/item_identity")
+-- Simulate a fresh plugin load after the client's config IDs change.
+local function reloadStore()
+    for _, name in ipairs({ "banktags/tags/item_identity", "banktags/tags/tag_data", "banktags/tags/tag_store" }) do
+        package.loaded[name] = nil
+    end
+    TagData = require("banktags/tags/tag_data")
+    TagStore = require("banktags/tags/tag_store")
+    return TagStore.new()
+end
 
 -- Report whether a tag holds the slot with a key
 local function has(store, tag, layoutKey)
@@ -113,15 +121,13 @@ local text = TagData.Encode(store.data, "melee")
 assert(string.find(text, '"abyssal_whip","abyssal_whip"', 1, true))
 assert(not string.find(text, "4151", 1, true) and not string.find(text, "abyssal_whip:", 1, true))
 objects.abyssal_whip.id, byID[4151], byID[5000] = 5000, nil, objects.abyssal_whip
-ItemIdentity.Reset()
-local reloaded = TagStore.new()
+local reloaded = reloadStore()
 assert(count(reloaded, "melee", 5000) == 2 and reloaded:GetTagSprite("melee") == 5000)
 assert(Json.encode(reloaded:AllTags()) == Json.encode(store:AllTags()))
 
 -- An item this client cannot name keeps its place and is written back unchanged
 objects.abyssal_whip = nil
-ItemIdentity.Reset()
-reloaded = TagStore.new()
+reloaded = reloadStore()
 local dormant = reloaded.data.tags.melee.rows[1].slots[3]
 assert(dormant.kind == "blank" and dormant.dormant == "abyssal_whip")
 assert(not TagLayouts.IsOpen(dormant))
@@ -253,8 +259,14 @@ assert(labelRows(4) == "0,5,6")
 
 -- Items cannot drop onto labels; the layout ends after the last label
 assert(not store:MoveLayoutItem("gear", gear[1], 5, 10))
-local _, boundary = store:GetLayout("gear", 10)
-assert(boundary == 50)
+local view = store:EditorLayout("gear", 10)
+assert(view.lines == 5 and #view.slots == 50 and #view.labels == 3)
+-- The editor's view finds each item slot by its key, on the grid or in Unsorted
+for index, slot in ipairs(view.slots) do
+    if slot.kind == "item" then assert(view.sortedIndex[slot.layoutKey] == index) end
+end
+for index, slot in ipairs(view.unsorted) do assert(view.unsortedIndex[slot.layoutKey] == index) end
+assert(store:EditorLayout("missing", 10).lines == 0 and #store:EditorLayout("missing", 10).unsorted == 0)
 
 -- Removing a label lifts everything below it
 assert(store:RemoveLabel("gear", 0, 10))

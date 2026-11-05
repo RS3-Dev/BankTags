@@ -67,14 +67,13 @@ assert(keys[7] == extra.layoutKey)
 rows, keys, count = TagPage.Rows({ rows = {}, unsorted = {} })
 assert(#rows == 0 and #keys == 0 and count == 0)
 
--- Core accepts the page with an 80-character title
+-- Core accepts rows without a page title
 local store = TagStore.new()
-local longName = string.rep("a", 79) .. "z"
-assert(store:CreateTag(longName))
-store.data.tags[longName].rows = record.rows
-store.data.tags[longName].unsorted = record.unsorted
-local page, pageKeys = TagPage.Build(store, longName)
-assert(#page.title == 80 and #pageKeys == 7)
+assert(store:CreateTag("supplies"))
+store.data.tags.supplies.rows = record.rows
+store.data.tags.supplies.unsorted = record.unsorted
+local page, pageKeys = TagPage.Build(store, "supplies")
+assert(page.title == nil and #pageKeys == 7)
 assert(accepts(page))
 assert(TagPage.Build(store, "missing") == nil)
 

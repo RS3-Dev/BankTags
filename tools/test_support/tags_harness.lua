@@ -1,5 +1,5 @@
 -- Load the real Bank Core beside the built Bank Tags in a stand-in host
--- Bank Core is read, never changed, from BANKCORE_ROOT or ../bank-utilities
+-- Bank Core is read, never changed, from BANKCORE_ROOT or ../bank-utils-core
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 -- Kept outside tests/ so tools/check.lua does not count it as a test program
 
@@ -31,10 +31,10 @@ end
 
 -- Find Bank Core's checkout, refusing one without the needed API
 function Harness.CoreRoot()
-    local root = os.getenv("BANKCORE_ROOT") or "../bank-utilities"
+    local root = os.getenv("BANKCORE_ROOT") or "../bank-utils-core"
     root = string.gsub(root, "\\", "/")
     if not exists(root .. "/main.lua") then
-        error("Bank Core was not found at " .. root .. "; set BANKCORE_ROOT to a bank-utilities checkout", 0)
+        error("Bank Core was not found at " .. root .. "; set BANKCORE_ROOT to a bank-utils-core checkout", 0)
     end
     local spec = readText(root .. "/docs/API.md") or ""
     for _, needed in ipairs({ "bankcore.Register(spec)", "ext:GetBankBounds()", "`slot`" }) do
@@ -92,6 +92,51 @@ local function installMiniMenu()
     }, { __index = MiniMenu })
 end
 
+-- Run PrettyUI's real dialog stack, footer actions, and close handling.
+-- Only the native window and leaf controls are stand-ins.
+local function installDialogs()
+    local root = Harness.PrettyUIRoot()
+    local fancy = { getSize = function(label) return math.max(70, #label * 8 + 24) end }
+    local windowFactory = { new = function(parent, options)
+        local window = prettyui.Window.new(parent, options)
+        window.content:SetSize(options.width - 16, options.height - 40)
+        window.managed = {}
+        local function keep(control)
+            window.managed[#window.managed + 1] = control
+            return control
+        end
+        function window:AddText(value, ...)
+            assert(select("#", ...) == 0, "AddText accepts one string or options table")
+            local opts = type(value) == "table" and value or { text = value }
+            opts.width, opts.height = opts.width or self.content.width, opts.height or 24
+            return keep(prettyui.Text.new(self.content, opts))
+        end
+        function window:AddTextField(opts)
+            return keep(prettyui.TextField.new(self.content, opts))
+        end
+        function window:AddFancyButton(label, action, opts)
+            opts.width, opts.height = fancy.getSize(label), 28
+            local button = prettyui.SimpleButton.new(self.content, label, action, opts)
+            button.root:SetPos(opts.x, opts.y, opts.xAnchor, opts.yAnchor)
+            return keep(button)
+        end
+        local destroy = window.Destroy
+        function window:Destroy()
+            assert(self.root ~= nil, "dialog window destroyed twice")
+            for _, control in ipairs(self.managed) do control:Destroy() end
+            destroy(self)
+            self.root, self.content, self.managed = nil, nil, {}
+        end
+        return window
+    end }
+    local env = setmetatable({ require = function(name)
+        if name == "src/window" then return windowFactory end
+        if name == "src/fancy_button" then return fancy end
+        error(name)
+    end }, { __index = _G })
+    prettyui.Dialog = assert(loadfile(root .. "/src/dialog.lua", "t", env))()
+end
+
 -- Give stand-in list rows real positions so tests can point at them
 local function placeListRows()
     local newList = prettyui.List.new
@@ -108,6 +153,11 @@ local function placeListRows()
             end
         end
         function list:_OnScrollWheel() return true end
+        -- PrettyUI clamps the list's scroll to its rows
+        function list:SetScrollPosition(position)
+            local most = math.max(0, #self.rows * self.entryHeight - self.root.height)
+            self.scrollY = math.max(0, math.min(math.floor(position or 0), most))
+        end
         return list
     end
 end
@@ -127,13 +177,11 @@ local function scrollViews()
         end
         function view:SetContentHeight(height)
             self.content.height = height
+            self.scrollbarVisible = height > self.height
+            self.contentWidth = self.root.width - (self.scrollbarVisible and 18 or 0)
             self:SetScrollPosition(self.scrollY)
         end
-        function view._onScrollWheel(_, delta)
-            local before = view.scrollY
-            view:SetScrollPosition(view.scrollY + delta * view.scrollStep)
-            return view.scrollY == before
-        end
+        function view:ScrollBy(delta) self:SetScrollPosition(self.scrollY + delta) end
         return view
     end
 end
@@ -197,14 +245,40 @@ function Harness.new(name, options)
     local bankHost = require("tools/test_support/fake_bank_host").install()
     bankHost:InstallSidebarWidgets()
     bankHost:InstallWindowWidgets()
+    -- Native bank icon-tab states (stand-in sprite IDs).
+    id.Sprite.BANK_TABS_HORIZONTAL_0 = 101
+    id.Sprite.BANK_TABS_HORIZONTAL_1 = 102
+    id.Sprite.BANK_TABS_HORIZONTAL_2 = 103
+    -- Native font metrics for clipped-label hover decisions (fixed-width stand-in).
+    config.Font = { MUSEO_SANS_15PT_REGULAR = {
+        GetStringWidth = function(_, text) return #text * 7 end,
+    } }
     -- Import/Share needs the window ComboBox, which has SetEntries
     local comboBox = prettyui.ComboBox
     bankHost:InstallPanelWidgets()
     prettyui.ComboBox = comboBox
+    -- Native input fields always expose their content margins
+    local newTextField = prettyui.TextField.new
+    prettyui.TextField.new = function(parent, fieldOptions)
+        local field = newTextField(parent, fieldOptions)
+        field.root.contentMargin = { left = 8, top = 3, right = 8, bottom = 0 }
+        return field
+    end
+    -- PrettyUI's Show shows and raises a window
+    local newWindow = prettyui.Window.new
+    prettyui.Window.new = function(parent, windowOptions)
+        local window = newWindow(parent, windowOptions)
+        function window:Show()
+            self.root.hidden = false
+            self.root:MoveToFront()
+        end
+        return window
+    end
     placeListRows()
     scrollViews()
     standInTabs()
     installMiniMenu()
+    installDialogs()
     -- An attached PrettyUI tooltip records its target, text, and whether it is shown
     local attach = prettyui.Tooltip.attach
     prettyui.Tooltip.attach = function(target, parent, value)
@@ -231,9 +305,29 @@ function Harness.new(name, options)
         return slot
     end
     ui.ObjectQuantityDisplayMode.MULTIPLE = 1
+    ui.Hook.ONKEY = "key"
+    ui.InputFieldActionResult = { CONTENT_CHANGE = "change", SUBMIT = "submit",
+        SUBMIT_ON_ESCAPE = "escape", SUBMIT_ON_FOCUS_LOSS = "blur" }
+    -- Lists report their documented selection callback when a row is picked
+    local newList = prettyui.List.new
+    prettyui.List.new = function(parent, listOptions)
+        local list = newList(parent, listOptions)
+        if listOptions.onChange ~= nil then
+            function list:Click(entryID)
+                for _, row in ipairs(self.rows) do
+                    if row.entry.id == entryID then
+                        listOptions.onChange(self, entryID, true)
+                        return true
+                    end
+                end
+                return false
+            end
+        end
+        return list
+    end
     -- Bank Core's own host events, which a test raises with Fire
     local hostSubscriptions = {}
-    for _, event in ipairs({ "GameStateChanged", "MiniMenuEntrySelected", "ContentLayerReady",
+    for _, event in ipairs({ "GameStateChanged", "MiniMenuEntrySelected", "ContentLayerReady", "SettingsLayerReady",
         "InventoryAdded", "InventoryRemoved", "InventoryUpdated" }) do
         local listeners = {}
         hostSubscriptions[event] = listeners
@@ -284,6 +378,7 @@ function Harness.new(name, options)
         MiniMenuEntryType = MiniMenuEntryType,
         MiniMenu = { IsOpen = function() return input.menuOpen end },
         GameKey = gameKeys,
+        ModifierKey = { SHIFT = 1, CONTROL = 2, ALT = 4, ANY = 7 },
         Player = { IsAvailable = function() return true end }, GameState = { GAME = 30 },
         log = function() end }
     local databases = {}
@@ -318,7 +413,13 @@ end
 
 -- Load the built Bank Tags folder
 function Harness:LoadTags()
-    self.tags = self.host:Load("banktags", self.tagsFolder)
+    -- Core's stand-in loader predates requiredDependencies; read the client format here
+    local manifest = require("banktags/core/json").decode(assert(readText(self.tagsFolder .. "/plugin.json")))
+    local dependencies, optional = {}, {}
+    for name in pairs(manifest.requiredDependencies or {}) do dependencies[name] = true end
+    for name in pairs(manifest.optionalDependencies or {}) do optional[name] = true end
+    self.tags = self.host:Load("banktags", self.tagsFolder,
+        { name = manifest.name, dependencies = dependencies, optional = optional })
     return self.tags
 end
 
@@ -391,6 +492,17 @@ function Harness.Find(parent, text)
         end
     end
     return nil
+end
+
+-- Click the control that owns a visible label, including shared-dialog footer actions.
+function Harness.Click(parent, text)
+    local target = assert(Harness.Find(parent, text), "missing control: " .. text)
+    while target ~= nil do
+        local action = target.hooks.click or target.hooks.pressed
+        if action ~= nil then action(); return end
+        target = target.parent
+    end
+    error("control cannot be clicked: " .. text)
 end
 
 -- Where hosts put a plugin's menu entry
@@ -573,6 +685,56 @@ function Harness:Saved(tag)
     end
     for _, slot in ipairs(record.unsorted) do values[#values + 1] = slot.objectID or 0 end
     return table.concat(values, " ")
+end
+
+-- Send native hover coordinates to the editor surface at a content position.
+function Harness:PointEditor(x, y)
+    local editor = assert(self:App().windows.layoutEditor)
+    local Geometry = require("banktags/ui/geometry")
+    local left, top = Geometry.absolutePosition(editor.content)
+    self.bankHost.mouse = { x = left + x, y = top + y }
+    local surface = editor.drag ~= nil and editor.drag.sourceSurface or nil
+    if surface == nil then
+        for _, candidate in ipairs({ editor.panes.sorted.surface, editor.panes.unsorted.surface,
+            editor.searchDragSurface }) do
+            local clip = editor.surfaceClips[candidate]
+            if not candidate.hidden and x >= clip.x and y >= clip.y
+                and x < clip.x + clip.width and y < clip.y + clip.height then
+                surface = candidate
+                break
+            end
+        end
+    end
+    local previous = self.editorHoveredSurface
+    if previous ~= surface and previous ~= nil then
+        previous.isMouseOver = false
+        if previous.hooks.mouseleave ~= nil then previous.hooks.mouseleave(previous) end
+    end
+    self.editorHoveredSurface = surface
+    if surface ~= nil then
+        surface.isMouseOver = true
+        local localX, localY = x, y
+        if previous ~= surface and surface.hooks.mouseover ~= nil then
+            surface.hooks.mouseover(surface, localX, localY)
+        end
+        if surface.hooks.mouserepeat ~= nil then surface.hooks.mouserepeat(surface, localX, localY) end
+    end
+    self.editorPoint = { x = x, y = y }
+end
+
+-- Press a pane-local point through its editor-origin input surface
+function Harness:PressEditor(surface, x, y)
+    local editor = assert(self:App().windows.layoutEditor)
+    local clip = editor.surfaceClips[surface]
+    return surface.hooks.click(surface, clip.x + x, clip.y + y)
+end
+
+-- Release the editor's drag where it was last pointed, in its surface's native units
+function Harness:ReleaseEditor()
+    local editor = assert(self:App().windows.layoutEditor)
+    local surface = editor.drag ~= nil and editor.drag.sourceSurface or self.editorHoveredSurface
+    local point = assert(self.editorPoint, "point at the editor first")
+    return surface.hooks.release(surface, point.x, point.y)
 end
 
 -- Point the mouse at a position relative to a component

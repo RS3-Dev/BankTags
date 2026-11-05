@@ -2,6 +2,8 @@
 
 This records the signed-off plan for making Bank Tags a standalone plugin on Bank Core's public API, the review amendments adopted before implementation, and the stages it was built in. Results and measurements are in the last section.
 
+> Historical implementation record. The current contract is [CONTRACT.md](../CONTRACT.md). Version 0.1.3 removed the import-provider API and source picker; ordinary share-code and backup imports remain. Bank Core is a fixed external dependency.
+
 ## Starting point
 
 - Bank Tags source was preserved from Bank Utilities `beba274` at `3c3771b` on `feature/standalone-banktags`. It was not runnable: it reached into Bank Core's private `Features` bridge and native bank components, and its modules used the same paths as Bank Core's.

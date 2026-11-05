@@ -6,11 +6,10 @@ local Parts = require("banktags/windows/layout_editor_parts")
 local Size = Parts.size
 
 local KEY_EVENT = Config.PLUGIN_REF .. "_layout_editor_keys"
--- Modifier bits captured from the live client's key events
-local SHIFT_MODIFIER = 1
-local CONTROL_MODIFIER = 4
-local ALT_MODIFIER = 2
-local ANY_MODIFIER = 7
+local SHIFT_MODIFIER = ModifierKey.SHIFT
+local CONTROL_MODIFIER = ModifierKey.CONTROL
+local ALT_MODIFIER = ModifierKey.ALT
+local ANY_MODIFIER = ModifierKey.ANY
 
 local LayoutEditorKeys = {}
 
@@ -25,11 +24,12 @@ function LayoutEditorKeys:StartShortcuts()
     end)
     -- The player may have typed elsewhere while the game was in the background
     Event.WindowFocusChanged.Subscribe(KEY_EVENT, function() self.keysOnGrid = false end)
-    -- Clicking the item search gives it the keys
-    self.itemSearch.root:Subscribe(ui.Hook.ONCLICK, function()
+    -- ONKEY is a general key hook, not a field-focus event
+    local function takeKeys()
         self.keysOnGrid = false
         return true
-    end)
+    end
+    self.itemSearch.root:Subscribe(ui.Hook.ONCLICK, KEY_EVENT, takeKeys)
 end
 
 -- Stop listening for shortcut keys
@@ -68,14 +68,9 @@ end
 -- Move the selected sorted item or group one cell, as a drag there would
 -- The grid's edges stop it quietly; a label's line says why
 function LayoutEditorKeys:NudgeSelected(columnStep, lineStep)
-    local entry = self:SelectedEntry()
-    if entry == nil or entry.unarranged then return false end
+    local entry, paneName, anchor = self:SelectedEntry()
+    if paneName ~= "sorted" then return false end
     local columns = Size.CENTER_COLUMNS
-    local anchor = nil
-    for index, slot in ipairs(self.panes.sorted.slots) do
-        if type(slot) == "table" and slot.layoutKey == entry.layoutKey then anchor = index end
-    end
-    if anchor == nil then return false end
     local line = (anchor - 1) // columns + lineStep
     local column = (anchor - 1) % columns + columnStep
     if line < 0 or column < 0 or column >= columns then return false end
@@ -83,21 +78,16 @@ function LayoutEditorKeys:NudgeSelected(columnStep, lineStep)
     local destination = line * columns + column + 1
     local plan = self.store:PlanLayoutItemsMove(self.selectedTag, keys, entry.layoutKey, destination, columns)
     if plan ~= nil and plan.offGrid then return false end
-    local saved, reason, changed = self:RecordEdit(self.selectedTag, function()
+    local _, _, changed = self:SaveEdit("Could not move the items.", function()
         return self.store:MoveLayoutItems(self.selectedTag, keys, entry.layoutKey, destination, columns)
     end)
-    if not saved then
-        self:ShowError(reason or "Could not move the items.")
-        return false
-    end
-    if changed then self:NotifyChanged(self.selectedTag) end
     return changed
 end
 
 -- Read the held modifiers from the event and the keyboard
 -- Either may report a held key; AltGr arrives as Ctrl and Alt, so it is never Ctrl alone
 local function heldModifiers(event)
-    local held = (math.tointeger(event.modifiers) or 0) & ANY_MODIFIER
+    local held = event.modifiers & ANY_MODIFIER
     if Keyboard.IsShiftDown() then held = held | SHIFT_MODIFIER end
     if Keyboard.IsControlDown() then held = held | CONTROL_MODIFIER end
     if Keyboard.IsAltDown() then held = held | ALT_MODIFIER end
@@ -153,13 +143,6 @@ function LayoutEditorKeys:KeyPressed(event)
         self:RemoveSelected()
     elseif self.settings().arrowKeyMovement then
         self:NudgeSelected(columnStep, lineStep)
-    end
-end
-
--- Attach these methods to LayoutEditorWindow
-function LayoutEditorKeys.install(target)
-    for name, method in pairs(LayoutEditorKeys) do
-        if name ~= "install" then target[name] = method end
     end
 end
 

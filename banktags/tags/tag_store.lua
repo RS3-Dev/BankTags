@@ -13,6 +13,7 @@ local folderName = TagRules.folderName
 local TagStore = {}
 TagStore.__index = TagStore
 require("banktags/tags/tag_store_layouts").install(TagStore)
+require("banktags/tags/tag_store_labels").install(TagStore)
 require("banktags/tags/tag_store_folders").install(TagStore)
 
 local TEXT_STORE = {
@@ -187,11 +188,6 @@ function TagStore:CreateTag(requestedName, spriteObjectID)
     local saved, reason = self:Commit(nextData, "Could not create the tag.")
     if not saved then return false, nil, reason end
     return true, name, nil
-end
-
--- Create an empty tag with the next available default name
-function TagStore:CreatePlaceholderTag()
-    return self:CreateTag(self:NextPlaceholderTagName())
 end
 
 -- Read the object ID of a tag's sidebar icon

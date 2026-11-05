@@ -113,7 +113,7 @@ end
 h:ClickRow("melee")
 h:Tick(2)
 assert(app:ShownTag() == "melee" and app.ext:IsOpen())
-assert(layout.pageState:GetLayoutSections()[1].label == "Melee")
+assert(#layout.pageState:GetLayoutSections() == 1 and layout.pageState:GetLayoutSections()[1].label == "Unsorted")
 checkButtons(true)
 local entries = layout:BuildPageItems()
 assert(#entries == 1 and entries[1].objectID == 4151)
@@ -129,7 +129,7 @@ list = tab.controls.list
 -- Another tag sets and opens the page again; the shown tag again closes it
 h:ClickRow("ranged")
 h:Tick(2)
-assert(app:ShownTag() == "ranged" and layout.pageState:GetLayoutSections()[1].label == "Ranged")
+assert(app:ShownTag() == "ranged" and layout.pageState:GetLayoutSections()[1].label == "Unsorted")
 -- The footer stays, and its Edit opens the tag shown now, not the one shown when it was built
 for _, control in ipairs(tab.controls.owned) do
     if control.spriteName == "PENCIL" then control.root.hooks.pressed() end
@@ -141,7 +141,7 @@ h:ClickRow("ranged")
 h:Tick(2)
 assert(app:ShownTag() == nil and layout.shownPage == nil and not hasEditButton())
 
--- Outside All Items the Tags tab says why; showing a tag clears it
+-- Outside All Items the bank banner says why; showing a tag clears it
 layout.nativeViewAll = false
 local detect = layout.DetectNativeViewAll
 layout.DetectNativeViewAll = function() return false end
@@ -171,7 +171,7 @@ h:ClickRow("melee")
 h:Tick(2)
 assert(tab.controls.list:RowFor("melee").selectionFrame ~= nil)
 local other = assert(h:Session().publicAPI.Register({ id = "other", name = "Other" }))
-assert(other:SetPage({ title = "Other", rows = { { slots = { 385 } } } }) and other:Open())
+assert(other:SetPage({ rows = { { slots = { 385 } } } }) and other:Open())
 assert(app:ShownTag() == nil)
 h:Tick(2)
 assert(tab.controls.list:RowFor("melee").selectionFrame == nil)
@@ -307,7 +307,7 @@ tab.controls.list.search.root.hooks.contentchanged(nil, "change", "iconic")
 assert(iconRows() == 1)
 local panel = ui.Layer.new(nil)
 panel:SetSize(300, 400)
-h.hostSubscriptions.ContentLayerReady.banktags_content({ component = panel })
+h.hostSubscriptions.SettingsLayerReady.banktags_settings({ component = panel })
 app.settingsSection.controls.showTagSprites:SetSelected("showTagSprites", false, true)
 assert(app.settings.showTagSprites == false and iconRows() == 0)
 tab.controls.list.search.root.hooks.contentchanged(nil, "change", "combat")

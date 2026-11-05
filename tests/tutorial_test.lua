@@ -10,15 +10,31 @@ assert(core.result.Register({ id = "aa.before", name = "Other", icon = "STAR",
     column = { mount = function() end } }))
 local tags = h:LoadTags()
 local cues, stops = 0, 0
+local currentSound, audioFailure
 tags.env.Plugin = { resources = { tutorial_step = "step-cue" } }
 tags.env.audio = {
-    SoundPlaybackParams = { new = function() return {} end },
+    SoundPlaybackParams = { new = function()
+        if audioFailure == "params" then error("Audio parameters unavailable") end
+        return {}
+    end },
     Play = function(resource, params)
         assert(resource == "step-cue" and params.volume == 0.25)
+        if audioFailure == "play" then error("Audio playback unavailable") end
         cues = cues + 1
-        return { Stop = function() stops = stops + 1 end }
+        currentSound = { dead = false, Stop = function(self)
+            stops = stops + 1
+            if self.dead then error("Attempting to use a dead sound instance") end
+            self.dead = true
+        end }
+        return currentSound
     end,
 }
+-- One-shot cues finish while the player takes the next action
+local tick = h.Tick
+function h:Tick(count)
+    if currentSound ~= nil then currentSound.dead = true end
+    tick(self, count)
+end
 local app = h:App()
 local session, layout = h:OpenBank()
 layout:SetSidebarMode("__bankutils_ext_tab:aa.before")
@@ -95,13 +111,13 @@ local editor = app.windows.layoutEditor
 assert(tour:Target() == editor.panes.sorted.view.root)
 assert(tour.flashWhite.parts[5].width == tour.highlight.width - 20)
 assert(tour.flashWhite.parts[5].height == tour.highlight.height - 20)
-assert(editor:RecordEdit("tutorial tag", function()
+assert(editor:SaveEdit(nil, function()
     return app.store:InsertLabel("tutorial tag", 0, "Items", editor.columns)
 end))
 app:Changed()
 h:Tick(5)
 assert(tour.step == 4, "opening the editor or adding only a label does not place an item")
-assert(editor:RecordEdit("tutorial tag", function()
+assert(editor:SaveEdit(nil, function()
     local shark = app.store:GetTaggedItems("tutorial tag")[1].layoutKey
     return app.store:MoveLayoutItem("tutorial tag", shark, 11, editor.columns)
 end))
@@ -143,7 +159,7 @@ assert(app:MoveTagToFolder("tutorial tag", "existing"))
 h:Tick(5)
 assert(tour.step == 7, "moving into an existing folder is not the create-folder action")
 app.windows:OpenCreateFolderPrompt("tutorial tag")
-assert(tour:Target() == app.windows.textPrompt.buttons[#app.windows.textPrompt.buttons].root)
+assert(tour:Target() == app.windows.textPrompt.field.root)
 app.windows.textPrompt:Save("Tutorial folder")
 h:Tick(5)
 assert(tour.step == 8 and app.store:GetTagFolder("tutorial tag") == "tutorial folder")
@@ -180,16 +196,31 @@ assert(not tour.active)
 app.tab:Build()
 assert(not tour.active)
 
+-- Optional audio failures must not prevent opening, navigating, or closing the guide
+for _, failure in ipairs({ "params", "play" }) do
+    audioFailure = failure
+    app.tab.controls.tutorialButton.action()
+    assert(tour.active and tour.step == 1 and tour.sound == nil)
+    tour.stepButtons[3].action()
+    assert(tour.step == 3 and tour.sound == nil)
+    tour:Stop(false)
+    assert(not tour.active and tour.window == nil)
+end
+audioFailure = nil
+
 -- Closing the bank or unloading destroys overlays and stops ticking
 app.tab.controls.tutorialButton.action()
 local root, arrow = tour.window.root, tour.arrow
 h:CloseBank()
 assert(not tour.active and root.destroyed and arrow.destroyed)
+assert(tour.sound == nil)
 h:OpenBank()
 h:Tick(2)
 assert(not tour.active)
 app.tab.controls.tutorialButton.action()
 assert(tour.active)
+currentSound.dead = true
 app:Shutdown()
 assert(not tour.active and tour.window == nil)
+assert(tour.sound == nil)
 print("tutorial_test: ok")

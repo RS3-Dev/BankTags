@@ -38,15 +38,4 @@ function NativeUi.makeButton(parent, x, y, width, height, options)
     return button
 end
 
--- Rotate a sprite using every rotation field the host might support
-function NativeUi.setSpriteRotation(sprite, rotationRadians, rotationDegrees)
-    if sprite.SetRotation ~= nil then
-        pcall(function() sprite:SetRotation(rotationRadians) end)
-    end
-    pcall(function() sprite.rotation = rotationRadians end)
-    pcall(function() sprite.angle = rotationRadians end)
-    pcall(function() sprite.rotationDegrees = rotationDegrees end)
-    pcall(function() sprite.angleDegrees = rotationDegrees end)
-end
-
 return NativeUi

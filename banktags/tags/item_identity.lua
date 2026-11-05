@@ -44,10 +44,4 @@ function ItemIdentity.ObjectID(reference)
     return objectID
 end
 
--- Forget cached lookups, such as after the client's configs reload
-function ItemIdentity.Reset()
-    namesByID = {}
-    idsByName = {}
-end
-
 return ItemIdentity

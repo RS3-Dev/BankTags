@@ -9,19 +9,13 @@ local h = Harness.new("plugin_reload")
 h.bankHost:SetItems({ { 1944, 3, "Egg" }, { 1927, 1, "Milk" } })
 
 -- Bank Tags loads without Bank Core and waits for it
+h.host.sharedGlobals.__banktags_api = { RegisterExtension = function() error("stale import API") end }
 local tags = h:LoadTags()
 local app = h:App()
 assert(app ~= nil and app.ext == nil)
 assert(type(rawget(tags.env, "PluginDependencyUpdate")) == "function")
 assert(rawget(tags.env, "PluginOptionalDependencyChanged") == nil)
-local api = tags.result
-assert(type(api.RegisterExtension) == "function" and api.GetState().running)
-assert(rawget(tags.env._G, "__banktags_api") == api)
--- Another plugin can add an import source without Bank Core; the window lists it
-local importer = assert(api.RegisterExtension("example.guides", "Guides"))
-assert(importer:RegisterImportProvider("guide", { label = "Guide", input = "text",
-    request = function() end }))
-assert(table.concat(importer:GetState().providers, ",") == "guide")
+assert(tags.result == nil and rawget(tags.env._G, "__banktags_api") == nil)
 -- No Core module was loaded into Bank Tags' cache
 for moduleName in pairs(tags.env.package.loaded) do
     assert(string.sub(moduleName, 1, 9) == "banktags/", moduleName .. " is not a Bank Tags module")
@@ -77,11 +71,7 @@ tabParent = h:TabParent()
 h.host:Reload("banktags", { freshEnvironment = true })
 local reloaded = h:App()
 assert(reloaded ~= app and app.shutDown and app.ext == nil and h:Connected())
--- The old import API closed; plugins register again
-assert(not importer:GetState().live and not api.GetState().running)
-assert(select(2, importer:RegisterImportProvider("again", { label = "Guide", input = "text",
-    request = function() end })) == "stale_handle")
-assert(h.tags.result.GetState().running and h.tags.result ~= api)
+assert(h.tags.result == nil and rawget(h.tags.env._G, "__banktags_api") == nil)
 assert(reloaded.store.data.tags.melee ~= nil)
 assert(tabParent.destroyed)
 h:Tick(2)
@@ -107,7 +97,7 @@ assert(h:TabParent() == nil)
 for _, subscription in ipairs(h.host:SubscriptionsOf("banktags")) do
     error("Bank Tags left " .. subscription .. " subscribed")
 end
-assert(reloaded.ext == nil and reloaded.imports.closed)
+assert(reloaded.ext == nil and reloaded.shutDown)
 h.host:Unload("bankcore")
 
 -- In its own Lua state, Bank Tags connects as before

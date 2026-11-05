@@ -1,6 +1,6 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
--- Change Bank Tags' preferences on its own plugin panel
+-- Change Bank Tags' preferences on its own Plugin Hub settings page
 -- Each saves under Bank Tags' key, applies at once, and reverts if refused
 -- FAKE HOST: stand-in loader, components, and menus, not the game client
 
@@ -14,11 +14,18 @@ h:OpenBank()
 h:Tick(2)
 local SETTINGS_KEY = "banktags:settings:v1"
 
--- Draw Bank Tags' plugin panel as the host does
+local manifestFile = assert(io.open("plugins/banktags/plugin.json", "r"))
+local manifest = manifestFile:read("*a")
+manifestFile:close()
+assert(manifest:match('"hasSettingsIcon"%s*:%s*true'), "the Plugin Hub settings cog must be enabled")
+assert(h.hostSubscriptions.ContentLayerReady.banktags_content == nil,
+    "preferences should mount through the settings cog, not the ribbon content layer")
+
+-- Draw Bank Tags' Plugin Hub settings page as the host does
 local function openPanel()
     local parent = ui.Layer.new(nil)
     parent:SetSize(300, 400)
-    h.hostSubscriptions.ContentLayerReady.banktags_content({ component = parent })
+    h.hostSubscriptions.SettingsLayerReady.banktags_settings({ component = parent })
     return assert(app.settingsSection), parent
 end
 
@@ -87,7 +94,7 @@ assert(h:Connected())
 -- Bank Tags unloads, destroying the panel; a reload reads the saved choice back
 h.host:Unload("banktags")
 assert(section.destroyed and app.settingsSection == nil)
-assert(h.hostSubscriptions.ContentLayerReady.banktags_content == nil)
+assert(h.hostSubscriptions.SettingsLayerReady.banktags_settings == nil)
 h:LoadTags()
 app = h:App()
 assert(app.settings.arrowKeyMovement == true)

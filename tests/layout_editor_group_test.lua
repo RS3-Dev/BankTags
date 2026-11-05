@@ -1,4 +1,5 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
+local BankGrid = require("banktags/ui/bank_grid")
 
 -- Shift-click sorted items in the layout editor and drag them as a group
 -- FAKE HOST: stand-in keyboard, pointer, and drags, not the game client
@@ -57,12 +58,12 @@ end }
 local function pointAt(paneName, column, line)
     local left, top = Geometry.absolutePosition(editor.content)
     local pane = editor.panes[paneName]
-    local x, y = Size.GRID_LEFT + column * 44 + 20, 4 + line * 44 + 20 - pane.view.scrollY
-    host.mouse = { x = left + pane.x + x, y = top + pane.y + y }
+    local x, y = pane.gridLeft + column * 44 + 20, BankGrid.RowItemY(line, pane.labels) + 20 - pane.view.scrollY
+    h:PointEditor(pane.x + x, pane.y + y)
     return x, y
 end
 local function press(paneName, column, line)
-    editor.panes[paneName].surface.hooks.click(nil, pointAt(paneName, column, line))
+    h:PressEditor(editor.panes[paneName].surface, pointAt(paneName, column, line))
 end
 -- Move a held drag over another slot, as the client's drag hook does
 local function dragOver(paneName, column, line)
@@ -70,7 +71,7 @@ local function dragOver(paneName, column, line)
     editor.panes.sorted.surface.hooks.drag()
 end
 local function release(paneName)
-    editor.panes[paneName or "sorted"].surface.hooks.release()
+    h:ReleaseEditor()
 end
 local function click(paneName, column, line)
     press(paneName, column, line)
@@ -84,8 +85,10 @@ end
 -- Count the gold outlines drawn on either grid
 local function outlines()
     local count = 0
-    for _, node in ipairs(editor.centerNodes) do
-        if node.fill == false then count = count + 1 end
+    for _, pane in pairs(editor.panes) do
+        for _, mark in ipairs(pane.outlines) do
+            if not mark.hidden and not mark.destroyed then count = count + 1 end
+        end
     end
     return count
 end
@@ -134,8 +137,8 @@ shiftClick("sorted", 6, 0)
 assert(grouped(1, 2, 3) and changes == 0)
 -- Items the group blocks say so; Copy takes the whole group
 assert(editor.copyButton.tooltipText == "Copy the selected item or group (Ctrl+C)")
-assert(editor.removeButton.tooltipText == "Select one item to remove it")
-assert(editor.unsortButton.tooltipText == "Select one item to move it to Unsorted")
+assert(editor.removeButton.tooltipText == editor.actionTooltips.removeButton)
+assert(editor.unsortButton.tooltipText == "Move the selected item or group to Unsorted")
 
 -- A plain click on a group item keeps the group and saves nothing
 local before = Json.encode(app.store.data)
@@ -172,19 +175,19 @@ press("sorted", 1, 0)
 dragOver("sorted", COLUMNS - 1, 0)
 release()
 assert(Json.encode(app.store.data) == before and changes == 1 and grouped(1, 2, 3))
-assert(editor.errorBanner ~= nil)
-editor:HideError()
+assert(editor.status.content ~= "")
+editor:ClearStatus()
 press("sorted", 1, 0)
 dragOver("sorted", 2, 2)
 pointAt("unsorted", 0, 0)
 release()
-assert(Json.encode(app.store.data) == before and editor.errorBanner ~= nil and grouped(1, 2, 3))
-editor:HideError()
+assert(Json.encode(app.store.data) == before and editor.status.content ~= "" and grouped(1, 2, 3))
+editor:ClearStatus()
 -- Across the label line the group cannot land
 press("sorted", 1, 0)
 dragOver("sorted", 1, 1)
 release()
-assert(Json.encode(app.store.data) == before and editor.errorBanner == nil and changes == 1)
+assert(Json.encode(app.store.data) == before and editor.status.content == "" and changes == 1)
 
 -- A failed save keeps the layout and the group, and says why
 -- The store's own write failure is covered by layout_group_move_test
@@ -193,27 +196,13 @@ press("sorted", 1, 0)
 dragOver("sorted", 0, 0)
 release()
 app.store.Commit = nil
-assert(Json.encode(app.store.data) == before and editor.errorBanner ~= nil and grouped(1, 2, 3))
-editor:HideError()
+assert(Json.encode(app.store.data) == before and editor.status.content ~= "" and grouped(1, 2, 3))
+editor:ClearStatus()
 
--- Remove and Move to Unsorted refuse a group by button and key
-editor.keysOnGrid = true
-for _, button in ipairs({ editor.removeButton, editor.unsortButton }) do
-    button.root.hooks.pressed()
-    assert(editor.errorBanner ~= nil, "a group action explains itself")
-    editor:HideError()
-end
-for name, action in pairs(h.keySubscriptions.KeyDown) do
-    if string.find(name, "layout_editor_keys", 1, true) then
-        action({ gameKey = 101, modifiers = 0, isRepeat = false })
-    end
-end
-assert(editor.errorBanner ~= nil and Json.encode(app.store.data) == before and changes == 1)
-editor:HideError()
 -- Copy keeps the whole group for Paste and saves nothing
 editor.copyButton.root.hooks.pressed()
 assert(#editor.clipboard.items == 3 and Json.encode(app.store.data) == before and grouped(1, 2, 3))
-editor:HideError()
+editor:ClearStatus()
 -- A new label goes above the item last grabbed
 assert(editor:DefaultLabelRow() == 0)
 
@@ -254,6 +243,116 @@ editor:SelectTag("food")
 assert(editor.groupKeys == nil and editor.selectedLayoutKey == nil)
 editor:SelectTag("gear")
 assert(editor.groupKeys == nil and outlines() == 0)
+
+-- Delete removes the whole selection atomically and one Undo restores every slot.
+local function deleteSelection()
+    for name, action in pairs(h.keySubscriptions.KeyDown) do
+        if string.find(name, "layout_editor_keys", 1, true) then
+            action({ gameKey = 101, modifiers = 0, isRepeat = false })
+        end
+    end
+end
+editor:SelectItems({ key(1), key(4) })
+editor.keysOnGrid = true
+before = Json.encode(app.store.data)
+local noticeCount = changes
+local removeTag = app.store.RemoveTag
+local removals = 0
+app.store.RemoveTag = function(self, tag, layoutKey)
+    removals = removals + 1
+    if removals == 2 then return false, "Could not save the selection." end
+    return removeTag(self, tag, layoutKey)
+end
+deleteSelection()
+app.store.RemoveTag = nil
+assert(Json.encode(app.store.data) == before and grouped(1, 4) and changes == noticeCount)
+assert(editor.status.content ~= "")
+editor:ClearStatus()
+deleteSelection()
+assert(editor.layout.sortedIndex[key(1)] == nil and editor.layout.sortedIndex[key(4)] == nil)
+assert(editor.layout.sortedIndex[key(5)] ~= nil and editor.layout.unsortedIndex[key(99)] ~= nil)
+assert(editor.selectedLayoutKey == nil and editor.groupKeys == nil and changes == noticeCount + 1)
+local deleted = Json.encode(app.store.data)
+local historyIndex = editor.history.index
+deleteSelection()
+assert(Json.encode(app.store.data) == deleted and editor.history.index == historyIndex)
+assert(changes == noticeCount + 1 and editor.status.content == "")
+assert(editor:Undo() and Json.encode(app.store.data) == before)
+assert(editor:Redo() and Json.encode(app.store.data) == deleted)
+assert(editor:Undo() and Json.encode(app.store.data) == before)
+-- The Remove button uses the same group action.
+editor:SelectItems({ key(1), key(4) })
+editor.removeButton.root.hooks.pressed()
+assert(Json.encode(app.store.data) == deleted)
+assert(editor:Undo() and Json.encode(app.store.data) == before)
+
+-- Move to Unsorted batches a group in reading order, preserving existing Unsorted slots.
+before = Json.encode(app.store.data)
+editor:SelectItems({ key(4), key(1) })
+local unsortedCount = #app.store.data.tags.gear.unsorted
+local moveNotices = changes
+local moveHistory = editor.history.index
+local commit = app.store.Commit
+app.store.Commit = function(self, data, reason)
+    if not self.holdSave then return false, "Could not save the group." end
+    return commit(self, data, reason)
+end
+editor.unsortButton.root.hooks.pressed()
+app.store.Commit = nil
+assert(Json.encode(app.store.data) == before and grouped(1, 4) and changes == moveNotices)
+assert(editor.history.index == moveHistory and editor.status.content ~= "")
+editor:ClearStatus()
+editor.unsortButton.root.hooks.pressed()
+local moved = Json.encode(app.store.data)
+local movedSlots = app.store.data.tags.gear.unsorted
+assert(#movedSlots == unsortedCount + 2)
+assert(movedSlots[unsortedCount + 1].layoutKey == key(1) and movedSlots[unsortedCount + 2].layoutKey == key(4))
+assert(editor.layout.sortedIndex[key(1)] == nil and editor.layout.sortedIndex[key(4)] == nil)
+assert(editor.layout.sortedIndex[key(5)] ~= nil and movedSlots[1].layoutKey == key(99))
+assert(changes == moveNotices + 1 and editor.selectedLayoutKey == nil and editor.groupKeys == nil)
+assert(editor:Undo() and Json.encode(app.store.data) == before)
+assert(editor:Redo() and Json.encode(app.store.data) == moved)
+assert(editor:Undo() and Json.encode(app.store.data) == before)
+
+local function moveFromMenu(layoutKey)
+    local index = editor.layout.sortedIndex[layoutKey] - 1
+    pointAt("sorted", index % COLUMNS, index // COLUMNS)
+    Harness.Choose(h:ContentMenu(), "Move to Unsorted")
+    h:Tick(2)
+end
+-- Right-clicking another selected member keeps the entire group as the target.
+editor:SelectItems({ key(4), key(1) })
+moveNotices = changes
+moveFromMenu(key(1))
+assert(Json.encode(app.store.data) == moved and changes == moveNotices + 1)
+assert(editor:Undo() and Json.encode(app.store.data) == before)
+-- Right-clicking an unselected item moves only that item.
+editor:SelectItems({ key(4), key(1) })
+moveFromMenu(key(5))
+assert(editor.layout.sortedIndex[key(1)] ~= nil and editor.layout.sortedIndex[key(4)] ~= nil)
+assert(editor.layout.sortedIndex[key(5)] == nil and #app.store.data.tags.gear.unsorted == unsortedCount + 1)
+assert(editor:Undo() and Json.encode(app.store.data) == before)
+
+-- Compact labels pull all following content up, including clicks after scrolling.
+app.store.data.tags.gear.rows = {
+    { kind = "label", text = "First" }, row(item(31)),
+    { kind = "label", text = "Second" }, row(item(32)),
+}
+for _ = 1, 20 do app.store.data.tags.gear.rows[#app.store.data.tags.gear.rows + 1] = row(item(33)) end
+assert(app.store:Save())
+editor:StoreChanged()
+local compact = editor.panes.sorted
+assert(compact.sprites[11].y == 39 and compact.sprites[31].y == 114,
+    "31px label rows must move following item sprites up")
+assert(editor:LabelRowAt(compact, 24, 89) == 2)
+assert(editor:SlotIndexAt(compact, 24, 55) == 11)
+assert(editor:SlotIndexAt(compact, 24, 130) == 31)
+compact.view:SetScrollPosition(44)
+h:PointEditor(compact.x + 24, compact.y + 11)
+h:PressEditor(compact.surface, 24, 11)
+h:ReleaseEditor()
+assert(editor.selectedLayoutKey == key(31), "a scrolled click must select the visibly compacted item")
+compact.view:SetScrollPosition(0)
 
 -- In a scrolled grid the drop lands under the pointer
 local tall = {}

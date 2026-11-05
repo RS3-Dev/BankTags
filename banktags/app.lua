@@ -2,11 +2,10 @@
 
 local Config = require("banktags/core/config")
 local DebugLog = require("banktags/core/debug_log")
-local ImportAPI = require("banktags/imports/import_api")
+local NativeItems = require("banktags/tags/native_items")
 local SelectMode = require("banktags/sidebar/select_mode")
 local Settings = require("banktags/core/settings")
 local SettingsSection = require("banktags/windows/settings_section")
-local TagDraft = require("banktags/imports/tag_draft")
 local TagMenus = require("banktags/sidebar/tag_menus")
 local TagPage = require("banktags/tags/tag_page")
 local TagStore = require("banktags/tags/tag_store")
@@ -18,15 +17,15 @@ local debugLog = DebugLog.Write
 local App = {}
 App.__index = App
 
--- What the Tags tab says when Bank Core cannot show a tag now
+-- Explain why Bank Core cannot show a tag
 local OPEN_REFUSALS = {
     not_all_items = 'Select "All Items" to view this tag.',
     preset_open = 'Close the preset selector to view this tag.',
     bank_closed = "Open your bank to view this tag.",
     busy = "The bank is still updating. Try again.",
 }
--- Bank Tags' preferences draw on its own plugin panel
-local CONTENT_EVENT = Config.PLUGIN_REF .. "_content"
+-- Bank Tags' preferences draw on its own Plugin Hub settings page
+local SETTINGS_EVENT = Config.PLUGIN_REF .. "_settings"
 
 -- Find Bank Core's API, trying the one passed in before the global copy
 local function findBank()
@@ -50,32 +49,28 @@ function App.new()
         revision = 0,
         pageKeys = {},
         bankItems = nil,
-        -- A notice the Tags tab shows
+        -- A notice shown over the bank title
         status = nil,
-        -- Preferences drawn on the plugin panel
+        -- Preferences drawn on the Plugin Hub settings page
         settingsSection = nil,
         started = false,
         shutDown = false,
     }, App)
-    app.imports = ImportAPI.new({
-        readDraft = TagDraft.Read,
-        onChange = function() app.windows:RefreshImportSources() end,
-    })
-    app.publicAPI = app.imports.publicAPI
     app.windows = Windows.new(app)
     app.select = SelectMode.new(app)
     app.menus = TagMenus.new(app)
     app.tab = TagTab.new(app)
+    app.nativeItems = NativeItems.new(app)
     app.tutorial = Tutorial.new(app)
     if store.loadError ~= nil then app.status = store.loadError end
     return app
 end
 
--- Draw preferences on the plugin panel and connect to Bank Core if it runs
+-- Draw preferences on the Plugin Hub settings page and connect to Bank Core if it runs
 function App:Start()
     if self.shutDown or self.started then return end
     self.started = true
-    Event.ContentLayerReady.Subscribe(CONTENT_EVENT, function(event) self:MountSettings(event.component) end)
+    Event.SettingsLayerReady.Subscribe(SETTINGS_EVENT, function(event) self:MountSettings(event.component) end)
     self:Connect()
 end
 
@@ -93,6 +88,7 @@ function App:Connect()
         onClose = function() self.tab:Refresh() end,
         onBankItems = function() self:OnBankItems() end,
         onBankClose = function()
+            self.nativeItems:Stop()
             self.tutorial:Stop(false)
             self.select:Stop()
             self.windows:CloseBankWindows()
@@ -103,6 +99,7 @@ function App:Connect()
         return false, reason
     end
     self.ext = ext
+    self.nativeItems:Start()
     self.menus:Start()
     debugLog("Bank Tags connected to Bank Core")
     return true
@@ -110,6 +107,7 @@ end
 
 -- Drop the extension and everything that needs Bank Core
 function App:Disconnect()
+    self.nativeItems:Stop()
     self.tutorial:Stop(false)
     self.windows:CloseBankWindows()
     self.menus:Stop()
@@ -127,6 +125,7 @@ end
 -- Read bank items, keeping the last good copy while Bank Core cannot read them
 function App:OnBankItems()
     if self.ext == nil then return end
+    self.nativeItems:Start()
     local items = self.ext:GetBankItems()
     if items ~= nil then
         self.bankItems = items
@@ -141,11 +140,11 @@ function App:BankItems()
     return self.bankItems or {}
 end
 
--- Show a short notice in the Tags tab, or clear it with nil
+-- Show a bank banner notice, or clear it
 function App:ShowStatus(text)
     if self.status == text then return end
     self.status = text
-    self.tab:Refresh()
+    self.tab:RefreshStatus()
 end
 
 -- Give Bank Core a tag's page, or explain why it cannot be shown
@@ -163,9 +162,11 @@ function App:SetTagPage(tag)
     return true, nil
 end
 
--- Show a tag in place of whatever the bank shows, explaining a refusal in the Tags tab
+-- Show a tag, explaining refusals over the bank title
 function App:ShowTag(tag)
     if self.ext == nil or self.store.data.tags[tag] == nil then return false end
+    -- Core copies native sprite styles when opening a page
+    self.nativeItems:RestoreHighlights()
     local shown, problem = self:SetTagPage(tag)
     if shown then
         local reason
@@ -176,6 +177,7 @@ function App:ShowTag(tag)
     end
     -- Select mode works over the bank's own view, so a shown tag ends it
     if shown then self.select:Stop() end
+    if not shown then self.nativeItems:Refresh() end
     self:ShowStatus(problem)
     self.tab:Refresh()
     return shown
@@ -210,6 +212,7 @@ function App:Changed(tag)
     end
     local selecting = self.select:Tag()
     if selecting ~= nil and self.store.data.tags[selecting] == nil then self.select:Stop() end
+    if selecting ~= nil then self.nativeItems:Refresh() end
 end
 
 -- Follow a renamed tag before showing the change
@@ -303,7 +306,7 @@ function App:SetSetting(key, value)
     return true
 end
 
--- Draw preferences on the plugin panel
+-- Draw preferences on the Plugin Hub settings page
 function App:MountSettings(parent)
     self:DestroySettings()
     self.settingsSection = SettingsSection.new(parent, {
@@ -329,12 +332,11 @@ function App:Shutdown()
     end
     cleanup("select mode", function() self.select:Forget() end)
     cleanup("settings", function()
-        Event.ContentLayerReady.Unsubscribe(CONTENT_EVENT)
+        Event.SettingsLayerReady.Unsubscribe(SETTINGS_EVENT)
         self:DestroySettings()
     end)
     cleanup("windows", function() self.windows:CloseAll() end)
     cleanup("Bank Core registration", function() self:Disconnect() end)
-    cleanup("import sources", function() self.imports:Close() end)
 end
 
 return App

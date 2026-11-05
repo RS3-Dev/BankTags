@@ -5,7 +5,6 @@ local DebugLog = require("banktags/core/debug_log")
 local debugLog = DebugLog.Write
 
 local SESSION_KEY = "__banktags_session"
-local API_KEY = "__banktags_api"
 
 local previous = rawget(_G, SESSION_KEY)
 if previous ~= nil then
@@ -14,7 +13,8 @@ if previous ~= nil then
 end
 -- Reloads share the Lua state, so drop the old references first
 if rawget(_G, SESSION_KEY) == previous then _G[SESSION_KEY] = nil end
-if previous ~= nil and rawget(_G, API_KEY) == previous.publicAPI then _G[API_KEY] = nil end
+-- Remove the export left by versions with external import providers.
+_G.__banktags_api = nil
 previous = nil
 pcall(function() collectgarbage("collect") end)
 
@@ -34,10 +34,6 @@ local app = App.new()
 _G[SESSION_KEY] = app
 app:Start()
 
--- Import-source plugins use the API passed to them first, then this global copy
-local api = app.publicAPI
-_G[API_KEY] = api
-
 -- Follow Bank Core and RuneQL loading and unloading
 function PluginDependencyUpdate(event)
     if event.pluginIdentifier == "runeql" then Catalog.SetRuneQLEnabled(event.enabled) end
@@ -49,7 +45,4 @@ end
 function PluginShutdown()
     app:Shutdown()
     if rawget(_G, SESSION_KEY) == app then _G[SESSION_KEY] = nil end
-    if rawget(_G, API_KEY) == api then _G[API_KEY] = nil end
 end
-
-return api

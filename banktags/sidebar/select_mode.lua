@@ -36,9 +36,10 @@ end
 function SelectMode:Start(tag)
     local app = self.app
     local ext = app.ext
-    if ext == nil then return false end
+    if ext == nil or app.store.data.tags[tag] == nil then return false end
     if ext:IsOpen() and not ext:Close() then return false end
     self.session = { tag = tag }
+    app.nativeItems:Refresh()
     app:ShowStatus(nil)
     self:StartPulse()
     app.tab:Refresh()
@@ -56,6 +57,7 @@ end
 function SelectMode:Stop()
     if self.session == nil then return false end
     self.session = nil
+    self.app.nativeItems:RestoreHighlights()
     self:StopPulse()
     self.app.tab:Refresh()
     return true
@@ -64,6 +66,7 @@ end
 -- Drop the session without redrawing the Tags tab
 function SelectMode:Forget()
     self.session = nil
+    self.app.nativeItems:RestoreHighlights()
     self:StopPulse()
 end
 

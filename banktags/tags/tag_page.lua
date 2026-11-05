@@ -1,6 +1,5 @@
 -- Describe a saved tag as the Bank Core page that shows it
 
-local Text = require("banktags/core/text")
 local TagData = require("banktags/tags/tag_data")
 
 local TagPage = {}
@@ -8,11 +7,6 @@ local TagPage = {}
 TagPage.UNSORTED_LABEL = "Unsorted"
 -- Bank Core's limit on labels, rows, and slots in one page
 TagPage.MAX_ENTRIES = TagData.MAX_TAG_ENTRIES
-
--- Show a tag name with each word capitalized
-function TagPage.Title(tag)
-    return Text.titleCase(tag)
-end
 
 -- Lay a tag out as page rows, with Unsorted items last
 -- Also lists each page slot's layout key by its position among the slots, false for a blank
@@ -59,7 +53,7 @@ function TagPage.Build(store, tag)
         return nil, "This tag has " .. count .. " rows, labels, and items, more than the "
             .. TagPage.MAX_ENTRIES .. " Bank Core shows. Remove some in the layout editor."
     end
-    return { title = TagPage.Title(tag), rows = rows }, keys
+    return { rows = rows }, keys
 end
 
 return TagPage

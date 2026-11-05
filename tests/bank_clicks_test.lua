@@ -36,14 +36,14 @@ local function clickRow(tag)
 end
 
 clickRow("melee")
-assert(app:ShownTag() == "melee" and layout.shownPage.title == "Melee")
+assert(app:ShownTag() == "melee" and layout.shownPage.title == "")
 -- The shown tag again returns to the bank's own view
 clickRow("melee")
 assert(app:ShownTag() == nil and layout.shownPage == nil)
 -- Another tag replaces the shown one, and choosing it again leaves it
 clickRow("melee")
 clickRow("ranged")
-assert(app:ShownTag() == "ranged" and layout.shownPage.title == "Ranged")
+assert(app:ShownTag() == "ranged" and layout.shownPage.title == "")
 clickRow("ranged")
 assert(app:ShownTag() == nil and layout.shownPage == nil)
 

@@ -1,7 +1,6 @@
 -- Name the item under the pointer in the layout editor's grids
 
 local BankGrid = require("banktags/ui/bank_grid")
-local Geometry = require("banktags/ui/geometry")
 local ObjectConfig = require("banktags/core/object_config")
 local Text = require("banktags/core/text")
 local Parts = require("banktags/windows/layout_editor_parts")
@@ -9,32 +8,30 @@ local Size = Parts.size
 
 local LayoutEditorNames = {}
 
--- Create the editor's one name tooltip and follow the pointer over each drag surface
--- The surfaces cover the grids and results, so they hear the hover the items cannot
+-- Create a positioning anchor for the editor's one item-name tooltip
 function LayoutEditorNames:CreateItemNames()
     self.nameAnchor = ui.Layer.new(self.content)
+    self.nameAnchor.hidden = true
     self.nameTooltip = prettyui.Tooltip.attach(self.nameAnchor, self.content, " ")
+    -- This is a positioning anchor, not a second hover target. Tooltip.attach's
+    -- automatic enter/leave handlers must not fight the surface-driven updates.
+    self.nameAnchor.enabled = false
     self.nameAnchor.clickthrough = true
-    self.nameShown = nil
-    self.nameSurface = nil
-    for _, surface in ipairs({ self.panes.sorted.surface, self.panes.unsorted.surface }) do
-        Geometry.trackPointer(surface)
-        surface:Subscribe(ui.Hook.ONMOUSEOVER, function()
-            self.nameSurface = surface
-            return true
-        end)
-        surface:Subscribe(ui.Hook.ONMOUSELEAVE, function()
-            if self.nameSurface == surface then self.nameSurface = nil end
-            self:HideItemName()
-            return true
-        end)
+end
+
+-- Only clipped search labels need a second copy of their name on hover.
+function LayoutEditorNames:SearchItemAt(x, y)
+    if not self:OnSearchList(x, y) then return nil end
+    local top = Size.PANEL_TOP + Size.SEARCH_LIST_TOP
+    local row = (y - top + self.searchList.scrollY) // Size.SEARCH_ROW_HEIGHT
+    local result = self.searchResults[row + 1]
+    if result == nil then return nil end
+    local label = self.searchList.rows[row + 1].label
+    if config.Font.MUSEO_SANS_15PT_REGULAR:GetStringWidth(result.displayName, false) <= label.width then
+        return nil
     end
-    Geometry.trackPointer(self.searchDragSurface)
-    self.searchDragSurface:Subscribe(ui.Hook.ONMOUSEOVER, function()
-        self.nameSurface = nil
-        self:HideItemName()
-        return true
-    end)
+    return { objectID = result.objectId, name = result.displayName, x = Size.SEARCH_X + Size.SEARCH_INSET,
+        y = top + row * Size.SEARCH_ROW_HEIGHT - self.searchList.scrollY, size = Size.SEARCH_ROW_HEIGHT }
 end
 
 -- Find a grid item and its cell under a content point
@@ -43,10 +40,10 @@ function LayoutEditorNames:GridItemAt(x, y)
     if pane == nil then return nil end
     local index = self:SlotIndexAt(pane, paneX, paneY)
     local slot = index ~= nil and pane.slots[index] or nil
-    if type(slot) ~= "table" or slot.kind ~= "item" then return nil end
+    if slot == nil or slot.kind ~= "item" then return nil end
     local zero = index - 1
-    local cellX = Size.GRID_LEFT + zero % pane.columns * Size.GRID_STEP
-    local cellY = BankGrid.RowItemY(zero // pane.columns) - (tonumber(pane.view.scrollY) or 0)
+    local cellX = pane.gridLeft + zero % pane.columns * Size.GRID_STEP
+    local cellY = BankGrid.RowItemY(zero // pane.columns, pane.labels) - pane.view.scrollY
     -- The gaps between cells name nothing
     if paneX - cellX >= Size.GRID_SLOT_SIZE or paneY < cellY or paneY - cellY >= Size.GRID_SLOT_SIZE then
         return nil
@@ -55,30 +52,29 @@ function LayoutEditorNames:GridItemAt(x, y)
 end
 
 -- Show the name of the item under the pointer, or hide it
--- Runs every tick, since moving within a surface raises no hover event
+-- Resolve visibility once per tick after native hover callbacks settle
 -- A window opened over the editor or a menu may cover the grids without a leave
 function LayoutEditorNames:UpdateItemName()
-    if self.nameSurface == nil or self.nameSurface.hidden or self.drag ~= nil
-        or self.window == nil or self.window.root.hidden
-        or self:OverlayShown() or MiniMenu.IsOpen() then
+    local surface = self.pointerSurface
+    if surface == nil or self.drag ~= nil
+        or self.window.root.hidden or self:OverlayShown() or MiniMenu.IsOpen() then
         return self:HideItemName()
     end
     local x, y = self:ContentPointer()
-    local item = x ~= nil and self:GridItemAt(x, y) or nil
+    local item = x ~= nil and (self:GridItemAt(x, y) or self:SearchItemAt(x, y)) or nil
     if item == nil then return self:HideItemName() end
     -- The client's name is read only when the pointer reaches another item or cell
     local shown = item.objectID .. "@" .. item.x .. "," .. item.y
     if self.nameShown ~= shown then
-        local name = Text.plain(ObjectConfig.DisplayName(item.objectID))
+        local name = Text.plain(item.name or ObjectConfig.DisplayName(item.objectID))
         -- An item the client cannot name shows nothing
         if name == "" then return self:HideItemName() end
         self.nameShown = shown
         self.nameAnchor:SetPos(item.x, item.y)
         self.nameAnchor:SetSize(item.size, item.size)
         self.nameTooltip:SetText(name)
+        self.nameTooltip:Show()
     end
-    -- The tooltip draws beside the window, which KeepOnTop raises every tick
-    self.nameTooltip:Show()
 end
 
 -- Hide the item name
@@ -88,18 +84,11 @@ function LayoutEditorNames:HideItemName()
     self.nameTooltip:Hide()
 end
 
--- Destroy the item name tooltip
+-- Destroy the item name tooltip and its anchor
 function LayoutEditorNames:DestroyItemNames()
-    if self.nameTooltip ~= nil then pcall(function() self.nameTooltip:Destroy() end) end
-    if self.nameAnchor ~= nil then pcall(function() self.nameAnchor:Destroy() end) end
-    self.nameTooltip, self.nameAnchor, self.nameShown, self.nameSurface = nil, nil, nil, nil
-end
-
--- Attach these methods to LayoutEditorWindow
-function LayoutEditorNames.install(target)
-    for name, method in pairs(LayoutEditorNames) do
-        if name ~= "install" then target[name] = method end
-    end
+    self.nameTooltip:Destroy()
+    self.nameAnchor:Destroy()
+    self.nameShown = nil
 end
 
 return LayoutEditorNames

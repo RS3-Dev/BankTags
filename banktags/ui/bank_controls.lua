@@ -91,34 +91,10 @@ function NativeButton:_UpdateState()
     end
 end
 
--- Resize the button and recenter its icon
-function NativeButton:SetSize(width, height)
-    self.width = width or self.width
-    self.height = height or self.height
-    self.root:SetSize(self.width, self.height)
-    if self.icon ~= nil then
-        self.icon:SetPos(
-            self.x + math.floor((self.width - self.iconSize) / 2),
-            self.y + math.floor((self.height - self.iconSize) / 2)
-        )
-    end
-end
-
--- Show or hide the button
-function NativeButton:SetHidden(hidden)
-    self.hidden = hidden == true
-    self:_UpdateState()
-end
-
 -- Set whether the button is selected
 function NativeButton:SetActive(active)
     self.active = active == true
     self:_UpdateState()
-end
-
--- Same as SetActive, named for selection
-function NativeButton:SetSelected(selected)
-    self:SetActive(selected)
 end
 
 -- Enable or disable the button

@@ -41,19 +41,6 @@ function Geometry.untrackPointer(component)
     component:Unsubscribe(ui.Hook.ONMOUSEREPEAT, POINTER_HOOK)
 end
 
--- Locate a component relative to an ancestor
-function Geometry.relativePosition(value, ancestor)
-    local x, y, current, depth = 0, 0, value, 0
-    while current ~= nil and current ~= ancestor and depth < MAX_PARENT_DEPTH do
-        x = x + (tonumber(current.x) or 0)
-        y = y + (tonumber(current.y) or 0)
-        current = current.parent
-        depth = depth + 1
-    end
-    if current ~= ancestor then return nil, nil end
-    return x, y
-end
-
 -- Locate a component on the screen
 function Geometry.absolutePosition(value)
     local x, y, current, depth = 0, 0, value, 0

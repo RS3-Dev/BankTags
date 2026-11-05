@@ -1,11 +1,12 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
 -- Choose a saved tag too large for Bank Core through the running app
--- It is not shown; the Tags tab's status line says why
+-- It is not shown; the bank banner says why
 -- FAKE HOST: stand-in loader, components, and saved data, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
 local h = Harness.new("notice_page")
+h.bankHost.anchoredLayout = true
 h.bankHost:SetItems({ { 4151, 1, "Abyssal whip" }, { 4151, 1, "Abyssal whip" }, { 385, 20, "Shark" } })
 
 local ChunkedStringStore = require("banktags/core/chunked_string_store")
@@ -48,12 +49,29 @@ h:ClickRow("full")
 h:Tick(2)
 assert(app:ShownTag() == nil and layout.shownPage == nil)
 assert(string.find(app.status, tostring(TagData.MAX_TAG_ENTRIES + 2) .. " rows, labels, and items", 1, true))
-assert(Harness.Find(h:TabParent(), app.status) ~= nil)
+local controls = app.tab.controls
+local banner, text = controls.statusBanner, controls.statusText
+assert(Harness.Find(h:TabParent(), app.status) == nil)
+assert(Harness.Find(app.tab.ctx.overlay, app.status) == text and not banner.hidden)
+assert(banner.parent == app.tab.ctx.overlay and banner.clickthrough and text.clickthrough)
+assert(banner.y == 5 and banner.height == 26)
+assert(banner.x + banner.width / 2 == app.tab.ctx.overlay.width / 2)
+assert(text.alignHorizontal == ui.AlignMode.CENTRE and text.maxLines == 2)
+
+-- Notice updates keep the list and footer intact
+local list, share = controls.list, controls.importShareButton
+local listHeight = list.list.root.height
+local notice = app.status
+app:ShowStatus("Another failure")
+assert(app.tab.controls == controls and controls.list == list and controls.importShareButton == share)
+assert(list.list.root.height == listHeight and text.content == "Another failure")
+app:ShowStatus(notice)
 
 -- A tag that fits shows and clears the notice
 h:ClickRow("small")
 h:Tick(2)
 assert(app:ShownTag() == "small" and app.status == nil)
+assert(app.tab.controls.statusBanner.hidden)
 assert(#layout:BuildPageItems() == 1 and layout:BuildPageItems()[1].objectID == 385)
 -- Choosing the oversized tag again leaves the shown tag in place
 h:ClickRow("full")
@@ -62,5 +80,16 @@ assert(app:ShownTag() == "small" and app.status ~= nil)
 
 -- Loading never cut the saved tag
 assert(TagData.EntryCount(app.store.data.tags.full) == TagData.MAX_TAG_ENTRIES)
+
+-- Unmounting removes the notice; reopening restores it once
+local oldBanner = app.tab.controls.statusBanner
+layout:Restore()
+assert(oldBanner.destroyed and app.tab.controls == nil)
+_, layout = h:OpenBank()
+h:Tick(2)
+assert(not app.tab.controls.statusBanner.hidden and app.tab.controls.statusText.content == app.status)
+oldBanner = app.tab.controls.statusBanner
+h.host:Unload("banktags")
+assert(oldBanner.destroyed)
 
 print("notice_page_test: ok")

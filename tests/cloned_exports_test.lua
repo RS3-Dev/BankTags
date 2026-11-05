@@ -1,7 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
 -- Run every plugin on plain data clones of the others' exports
--- Bank Tags connects through Core's clone, and an importer through Bank Tags'
+-- Bank Tags connects and reloads through Core's injected clone
 -- FAKE HOST: stand-in loader, clone, components, and menus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -37,69 +37,14 @@ _, layout = h:OpenBank()
 h:Tick(2)
 assert(h:TabParent() ~= nil and app:ShowTag("melee") and app:ShownTag() == "melee")
 
--- A plugin that requires Bank Tags adds an import source using only its injected clone
-local folder = h.out .. "/importer"
-os.execute('mkdir "' .. string.gsub(folder, "/", "\\") .. '" 2>nul')
-local file = assert(io.open(folder .. "/main.lua", "w"))
-file:write([[
-local Importer = {}
-function Importer.Connect()
-    local handle, reason = banktags.RegisterExtension("example.importer", "Importer")
-    if handle == nil then return nil, reason end
-    local ok, failure = handle:RegisterImportProvider("guide", { label = "Guide", input = "text",
-        request = function() end })
-    if not ok then return nil, failure end
-    return handle
-end
-Importer.handle = Importer.Connect()
-return Importer
-]])
-file:close()
-local importer = h.host:Load("importer", folder,
-    { name = "importer", dependencies = { banktags = true }, optional = {} })
-local tagsClone = rawget(importer.env, "banktags")
-assert(rawget(importer.env._G, "__banktags_api") == nil)
-assert(tagsClone ~= tags.result and getmetatable(tagsClone) == nil)
-local first = importer.result.handle
-assert(first ~= nil and table.concat(first:GetState().providers, ",") == "guide")
-
--- Bank Tags' Import window lists the source
-app.windows:OpenImportShare()
-local window = app.windows.importShare
-local function sourceKeys()
-    local keys = {}
-    for index, entry in ipairs(window.importSourcePicker.entries) do keys[index] = entry.id end
-    return table.concat(keys, " ")
-end
-assert(sourceKeys() == "builtin:code example.importer/guide")
-
--- Changing the clone's limits changes no limit Bank Tags enforces
-local ImportAPI = h:TagsModule("banktags/imports/import_api")
-tagsClone.LIMITS.owners = 0
-assert(ImportAPI.LIMITS.owners == 32 and tags.result.LIMITS.owners == 32)
-
--- Registering again replaces the first handle, which then refuses every call
-local second = assert(importer.result.Connect())
-assert(not first:GetState().live and second:GetState().live)
-assert(select(2, first:RegisterImportProvider("again", { label = "Guide", input = "text",
-    request = function() end })) == "stale_handle")
-assert(sourceKeys() == "builtin:code example.importer/guide")
-assert(second:Dispose() and not second:GetState().live)
-assert(sourceKeys() == "builtin:code")
-
--- Bank Tags reloads; the source plugin gets a fresh clone of the new API
-h.host:Reload("banktags", { shutdown = true, freshEnvironment = true, notify = true,
-    reinject = true, notifyRequired = true })
-local reloadedClone = rawget(importer.env, "banktags")
-assert(reloadedClone ~= tagsClone and not tagsClone.GetState().running)
-assert(reloadedClone.GetState().running)
-assert(importer.result.Connect() ~= nil)
+-- Bank Tags reloads and reconnects through Core's injected clone.
+h.host:Reload("banktags", { shutdown = true, freshEnvironment = true })
+assert(h:Connected() and app.shutDown)
+assert(h.tags.result == nil and rawget(h.tags.env._G, "__banktags_api") == nil)
 local reloaded = h:App()
-reloaded.windows:OpenImportShare()
-window = reloaded.windows.importShare
-assert(sourceKeys() == "builtin:code example.importer/guide")
-
-h.host:Unload("importer")
+h:OpenBank()
+h:Tick(2)
+assert(reloaded.store.data.tags.melee ~= nil and reloaded:ShowTag("melee"))
 h.host:Unload("banktags")
 h.host:Unload("bankcore")
 

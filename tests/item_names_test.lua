@@ -1,4 +1,5 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
+local BankGrid = require("banktags/ui/bank_grid")
 
 -- Name grid items without repeating names over search results
 -- Bank Core names a shown tag page's items itself; Bank Tags adds nothing over the page
@@ -7,6 +8,35 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 local Harness = require("tools/test_support/tags_harness")
 local Geometry = require("banktags/ui/geometry")
 local h = Harness.new("item_names")
+h.bankHost.anchoredLayout = true
+-- Exercise PrettyUI's actual automatic hover hooks and manual tooltip lifecycle.
+local frame = setmetatable({}, { __index = function() return 1 end })
+local tooltipEnv = setmetatable({
+    require = function(name)
+        if name == "src/core/sprites" then return { CONTENT_FRAME = frame } end
+        if name == "src/core/math" then return { clamp = function(v, a, b) return math.max(a, math.min(b, v)) end } end
+        error(name)
+    end,
+    config = { Font = { MUSEO_SANS_15PT_REGULAR = { baseline = 15,
+        GetStringWidth = function(_, text) return #text * 7 end,
+        GetStringHeightAndLineCount = function() return 18, 1 end } } },
+}, { __index = _G })
+local Tooltip = assert(loadfile(Harness.PrettyUIRoot() .. "/src/tooltip.lua", "t", tooltipEnv))()
+prettyui.Tooltip.registerContext = Tooltip.registerContext
+prettyui.Tooltip.unregisterContext = Tooltip.unregisterContext
+prettyui.Tooltip.bind = Tooltip.bind
+prettyui.Tooltip.set = Tooltip.set
+prettyui.Tooltip.unbind = Tooltip.unbind
+prettyui.Tooltip.attach = function(target, parent, value)
+    local tooltip = Tooltip.attach(target, parent, value)
+    local show, hide, setText, destroy = tooltip.Show, tooltip.Hide, tooltip.SetText, tooltip.Destroy
+    tooltip.shown, tooltip.text = false, type(value) == "table" and value.text or value
+    function tooltip:Show() show(self); self.shown = not self.root.hidden end
+    function tooltip:Hide() hide(self); self.shown = false end
+    function tooltip:SetText(text) setText(self, text); self.text = text end
+    function tooltip:Destroy() destroy(self); self.destroyed, self.shown = true, false end
+    return tooltip
+end
 local host = h.bankHost
 -- Two whips, a shark, and an egg placeholder
 host:SetItems({ { 4151, 1, "Abyssal whip" }, { 4151, 1, "Abyssal whip" }, { 385, 20, "Shark" },
@@ -15,6 +45,7 @@ host.names[536] = "Dragon bones"
 host.itemLayer.interfaceID = 517
 h:LoadCore()
 h:LoadTags()
+h.tags.env.Mouse = { GetPosition = function() error("editor hover must use native hooks") end }
 local app = h:App()
 h:OpenBank()
 h:Tick(12)
@@ -42,23 +73,55 @@ end }
 local nameTooltip = editor.nameTooltip
 assert(nameTooltip.parent == editor.content and editor.nameAnchor.clickthrough == true)
 
+-- Rail names render in the editor overlay, not inside the 32px button row.
+local railTooltip = editor.tagTabs.rows[1].tooltip
+local railContext = railTooltip.context
+assert(railTooltip.parent == editor.content and railTooltip.root.parent == editor.content)
+railTooltip:Show()
+assert(railTooltip.width > 48)
+local railX, railY = railTooltip.context.position(railTooltip.target)
+assert(railX == editorSize.CENTER_X + editorSize.TABS_INSET and railY == editorSize.TABS_Y)
+railTooltip:Hide()
+
 -- Point at a pane's cell, at an offset inside it
 local function pointAt(paneName, column, row, dx, dy)
     local pane = editor.panes[paneName]
     local left, top = Geometry.absolutePosition(editor.content)
-    host.mouse = { x = left + pane.x + editorSize.GRID_LEFT + column * 44 + (dx or 20),
-        y = top + pane.y + 4 + row * 44 + (dy or 20) - pane.view.scrollY }
+    h:PointEditor(pane.x + pane.gridLeft + column * 44 + (dx or 20),
+        pane.y + BankGrid.RowItemY(row, pane.labels) + (dy or 20) - pane.view.scrollY)
 end
 local sorted, unsorted = editor.panes.sorted, editor.panes.unsorted
 
 -- Nothing shows until the pointer is over a surface
-pointAt("sorted", 3, 0)
 h:Tick()
 assert(not nameTooltip.shown)
-sorted.surface.hooks.mouseover()
+pointAt("sorted", 3, 0)
 h:Tick()
 assert(nameTooltip.shown and nameTooltip.text == "Egg", tostring(nameTooltip.text))
+local show = nameTooltip.Show
+local repeatedShows = 0
+function nameTooltip:Show() repeatedShows = repeatedShows + 1; return show(self) end
+local front = editor.window.root.front
+h:Tick(20)
+assert(repeatedShows == 0, "an unchanged tooltip must not be re-shown every tick")
+assert(editor.window.root.front == front, "an idle editor must not reorder its native window every tick")
 local anchor = editor.nameAnchor
+assert(anchor.hidden, "the positioning anchor must not participate in native hover")
+-- The editor drives this anchor programmatically; native hover must not hide it.
+for _ = 1, 5 do
+    if anchor.enabled ~= false then anchor.hooks.mouseleave() end
+    assert(nameTooltip.shown, "automatic anchor hover must not fight the editor's tooltip")
+    h:Tick()
+end
+-- A leave/re-enter during native layer ordering must not hide the tooltip mid-frame.
+for _ = 1, 5 do
+    sorted.surface.hooks.mouseleave()
+    assert(nameTooltip.shown)
+    sorted.surface.hooks.mouseover(sorted.surface,
+        sorted.x + editorSize.GRID_LEFT + 3 * 44 + 20, sorted.y + 24)
+    h:Tick()
+    assert(nameTooltip.shown and nameTooltip.text == "Egg")
+end
 assert(anchor.x == sorted.x + editorSize.GRID_LEFT + 3 * 44 and anchor.y == sorted.y + 4)
 assert(anchor.width == 40 and anchor.height == 40)
 -- Every item has a name, held stacks included, with no quantity
@@ -84,28 +147,28 @@ pointAt("sorted", 0, 0)
 h:Tick()
 assert(nameTooltip.shown)
 sorted.surface.hooks.mouseleave()
-assert(not nameTooltip.shown)
+assert(nameTooltip.shown, "leave is settled on the next logic tick")
 h:Tick()
 assert(not nameTooltip.shown)
 
 -- Unsorted names its items too
-unsorted.surface.hooks.mouseover()
 pointAt("unsorted", 0, 0)
 h:Tick()
 assert(nameTooltip.shown and nameTooltip.text == "Shark")
-assert(anchor.x == unsorted.x + editorSize.GRID_LEFT and anchor.y == unsorted.y + 4)
+assert(anchor.x == unsorted.x + unsorted.gridLeft and anchor.y == unsorted.y + 4)
 
 -- A press that starts a drag hides the name until the drop
-sorted.surface.hooks.mouseover()
 pointAt("sorted", 0, 0)
 h:Tick()
 assert(nameTooltip.shown)
-sorted.surface.hooks.click(nil, editorSize.GRID_LEFT + 20, 24)
+h:PressEditor(sorted.surface, editorSize.GRID_LEFT + 20, 24)
 assert(editor.drag ~= nil)
 h:Tick()
 assert(not nameTooltip.shown)
-sorted.surface.hooks.release()
+h:ReleaseEditor()
 assert(editor.drag == nil)
+-- Native hover returns to the grid after release
+pointAt("sorted", 0, 0)
 h:Tick()
 assert(nameTooltip.shown and nameTooltip.text == "Abyssal whip")
 
@@ -128,33 +191,50 @@ editor.window.root.hidden = false
 h:Tick()
 assert(nameTooltip.shown)
 
--- A hidden tab names nothing, even if its surface heard no leave
-editor.tabs:GetTab(2).hit.hooks.click()
-unsorted.surface.hooks.mouseover()
+-- Unsorted stays available alongside the search list
 pointAt("unsorted", 0, 0)
 h:Tick()
-assert(not nameTooltip.shown)
+assert(nameTooltip.shown and nameTooltip.text == "Shark")
 
--- Search results already show their names and have no tooltip
+-- Readable search labels do not get a redundant tooltip over their text.
 editor:RunSearch("whip")
 assert(#editor.searchResults >= 1)
-editor.searchDragSurface.hooks.mouseover()
 local left, top = Geometry.absolutePosition(editor.content)
-host.mouse = { x = left + editorSize.RIGHT_X + 4 + 100, y = top + editorSize.PANEL_TOP + editorSize.SEARCH_LIST_TOP + 10 }
+h:PointEditor(editorSize.SEARCH_X + editorSize.SEARCH_INSET + 100, editorSize.PANEL_TOP + editorSize.SEARCH_LIST_TOP + 10)
+h:Tick()
+assert(not nameTooltip.shown)
+-- A name that exactly fits still needs no tooltip; only a clipped name does.
+local label = editor.searchList.rows[1].label
+local searchRow = editor.searchList.rows[1].root
+local nameWidth = config.Font.MUSEO_SANS_15PT_REGULAR:GetStringWidth("Abyssal whip", false)
+searchRow:SetSize(nameWidth + 44, editorSize.SEARCH_ROW_HEIGHT)
+assert(label.width == nameWidth)
+h:Tick()
+assert(not nameTooltip.shown)
+-- The native list removes 16px from the row when its scrollbar is visible.
+searchRow:SetSize(nameWidth + 44 - 16, editorSize.SEARCH_ROW_HEIGHT)
+assert(label.width == nameWidth - 16)
+h:Tick()
+assert(nameTooltip.shown and nameTooltip.text == "Abyssal whip")
+local shows = repeatedShows
+h:Tick(10)
+assert(repeatedShows == shows, "a clipped name must not re-show every tick")
+searchRow:SetSize(nameWidth + 44, editorSize.SEARCH_ROW_HEIGHT)
 h:Tick()
 assert(not nameTooltip.shown)
 -- Below the last result there is nothing to name
-host.mouse.y = host.mouse.y + 32 * #editor.searchResults
+h:PointEditor(editorSize.SEARCH_X + editorSize.SEARCH_INSET + 100,
+    editorSize.PANEL_TOP + editorSize.SEARCH_LIST_TOP + 10 + 32 * #editor.searchResults)
 h:Tick()
 assert(not nameTooltip.shown)
 
 -- Closing the editor destroys the tooltip
 pointAt("sorted", 0, 0)
-sorted.surface.hooks.mouseover()
 h:Tick()
 assert(nameTooltip.shown)
 editor.window:Close()
 h:Tick()
-assert(nameTooltip.destroyed and editor.nameTooltip == nil and app.windows.layoutEditor == nil)
+assert(nameTooltip.destroyed and app.windows.layoutEditor == nil)
+assert(railTooltip.root == nil and not railContext.active, "closing releases the rail's overlay names")
 
 print("item_names_test: ok")

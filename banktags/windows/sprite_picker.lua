@@ -2,6 +2,7 @@
 
 local debugLog = require("banktags/core/debug_log").Write
 local Catalog = require("banktags/tags/catalog")
+local objectFromID = require("banktags/core/object_config").FromID
 local Text = require("banktags/core/text")
 local Theme = require("banktags/ui/theme")
 local trim = Text.trim
@@ -26,14 +27,6 @@ local GRID_X = math.floor((CONTENT_WIDTH - GRID_WIDTH) / 2)
 
 local MUTED = 0xA99F8AFF
 local ERROR = Theme.ERROR_TEXT
-
--- Look up an item definition, allowing missing entries
-local function objectFromID(objectID)
-    local ok, object = pcall(function()
-        return config.Obj.FromID(math.tointeger(objectID))
-    end)
-    return ok and object or nil
-end
 
 -- Create the tag icon picker
 function SpritePicker.new(parent, options)

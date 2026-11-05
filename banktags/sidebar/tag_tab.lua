@@ -16,7 +16,7 @@ local FOOTER_BUTTON_HEIGHT = 28
 local FOOTER_BUTTON_GAP = 8
 local ICON_BUTTON_SIZE = 28
 local HELP_BUTTON_SIZE = SidebarRows.SEARCH_HEIGHT
-local STATUS_HEIGHT = 40
+local STATUS_HEIGHT = 26
 local PANEL_HEIGHT = 156
 local PANEL_INSET = 10
 
@@ -39,15 +39,9 @@ function TagTab.new(app)
     return self
 end
 
--- Report whether the column is mounted now
-function TagTab:IsMounted()
-    return self.controls ~= nil
-end
-
 -- Describe the column's arrangement so refreshes rebuild only on change
 function TagTab:Arrangement()
-    return tostring(self.app.select:Tag()) .. "\n" .. tostring(self.app.status) .. "\n"
-        .. tostring(self.app:ShownTag() ~= nil)
+    return tostring(self.app.select:Tag()) .. "\n" .. tostring(self.app:ShownTag() ~= nil)
 end
 
 -- Destroy the column's controls; Bank Core destroys the layers they sit in
@@ -90,6 +84,30 @@ local function addRectangle(parent, x, y, width, height, colour)
     value.rgba = colour
     value.clickthrough = true
     return value
+end
+
+-- Cover the bank title with a centered notice
+function TagTab:BuildStatus(controls)
+    local banner = ui.Layer.new(self.ctx.overlay)
+    banner:SetPos(80, 5)
+    banner:SetSize(-160, STATUS_HEIGHT, 1.0, 0)
+    banner.clickthrough = true
+    controls.statusBanner = banner
+    controls.owned[#controls.owned + 1] = banner
+    local background = addRectangle(banner, 0, 0, 0, STATUS_HEIGHT, Theme.ROW_EVEN)
+    background:SetSize(0, STATUS_HEIGHT, 1.0, 0)
+    controls.statusText = addText(banner, "", 8, 0, 0, STATUS_HEIGHT, Theme.ERROR_TEXT, 2)
+    controls.statusText:SetSize(-16, STATUS_HEIGHT, 1.0, 0)
+    controls.statusText.alignHorizontal = ui.AlignMode.CENTRE
+    self:RefreshStatus()
+end
+
+-- Update the notice without rebuilding sidebar controls
+function TagTab:RefreshStatus()
+    local controls = self.controls
+    if controls == nil then return end
+    controls.statusBanner.hidden = self.app.status == nil
+    controls.statusText.content = self.app.status or ""
 end
 
 -- Draw the select-mode panel with its tag, help, and Done
@@ -210,7 +228,6 @@ function TagTab:Build()
 
     local bottom = ctx.height - SidebarRows.FOOTER_HEIGHT
     if app.select:Tag() ~= nil then bottom = bottom - PANEL_HEIGHT - 4 end
-    if app.status ~= nil then bottom = bottom - STATUS_HEIGHT end
     controls.list = TagList.new(parent, {
         store = app.store,
         settings = function() return app.settings end,
@@ -226,10 +243,7 @@ function TagTab:Build()
         onReorder = function(source, target, after) app:MoveSidebarEntry(source, target, after) end,
     })
     self.controls = controls
-    if app.status ~= nil then
-        controls.owned[#controls.owned + 1] = addText(parent, app.status, FOOTER_X, bottom,
-            width, STATUS_HEIGHT - 4, Theme.ERROR_TEXT, 3)
-    end
+    self:BuildStatus(controls)
     if app.select:Tag() ~= nil then
         self:BuildSelectPanel(controls, ctx.height - SidebarRows.FOOTER_HEIGHT - PANEL_HEIGHT, width)
     end
@@ -250,6 +264,11 @@ end
 -- Find the drawn row for a tag, if the column shows it
 function TagTab:RowFor(tag)
     return self.controls ~= nil and self.controls.list:RowFor(tag) or nil
+end
+
+-- Native item drops target only tags in the currently mounted sidebar column
+function TagTab:ItemDropTarget()
+    return self.controls ~= nil and self.controls.list:ItemDropTarget() or nil
 end
 
 return TagTab

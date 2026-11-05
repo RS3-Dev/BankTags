@@ -1,4 +1,5 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
+local BankGrid = require("banktags/ui/bank_grid")
 
 -- Right-click the layout editor's sorted grid for its Edit row submenu: add a row, or remove one
 -- Removing a row with items, reserved slots, or a label asks first in a confirmation window
@@ -76,12 +77,12 @@ openEditor()
 -- Point at an editor content point
 local function pointAtContent(x, y)
     local left, top = Geometry.absolutePosition(editor.content)
-    host.mouse = { x = left + x, y = top + y }
+    h:PointEditor(x, y)
 end
 -- Point at a pane's grid cell by its content row, as its scroll shows it
 local function pointAt(paneName, column, row)
     local pane = editor.panes[paneName]
-    local x, y = editorSize.GRID_LEFT + column * 44 + 20, 4 + row * 44 + 20 - pane.view.scrollY
+    local x, y = pane.gridLeft + column * 44 + 20, BankGrid.RowItemY(row, pane.labels) + 20 - pane.view.scrollY
     pointAtContent(pane.x + x, pane.y + y)
     return x, y
 end
@@ -104,6 +105,7 @@ local function saved() return Json.encode(store.data) end
 local function shown(menu) return table.concat(Harness.DisplayedLabels(menu), "|") end
 local EDIT = "Edit row <col=ffffff><gt></col>"
 local ABOVE, BELOW, REMOVE = "Add row above", "Add row below", "Remove row"
+local LABELS = "Add label above|Add label below"
 local OFFERED = EDIT .. "|Cancel"
 local ITEM_OFFERED = "Move to Unsorted|" .. EDIT .. "|Remove from Tag|Cancel"
 -- List the Edit row children of a menu, or nil without the submenu
@@ -111,8 +113,8 @@ local function children(menu)
     local submenu = Harness.Submenu(menu, EDIT)
     return submenu ~= nil and table.concat(Harness.ChildLabels(submenu), "|") or nil
 end
-local BOTH = ABOVE .. "|" .. BELOW .. "|" .. REMOVE .. "|Cancel"
-local LAST = ABOVE .. "|" .. REMOVE .. "|Cancel"
+local BOTH = ABOVE .. "|" .. BELOW .. "|" .. LABELS .. "|" .. REMOVE .. "|Cancel"
+local LAST = ABOVE .. "|" .. LABELS .. "|" .. REMOVE .. "|Cancel"
 -- Choose an Edit row child from a menu
 local function choose(menu, label) Harness.ChooseChild(menu, EDIT, label) end
 
@@ -141,15 +143,13 @@ for _, order in ipairs({ "core_first", "tags_first" }) do
 end
 h.menuOrder, h.placement = "core_first", "documented"
 
--- Nothing else in the editor gets entries: Unsorted, Search, the rail, the tab header, the scrollbar, the gaps
+-- Unsorted items offer item actions without row editing; other surfaces stay empty.
 local sorted = editor.panes.sorted
 pointAt("unsorted", 0, 0)
+assert(shown(h:ContentMenu()) == "Move to Layout|Remove from Tag|Cancel")
+pointAtContent(editorSize.SEARCH_X + 40, editorSize.PANEL_TOP + editorSize.SEARCH_LIST_TOP + 10)
 assert(shown(h:ContentMenu()) == "Cancel")
-editor:ShowRightTab("search")
-pointAtContent(editorSize.RIGHT_X + 40, editorSize.PANEL_TOP + editorSize.SEARCH_LIST_TOP + 10)
-assert(shown(h:ContentMenu()) == "Cancel")
-editor:ShowRightTab("unsorted")
-pointAtContent(editorSize.RAIL_X + 10, editorSize.PANEL_TOP + 20)
+pointAtContent(editorSize.CENTER_X + 10, editorSize.PANEL_TOP + 20)
 assert(shown(h:ContentMenu()) == "Cancel")
 pointAtContent(sorted.x + 20, sorted.y - 20)
 assert(shown(h:ContentMenu()) == "Cancel")
@@ -188,7 +188,7 @@ assert(lines() == "Weapons 3001 - 3003", lines())
 assert(changes == 1 and onlyBoots())
 assert(TagLayouts.Render(store.data.tags.gear.rows, 10).slots[12].layoutKey == keys.axe2)
 -- The editor redraws at once: the helm's row is now the last one, then the drop row
-assert(editor.usedRows == 4 and sorted.slots[31].layoutKey == keys.helm and sorted.slots[21].kind == "blank")
+assert(editor.layout.lines == 4 and sorted.slots[31].layoutKey == keys.helm and sorted.slots[21].kind == "blank")
 -- The same menu's entries act only once
 before = saved()
 choose(menu, BELOW)
@@ -201,7 +201,7 @@ pointAt("sorted", 4, 0)
 choose(h:ContentMenu(), ABOVE)
 h:Tick(2)
 assert(lines() == "- Weapons 3001 - 3003", lines())
-assert(editor.centerLabels[1].row == 1 and changes == 2)
+assert(editor.layout.labels[1].row == 1 and changes == 2)
 for _, row in ipairs({ 0, 1, 2, 3 }) do
     pointAt("sorted", 2, row)
     assert(children(h:ContentMenu()) == BOTH, "row " .. row)
@@ -213,13 +213,13 @@ choose(h:ContentMenu(), REMOVE)
 h:Tick(2)
 assert(app.windows.rowRemoveConfirm == nil)
 assert(lines() == "- Weapons 3001 3003", lines())
-assert(changes == 3 and editor.usedRows == 4)
+assert(changes == 3 and editor.layout.lines == 4)
 assert(TagLayouts.Render(store.data.tags.gear.rows, 10).slots[22].layoutKey == keys.axe2)
 pointAt("sorted", 0, 0)
 choose(h:ContentMenu(), REMOVE)
 h:Tick(2)
 assert(lines() == "Weapons 3001 3003", lines())
-assert(changes == 4 and editor.centerLabels[1].row == 0)
+assert(changes == 4 and editor.layout.labels[1].row == 0)
 -- A line past the layout has nothing to remove
 before = saved()
 assert(not editor:RemoveRow(5) and saved() == before and changes == 4)
@@ -239,12 +239,12 @@ assert(string.find(message, "its 3 items from", 1, true) and string.find(message
     message)
 assert(editor.overlayWindows[#editor.overlayWindows] == confirm().window, "the confirmation stays over the editor")
 assert(editor:KeysBlocker() ~= nil, "the confirmation takes the editor's keys")
-confirm().cancelButton.root.hooks.click()
-assert(confirm().window.root.hidden and saved() == before and changes == 4)
+Harness.Click(confirm().window.content, "Cancel")
+assert(confirm().closed and saved() == before and changes == 4)
 -- Confirming removes the whole line in one save and one undo step; Unsorted and the other rows stay
-askToRemove(2, 1).confirmButton.root.hooks.click()
+Harness.Click(askToRemove(2, 1).window.content, "Remove")
 assert(lines() == "Weapons 3003", lines())
-assert(changes == 5 and confirm().window.root.hidden)
+assert(changes == 5 and confirm().closed)
 for _, gone in ipairs({ keys.axe, keys.axe2, keys.sword }) do assert(not has(gone)) end
 assert(has(keys.helm) and onlyBoots())
 -- Undo puts back every item and blank; redo removes them again
@@ -254,9 +254,9 @@ assert(editor:Undo() and saved() == before)
 -- A label's line asks first and removes only the label
 askToRemove(5, 0)
 assert(string.find(confirm().message.content, "the label <col=ffcb05>\"Weapons\"", 1, true), confirm().message.content)
-confirm().confirmButton.root.hooks.click()
+Harness.Click(confirm().window.content, "Remove")
 assert(lines() == "3001 3003", lines())
-assert(has(keys.axe2) and editor.centerLabels[1] == nil)
+assert(has(keys.axe2) and editor.layout.labels[1] == nil)
 assert(editor:Undo() and saved() == before)
 
 -- A confirmation goes stale after any save or another tag, and then removes nothing
@@ -264,10 +264,10 @@ local function staleConfirm(change)
     local window = askToRemove(2, 1)
     change()
     before = saved()
-    window.confirmButton.root.hooks.click()
+    Harness.Click(window.window.content, "Remove")
     assert(saved() == before and string.find(window.message.content, "layout changed", 1, true), window.message.content)
     assert(not window.window.root.hidden)
-    window.cancelButton.root.hooks.click()
+    Harness.Click(window.window.content, "Cancel")
 end
 staleConfirm(function()
     assert(store:SetLabel("gear", 0, "Arms", 10))
@@ -286,12 +286,12 @@ sorted = editor.panes.sorted
 askToRemove(2, 1)
 store.loadError = "The saved tags could not be read."
 before = saved()
-confirm().confirmButton.root.hooks.click()
+Harness.Click(confirm().window.content, "Remove")
 store.loadError = nil
 assert(saved() == before and changes == 0 and editor.history == nil)
 assert(not confirm().window.root.hidden and confirm().message.content == "The saved tags could not be read.")
-confirm().cancelButton.root.hooks.click()
-editor:HideError()
+Harness.Click(confirm().window.content, "Cancel")
+editor:ClearStatus()
 assert(lines() == "Arms 3001 3003", lines())
 assert(store:SetLabel("gear", 0, "Weapons", 10))
 app:Changed()
@@ -317,9 +317,9 @@ assert(store.data.tags.gear.rows[3].slots[2].dormant == "Old item")
 -- A reserved slot counts as content, so its line asks first
 askToRemove(0, 3)
 assert(string.find(confirm().message.content, "its 1 reserved slot from", 1, true), confirm().message.content)
-confirm().cancelButton.root.hooks.click()
+Harness.Click(confirm().window.content, "Cancel")
 -- Removing a wrapped row's item line takes only that line's items
-askToRemove(0, 2).confirmButton.root.hooks.click()
+Harness.Click(askToRemove(0, 2).window.content, "Remove")
 assert(lines() == "Weapons 3001 -", lines())
 assert(#store.data.tags.gear.rows[2].slots == 4 and not has(sword2))
 assert(store.data.tags.gear.rows[3].slots[2].dormant == "Old item")
@@ -352,6 +352,68 @@ h:Tick(2)
 local view = TagLayouts.Render(store.data.tags.gear.rows, 10)
 assert(view.slots[scrolled * 10 + 1].kind == "blank" and view.slots[(scrolled + 1) * 10 + 1].kind == "item")
 
+-- Add label above or below asks for text and puts the label at that row, in one undo step
+-- Labels drawn on the grid stay draggable, and New label adds at the selection or the end
+resetGear()
+local function labelRows()
+    local found = {}
+    for _, label in ipairs(TagLayouts.Render(store.data.tags.gear.rows, 10).labels) do
+        found[#found + 1] = label.text .. "@" .. label.row
+    end
+    return table.concat(found, " ")
+end
+-- Type text into the open label prompt and add it
+local function addLabel(text)
+    local prompt = assert(app.windows.textPrompt)
+    local over = false
+    for _, window in ipairs(editor.overlayWindows) do over = over or window == prompt.window end
+    assert(over, "the prompt opens in front of the editor")
+    prompt.field:SetText(text)
+    Harness.Click(prompt.window.content, "Add")
+    assert(prompt.closed)
+end
+assert(labelRows() == "Weapons@0")
+pointAt("sorted", 3, 1)
+choose(h:ContentMenu(), "Add label below")
+assert(app.windows.textPrompt == nil, "the prompt waits for the next tick")
+h:Tick(2)
+addLabel("Armour")
+assert(labelRows() == "Weapons@0 Armour@2" and lines() == "Weapons 3001 Armour 3003", lines())
+before = saved()
+pointAt("sorted", 6, 1)
+choose(h:ContentMenu(), "Add label above")
+h:Tick(2)
+addLabel("Axes")
+assert(labelRows() == "Weapons@0 Axes@1 Armour@3")
+assert(editor:Undo() and saved() == before)
+-- The last row's Add label below goes at the layout's end
+pointAt("sorted", 0, 3)
+choose(h:ContentMenu(), "Add label below")
+h:Tick(2)
+addLabel("Spare")
+assert(labelRows() == "Weapons@0 Armour@2 Spare@4", labelRows())
+-- New label goes above the selected item's row, then above the outlined paste cell
+editor:SelectOnly(keys.helm)
+editor.newLabelButton.root.hooks.pressed()
+addLabel("Helms")
+assert(labelRows() == "Weapons@0 Armour@2 Helms@3 Spare@5")
+editor:SelectOnly(nil)
+editor.pasteCell = 13
+editor.newLabelButton.root.hooks.pressed()
+addLabel("Picks")
+assert(labelRows() == "Weapons@0 Picks@1 Armour@3 Helms@4 Spare@6")
+-- A prompt left open after another tag opens saves nothing to either tag
+before = saved()
+editor:SelectOnly(nil)
+editor.newLabelButton.root.hooks.pressed()
+local stalePrompt = app.windows.textPrompt
+editor:SelectTag("food")
+stalePrompt.field:SetText("Stale")
+Harness.Click(stalePrompt.window.content, "Add")
+assert(saved() == before and not stalePrompt.closed)
+Harness.Click(stalePrompt.window.content, "Cancel")
+editor:SelectTag("gear")
+
 -- Stale menus do nothing: a save, another tag, a drag, a closed or reopened editor
 local function staleAfter(change)
     resetGear()
@@ -370,8 +432,8 @@ staleAfter(function()
 end)
 staleAfter(function() editor:SelectTag("food") end)
 editor:SelectTag("gear")
-staleAfter(function() sorted.surface.hooks.click(nil, pointAt("sorted", 0, 1)) end)
-sorted.surface.hooks.release()
+staleAfter(function() h:PressEditor(sorted.surface, pointAt("sorted", 0, 1)) end)
+h:ReleaseEditor()
 staleAfter(function() editor.window:Close() end)
 openEditor()
 staleAfter(function() openEditor() end)
@@ -388,10 +450,10 @@ openEditor()
 sorted = editor.panes.sorted
 
 -- A drag in progress gives no entries
-sorted.surface.hooks.click(nil, pointAt("sorted", 0, 1))
+h:PressEditor(sorted.surface, pointAt("sorted", 0, 1))
 assert(editor.drag ~= nil)
 assert(shown(h:ContentMenu()) == "Cancel")
-sorted.surface.hooks.release()
+h:ReleaseEditor()
 
 -- A failed save shows in the editor's banner and changes nothing
 store.loadError = "The saved tags could not be read."
@@ -400,7 +462,7 @@ before = saved()
 choose(h:ContentMenu(), ABOVE)
 h:Tick(2)
 store.loadError = nil
-assert(saved() == before and editor.errorBanner ~= nil and changes == 0)
+assert(saved() == before and editor.status.content ~= "" and changes == 0)
 
 -- Closing the editor brings back the bank's own menus
 editor.window:Close()

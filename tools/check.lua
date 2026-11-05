@@ -13,7 +13,7 @@ local compiler = interpreter:gsub("lua(%d*)%.exe$", "luac%1.exe"):gsub("lua(%d*)
 local ALLOWED = {}
 for name in ([[
 ui id Event prettyui PersistentDB config game Mouse Vector4 log bankcore runeql MiniMenuActionType
-MiniMenu GameKey Keyboard Plugin audio
+MiniMenu GameKey ModifierKey Keyboard Plugin audio
 PluginShutdown PluginDependencyUpdate pairs ipairs type tostring tonumber math string table
 pcall error select next setmetatable getmetatable rawget rawset require print os io load
 assert collectgarbage package _G utf8 coroutine debug
@@ -27,11 +27,14 @@ local function run(command)
     return ok == true, output
 end
 
--- List the tracked files matching git pathspecs
+-- List tracked and new files still present, including uncommitted additions and removals.
 local function trackedFiles(...)
-    local _, output = run("git ls-files " .. table.concat({ ... }, " "))
+    local _, output = run("git ls-files --cached --others --exclude-standard " .. table.concat({ ... }, " "))
     local files = {}
-    for path in output:gmatch("[^\r\n]+") do files[#files + 1] = path end
+    for path in output:gmatch("[^\r\n]+") do
+        local file = io.open(path, "rb")
+        if file ~= nil then file:close(); files[#files + 1] = path end
+    end
     return files
 end
 
@@ -66,7 +69,7 @@ for _, path in ipairs(trackedFiles('"plugins/*.lua"', '"banktags/*.lua"')) do
 end
 
 -- Name the Bank Core checkout the tests run against
-local coreRoot = os.getenv("BANKCORE_ROOT") or "../bank-utilities"
+local coreRoot = os.getenv("BANKCORE_ROOT") or "../bank-utils-core"
 local _, coreHead = run('git -C "' .. coreRoot .. '" log -1 --format="%h %s"')
 print("Bank Core for tests: " .. coreRoot .. " at " .. (coreHead:match("[^\r\n]+") or "unknown"))
 -- Name the PrettyUI checkout the tests load MiniMenu from

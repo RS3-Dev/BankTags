@@ -1,7 +1,8 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
+local BankGrid = require("banktags/ui/bank_grid")
 
 -- Press Delete, Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+Y, and the arrows in the layout editor over a bank Bank Core reports
--- Key events use the documented payload and modifier values captured from the live client
+-- Key events use the documented payload and native modifier enum
 -- FAKE HOST: stand-in key events, keyboard, menus, and focus, not the game client
 
 local Harness = require("tools/test_support/tags_harness")
@@ -55,9 +56,13 @@ local GAME = { DELETE = 101, BACKSPACE = 85, C = 66, V = 67, Z = 64, Y = 37, A =
     LEFT = 96, RIGHT = 97, UP = 98, DOWN = 99 }
 local SYSTEM = { [101] = 46, [85] = 8, [66] = 67, [67] = 86, [64] = 90, [37] = 89, [48] = 65, [82] = 17,
     [96] = 37, [97] = 39, [98] = 38, [99] = 40 }
-local NONE, SHIFT, CONTROL, ALT = 0, 1, 4, 2
+local NONE, SHIFT, CONTROL, ALT = 0, 1, 2, 4
 -- Send one KeyDown as the client does, optionally as the OS's held-key repeat
 local function press(gameKey, modifiers, isRepeat)
+    -- General ONKEY hooks are delivered to visible fields even without focus
+    for _, field in ipairs({ editor.itemSearch.root }) do
+        if field.hooks.key ~= nil then field.hooks.key(field, gameKey, 0) end
+    end
     listener("KeyDown")({ isRepeat = isRepeat == true, gameKey = gameKey, systemKey = SYSTEM[gameKey],
         modifiers = modifiers, timestamp = 1000 })
 end
@@ -73,15 +78,15 @@ local function redo() controlKey(GAME.Y) end
 local function pointAt(paneName, column, row)
     local left, top = Geometry.absolutePosition(editor.content)
     local pane = editor.panes[paneName]
-    local x, y = editorSize.GRID_LEFT + column * 44 + 20, 4 + row * 44 + 20 - pane.view.scrollY
-    host.mouse = { x = left + pane.x + x, y = top + pane.y + y }
+    local x, y = pane.gridLeft + column * 44 + 20, BankGrid.RowItemY(row, pane.labels) + 20 - pane.view.scrollY
+    h:PointEditor(pane.x + x, pane.y + y)
     return x, y
 end
 -- Press and release on a pane's grid cell, which selects its item or the empty cell
 local function clickSlot(paneName, column, row)
     local pane = editor.panes[paneName]
-    pane.surface.hooks.click(nil, pointAt(paneName, column, row))
-    pane.surface.hooks.release()
+    h:PressEditor(pane.surface, pointAt(paneName, column, row))
+    h:ReleaseEditor()
 end
 -- Count the tag's whip slots
 local function whipCopies()
@@ -98,8 +103,10 @@ end
 -- Count the gold outlines drawn on either grid
 local function outlines()
     local count = 0
-    for _, node in ipairs(editor.centerNodes) do
-        if node.fill == false then count = count + 1 end
+    for _, pane in pairs(editor.panes) do
+        for _, mark in ipairs(pane.outlines) do
+            if not mark.hidden and not mark.destroyed then count = count + 1 end
+        end
     end
     return count
 end
@@ -124,7 +131,7 @@ assert(listener("KeyDown") ~= nil and listener("WindowFocusChanged") ~= nil and 
 -- The buttons name their keys
 assert(editor.copyButton.tooltipText == "Copy the selected item or group (Ctrl+C)")
 assert(editor.pasteButton.tooltipText == "Click an empty cell, then paste the copied items there (Ctrl+V)")
-assert(editor.removeButton.tooltipText == "Remove the selected item (Delete). Ctrl+Z undoes and Ctrl+Y redoes;"
+assert(editor.removeButton.tooltipText == "Remove the selected item or group (Delete). Ctrl+Z undoes and Ctrl+Y redoes;"
     .. " arrow keys move the selection when turned on in Bank Tags' settings")
 
 -- Before any press on the grid, keys do nothing
@@ -138,12 +145,12 @@ selectWhip()
 local before = saved()
 controlKey(GAME.C)
 assert(saved() == before and changes == 0 and editor.history == nil)
-assert(#editor.clipboard.items == 1 and editor.clipboard.tag == "melee" and editor.errorBanner ~= nil)
-editor:HideError()
+assert(#editor.clipboard.items == 1 and editor.clipboard.tag == "melee" and editor.status.content ~= "")
+editor:ClearStatus()
 -- Ctrl+V needs an empty cell picked first
 controlKey(GAME.V)
-assert(saved() == before and editor.errorBanner ~= nil)
-editor:HideError()
+assert(saved() == before and editor.status.content ~= "")
+editor:ClearStatus()
 -- Clicking an empty sorted cell outlines it as the paste cell and clears the item selection
 clickSlot("sorted", 2, 1)
 assert(editor.pasteCell == 13 and editor.selectedLayoutKey == nil and outlines() == 1)
@@ -172,7 +179,7 @@ host.shiftDown = false
 assert(editor:GroupCount() == 2)
 controlKey(GAME.C)
 assert(#editor.clipboard.items == 2 and changes == 2)
-editor:HideError()
+editor:ClearStatus()
 -- The shark sits where the second copy would land, so nothing is pasted
 assert(store:MoveLayoutItem("melee", SHARK, 2 * 10 + 4, 10))
 app:Changed()
@@ -180,13 +187,13 @@ clickSlot("sorted", 1, 1)
 assert(editor.pasteCell == 12)
 before = saved()
 controlKey(GAME.V)
-assert(saved() == before and editor.errorBanner ~= nil and changes == 2 and editor.pasteCell == 12)
-editor:HideError()
+assert(saved() == before and editor.status.content ~= "" and changes == 2 and editor.pasteCell == 12)
+editor:ClearStatus()
 -- Past the grid's right edge nothing is pasted either
 clickSlot("sorted", 9, 3)
 controlKey(GAME.V)
-assert(saved() == before and editor.errorBanner ~= nil)
-editor:HideError()
+assert(saved() == before and editor.status.content ~= "")
+editor:ClearStatus()
 -- Into open cells the group lands with its shape and stays selected
 clickSlot("sorted", 0, 3)
 controlKey(GAME.V)
@@ -245,7 +252,7 @@ assert(not hasSlot(selected) and editor.selectedLayoutKey == nil and changes == 
 -- With nothing selected, Delete and Ctrl+C do nothing and say nothing
 press(GAME.DELETE, NONE)
 controlKey(GAME.C)
-assert(changes == 10 and editor.errorBanner == nil and #editor.clipboard.items == 2)
+assert(changes == 10 and editor.status.content == "" and #editor.clipboard.items == 2)
 undo()
 assert(hasSlot(selected) and changes == 11)
 
@@ -256,7 +263,7 @@ local history = editor.history
 local historyIndex = history.index
 before = saved()
 for _, arrow in ipairs({ GAME.RIGHT, GAME.DOWN, GAME.LEFT, GAME.UP }) do press(arrow, NONE) end
-assert(saved() == before and changes == 11 and editor.errorBanner == nil)
+assert(saved() == before and changes == 11 and editor.status.content == "")
 -- Turning it on applies at once and changes neither the layout nor the undo steps
 assert(app:SetSetting("arrowKeyMovement", true))
 assert(saved() == before and editor.history == history and history.index == historyIndex)
@@ -289,23 +296,22 @@ redo()
 assert(saved() ~= before and changes == 14)
 -- Any other menu may lead to a text field, so it takes the keys until the grid is pressed
 local left, top = Geometry.absolutePosition(editor.content)
-host.mouse = { x = left + editorSize.RAIL_X + 10, y = top + editorSize.PANEL_TOP + 20 }
+h:PointEditor(editorSize.CENTER_X + 10, editorSize.PANEL_TOP + 20)
 Harness.Open(h:ContentMenu())
 assert(not editor.keysOnGrid)
 before = saved()
 undo()
 assert(saved() == before)
 
--- The search field, the Search tab, a keybind field, windows over the editor, focus, drags, and a hidden editor block them
+-- Search, rail navigation, overlays, focus, and drags block shortcuts
 clickSlot("sorted", 0, 0)
 editor.itemSearch.root.hooks.click(nil, 4, 4)
 undo()
 assert(saved() == before)
 clickSlot("sorted", 0, 0)
-editor.tabs:GetTab(2).hit.hooks.click()
+editor.tagTabs:Select("melee", true)
 undo()
 assert(saved() == before and not editor.keysOnGrid)
-editor.tabs:GetTab(1).hit.hooks.click()
 clickSlot("sorted", 0, 0)
 h.input.capturing = true
 undo()
@@ -326,12 +332,12 @@ undo()
 assert(saved() == before, "the grid needs a press after focus returns")
 selectWhip()
 local surface = editor.panes.unsorted.surface
-surface.hooks.click(nil, editorSize.GRID_LEFT + 20, 4 + 20)
+h:PressEditor(surface, editorSize.GRID_LEFT + 20, 4 + 20)
 assert(editor.drag ~= nil)
 press(GAME.DELETE, NONE)
 undo()
 assert(saved() == before)
-surface.hooks.release()
+h:ReleaseEditor()
 editor.window.root.hidden = true
 undo()
 editor.window.root.hidden = false
@@ -350,7 +356,7 @@ app:Changed()
 local changesBefore = changes
 press(GAME.DELETE, NONE)
 controlKey(GAME.C)
-assert(changes == changesBefore and editor.errorBanner == nil and editor.clipboard == clipboard)
+assert(changes == changesBefore and editor.status.content == "" and editor.clipboard == clipboard)
 
 -- Debug logging names each chord and shortcut key, and what blocked it; plain typing is not logged
 local logged = {}
@@ -364,8 +370,8 @@ press(GAME.A, NONE)
 assert(#logged == 0, "plain typing is not logged")
 undo()
 assert(#logged == 2, #logged)
-assert(string.find(logged[1], "CONTROL gameKey 82 systemKey 17 modifiers 4 held 4 shortcut nil", 1, true), logged[1])
-assert(string.find(logged[2], "Z gameKey 64 systemKey 90 modifiers 4 held 4 shortcut undo blocked by nothing", 1,
+assert(string.find(logged[1], "CONTROL gameKey 82 systemKey 17 modifiers 2 held 2 shortcut nil", 1, true), logged[1])
+assert(string.find(logged[2], "Z gameKey 64 systemKey 90 modifiers 2 held 2 shortcut undo blocked by nothing", 1,
     true), logged[2])
 editor.itemSearch.root.hooks.click(nil, 4, 4)
 press(GAME.V, CONTROL)
@@ -379,9 +385,7 @@ app:Renamed("melee", "melee2")
 assert(editor.clipboard.tag == "melee2")
 assert(store:UpdateTag("melee2", "melee"))
 app:Renamed("melee2", "melee")
-for _, button in ipairs(editor.tagRail.buttons) do
-    if button.tagID == "food" then button.root.hooks.pressed() end
-end
+editor.tagTabs:Select("food", true)
 assert(editor.selectedTag == "food" and editor.selectedLayoutKey == nil and editor.clipboard == nil)
 editor:SelectTag("melee")
 clickSlot("sorted", 0, 0)
@@ -394,7 +398,7 @@ app:Changed()
 assert(editor.selectedTag ~= "melee" and editor.selectedLayoutKey == nil and editor.clipboard == nil)
 press(GAME.DELETE, NONE)
 controlKey(GAME.V)
-editor:HideError()
+editor:ClearStatus()
 
 -- Reopening keeps one listener; closing and unloading remove it
 openEditor("food")

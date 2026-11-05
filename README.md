@@ -21,6 +21,10 @@ Opening an empty tag list offers an eight-step tutorial, starting with **New Tag
 
 Right-click a tag and choose **Select items**. Click bank items to add them to that tag. Click **Done** in the sidebar to finish. Select mode works in any bank tab.
 
+Items already in the tag have a gold outline during select mode. Adding another copy outlines its next stack, with stocked stacks before placeholders. Leaving select mode restores the items' normal appearance.
+
+You can also drag a bank item onto a tag's row in the sidebar to add it to that tag.
+
 A tag lists items, not particular stacks. Clicking an item that is already in the tag adds it again: the tag then shows that item's next stack too, with stacks that hold items first and placeholders after. An item listed more times than you have stacks shows as an empty placeholder.
 
 To remove an item, view the tag, right-click the item, and choose **Remove from**.
@@ -39,19 +43,22 @@ To remove an item, view the tag, right-click the item, and choose **Remove from*
 
 Right-click the tag and choose **Edit**, or use the sidebar's Edit button while that tag is open.
 
-The left grid is **Layout**. The right side contains **Unsorted** items and **Search**. Items in Unsorted still belong to the tag; they simply have no chosen layout position.
+The editor follows the bank from left to right: **Unsorted → Layout → Search**. The compact left tray holds five item columns at the default bank size. Native bank tabs above Layout show each tag's item icon, or its first letter; hover for the full name. Tabs follow the sidebar's tag order, including folder members. Left/right arrows appear on overflow; arrows and the wheel scroll through tabs without changing the selected page.
+
+Search stays open on the left. Drag a named result into the central Layout, which keeps the bank's item spacing and column count. Hover a result to read its full item name. Unsorted stays open on the right and packs four columns at the default bank size. Its items still belong to the tag; they simply have no chosen layout position. Each area scrolls independently. Editing actions and persistent status feedback sit in the footer, with Close at the right.
 
 - Drag items into Layout to position them. Moving onto another item swaps positions.
 - Shift-click Layout items to select a group, then drag a selected item without Shift to move the group. The group keeps its shape. Gold previews fit; red previews are refused.
-- **New label** adds a heading. Labels can be renamed, moved, or removed.
+- **New label** asks for a heading's text and adds it above the selected item or the cell chosen for pasting, or after the layout. To add one at any row, right-click the row and use **Edit row**, then **Add label above** or **Add label below**. Drag a label to move it; drop it back on its own row to rename or remove it.
 - Right-click a Layout item for **Move to Unsorted**, **Edit row**, **Remove from Tag**, and **Cancel**.
+- Right-click an Unsorted item for **Move to Layout** or **Remove from Tag**. Move to Layout fills the first open cell, skipping labels and reserved slots, or adds a row if needed.
 - Right-click a blank cell or label for row editing.
-- **Edit row** offers row insertion and removal. Removing a populated row asks for confirmation and removes its contents from the tag, not your bank.
+- **Edit row** offers row insertion, label insertion, and row removal. Removing a populated row asks for confirmation and removes its contents from the tag, not your bank.
 - Click **Close** or the title-bar X to leave the editor. Edits save automatically.
 
 ### Copy, paste, and undo
 
-Click an item before using a shortcut. Click an empty Layout cell to choose where to paste.
+Click an item before using a shortcut. Click an empty layout cell to choose where to paste. Clicking or typing in item search, or choosing a tag tab, gives the keyboard away from the grid until you click a grid again, so typing never edits the layout.
 
 | Action | Shortcut | What it does |
 | --- | --- | --- |
@@ -65,25 +72,25 @@ Pasting lists the same items again, so the tag shows each one's next stack; it d
 
 Undo keeps up to 50 steps for the current tag while the editor stays open. Switching tags or closing the editor clears undo and the clipboard. Renaming the tag keeps them. Changes made elsewhere to that tag end its undo history.
 
-Remove and Move to Unsorted require a single selection; Copy supports a group. Shortcuts pause while you type in editor fields or use its dialogs. Click the grid again to resume them.
+Remove (Delete), Copy, and Move to Unsorted support a group. Removing a group or moving it to Unsorted is one undo step. Right-clicking a selected item and choosing Move to Unsorted moves the whole selection; an unselected item moves on its own. Shortcuts pause while you type in editor fields or use its dialogs. Click the grid again to resume them.
 
-Arrow-key movement is **off by default**. Enable it on the Bank Tags plugin panel if desired. The arrows also move the game's camera.
+Arrow-key movement is **off by default**. Enable it through the Bank Tags settings cog in **Plugin Hub → Manage** if desired. The arrows also move the game's camera.
 
 ## Import and share
 
 Click **Import/Share** at the bottom-left of the sidebar.
 
 - **Share:** select the tag's code field and copy its text.
-- **Import:** choose a source, enter the code or source details, review the preview, then confirm the import.
+- **Import:** paste a share code or full backup, review the preview, then confirm the import. For a single tag, you can change its name, icon, and folder before importing.
 
 Sharing a tag shares its layout, labels, icon, and folder information, not bank ownership or quantities. Keep a share code for important layouts before making large changes.
 
 ## Settings and troubleshooting
 
-Open the **Bank Tags** plugin panel to change tag icons, new-item placement, arrow-key movement, or debug logging.
+Open **Plugin Hub → Manage → Bank Tags → settings cog** to change tag icons, new-item placement, arrow-key movement, or debug logging.
 
 - **Nothing appears:** check that Bank Core and PrettyUI are enabled.
-- **Cannot open a tag:** close the preset selector, switch to the native All Items tab, and try again. A tag with more than 10,000 rows, labels, and items cannot be shown; remove some in the layout editor.
+- **Cannot open a tag:** the error appears at the top center of the bank, over its title. Close the preset selector, switch to the native All Items tab, and try again. A tag with more than 10,000 rows, labels, and items cannot be shown; remove some in the layout editor.
 - **Limited item search:** enable RuneQL for the full catalog.
 - **Shortcut does nothing:** close dialogs, click the grid, and release Shift/Alt before using Ctrl.
 - **Save error:** read the displayed message. Unreadable saved data is protected from being overwritten; do not delete it without a backup.

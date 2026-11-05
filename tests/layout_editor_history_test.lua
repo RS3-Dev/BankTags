@@ -1,4 +1,5 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
+local BankGrid = require("banktags/ui/bank_grid")
 
 -- Move sorted items with the arrow keys, once turned on, and undo or redo layout edits with Ctrl+Z and Ctrl+Y
 -- FAKE HOST: stand-in key events, keyboard, pointer, and drags, not the game client
@@ -78,7 +79,7 @@ local function listener(event)
 end
 -- GameKey values from the client docs
 local LEFT, RIGHT, UP, DOWN, Z, Y, C, V, DELETE = 96, 97, 98, 99, 64, 37, 66, 67, 101
-local NONE, SHIFT_HELD, CONTROL_HELD, CONTROL_SHIFT = 0, 1, 4, 5
+local NONE, SHIFT_HELD, CONTROL_HELD, CONTROL_SHIFT = 0, 1, 2, 3
 -- Send a key press as the client's KeyDown payload, optionally as the OS's held-key repeat
 local function press(gameKey, modifiers, isRepeat)
     listener("KeyDown")({ gameKey = gameKey, systemKey = 0, modifiers = modifiers or NONE,
@@ -95,19 +96,19 @@ local function redo() tap(Y, CONTROL_HELD) end
 local function pointAt(paneName, column, line)
     local left, top = Geometry.absolutePosition(editor.content)
     local pane = editor.panes[paneName]
-    local x, y = Size.GRID_LEFT + column * 44 + 20, 4 + line * 44 + 20 - pane.view.scrollY
-    host.mouse = { x = left + pane.x + x, y = top + pane.y + y }
+    local x, y = pane.gridLeft + column * 44 + 20, BankGrid.RowItemY(line, pane.labels) + 20 - pane.view.scrollY
+    h:PointEditor(pane.x + x, pane.y + y)
     return x, y
 end
 local function pressSlot(paneName, column, line)
-    editor.panes[paneName].surface.hooks.click(nil, pointAt(paneName, column, line))
+    h:PressEditor(editor.panes[paneName].surface, pointAt(paneName, column, line))
 end
 local function dragOver(paneName, column, line)
     pointAt(paneName, column, line)
     editor.panes.sorted.surface.hooks.drag()
 end
 local function releaseSlot(paneName)
-    editor.panes[paneName or "sorted"].surface.hooks.release()
+    h:ReleaseEditor()
 end
 local function click(paneName, column, line)
     pressSlot(paneName, column, line)
@@ -169,7 +170,7 @@ click("sorted", 0, 0)
 local before = saved()
 tap(RIGHT)
 assert(lines() == "2 1 3 4 | Mid | 5 1 / 99", lines())
-assert(changes == 1 and editor.selectedLayoutKey == keys[1] and editor.errorBanner == nil)
+assert(changes == 1 and editor.selectedLayoutKey == keys[1] and editor.status.content == "")
 -- Holding the key moves only once, through the OS's repeats
 press(LEFT)
 press(LEFT, NONE, true)
@@ -181,16 +182,16 @@ assert(changes == 2)
 -- The grid's edges stop it quietly; nothing wraps to the next line
 tap(LEFT)
 tap(UP)
-assert(lines() == "1 2 3 4 | Mid | 5 1 / 99" and changes == 2 and editor.errorBanner == nil)
+assert(lines() == "1 2 3 4 | Mid | 5 1 / 99" and changes == 2 and editor.status.content == "")
 for _ = 1, COLUMNS - 1 do tap(RIGHT) end
 assert(lines() == "2 3 4 . . . . . . 1 | Mid | 5 1 / 99" or COLUMNS ~= 10, lines())
 before = saved()
 tap(RIGHT)
-assert(saved() == before and editor.errorBanner == nil)
+assert(saved() == before and editor.status.content == "")
 -- A label's line refuses it and says why
 tap(DOWN)
-assert(saved() == before and editor.errorBanner ~= nil)
-editor:HideError()
+assert(saved() == before and editor.status.content ~= "")
+editor:ClearStatus()
 for _ = 1, COLUMNS - 1 do tap(LEFT) end
 assert(lines() == "1 2 3 4 | Mid | 5 1 / 99", lines())
 changes = 0
@@ -216,7 +217,7 @@ tap(LEFT)
 assert(lines() == "1 2 3 4 | Mid | 5 1 / 99" and grouped(2, 3) and changes == 4)
 -- Any member past an edge stops the group quietly
 tap(UP)
-assert(changes == 4 and editor.errorBanner == nil)
+assert(changes == 4 and editor.status.content == "")
 
 -- Unsorted items, an empty selection, and the search field's keys do not move
 click("unsorted", 0, 0)
@@ -227,10 +228,9 @@ click("sorted", 7, 0)
 assert(editor.selectedLayoutKey == nil)
 for _, arrow in ipairs({ LEFT, RIGHT, UP, DOWN }) do tap(arrow) end
 click("sorted", 0, 0)
-editor:ShowRightTab("search")
+editor.itemSearch.root.hooks.click(editor.itemSearch.root, 4, 4)
 tap(RIGHT)
-editor:ShowRightTab("unsorted")
-assert(saved() == before and changes == 4 and editor.errorBanner == nil)
+assert(saved() == before and changes == 4 and editor.status.content == "")
 
 -- Fresh editor: with nothing to undo or redo, the keys do nothing
 editor.window:Close()
@@ -240,7 +240,7 @@ click("sorted", 7, 0)
 before = saved()
 undo()
 redo()
-assert(saved() == before and changes == 0 and editor.errorBanner == nil)
+assert(saved() == before and changes == 0 and editor.status.content == "")
 
 -- Every edit is one step; undo and redo walk back and forth through them
 local states, names = { gearState() }, {}
@@ -332,8 +332,19 @@ undo()
 assert(gearState() == states[last - 1])
 drag("sorted", 9, 5, "sorted", 9, 5)
 editor:InsertEmptyRow(40)
-editor:HideError()
+editor:ClearStatus()
 assert(gearState() == states[last - 1])
+-- Saving a label's unchanged text writes a fresh copy, yet changes nothing, so redo stays
+local label = assert(editor.layout.labels[1], "a label to rename")
+local dataBefore, notices = store.data, changes
+assert(editor:EditLabel(label.row))
+assert(prompt.text == label.text and prompt.onSave(label.text))
+assert(store.data ~= dataBefore, "the store saved a fresh copy")
+assert(gearState() == states[last - 1] and changes == notices and editor:CanStepHistory(1))
+-- A rejected label save also keeps redo, and its reason goes back to the prompt
+assert(editor:EditLabel(label.row))
+local refused, reason = prompt.onSave("<>")
+assert(not refused and reason ~= nil and editor:CanStepHistory(1) and changes == notices)
 redo()
 assert(gearState() == states[last])
 undo()
@@ -351,10 +362,10 @@ store.loadError = "The saved tags could not be read."
 before = saved()
 count = changes
 undo()
-assert(saved() == before and changes == count and editor.errorBanner ~= nil)
-editor:HideError()
+assert(saved() == before and changes == count and editor.status.content ~= "")
+editor:ClearStatus()
 assert(not editor:InsertEmptyRow(0))
-editor:HideError()
+editor:ClearStatus()
 store.loadError = nil
 undo()
 assert(gearState() == states[last - 2])
@@ -384,8 +395,8 @@ local edited = gearState()
 assert(store:RemoveTag("gear", outside))
 before = saved()
 undo()
-assert(saved() == before and editor.errorBanner ~= nil and not hasOutside())
-editor:HideError()
+assert(saved() == before and editor.status.content ~= "" and not hasOutside())
+editor:ClearStatus()
 assert(gearState() ~= edited)
 app:Changed()
 

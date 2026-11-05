@@ -49,7 +49,9 @@ function Windows:SyncEditorOverlays()
     for _, name in ipairs(EDITOR_OVERLAYS) do
         if self[name] ~= nil then overlays[#overlays + 1] = self[name].window end
     end
-    self.layoutEditor:SetOverlays(overlays)
+    local tutorial = self.app.tutorial
+    local guideLayer = tutorial ~= nil and tutorial.active and tutorial.root or nil
+    self.layoutEditor:SetOverlays(overlays, guideLayer)
 end
 
 -- Close every window that needs the open bank; Import/Share stays
@@ -175,13 +177,11 @@ function Windows:OpenLayoutEditor(tag)
         onBankCheck = function() self:CheckBankBounds() end,
         onPromptLabel = function(options) self:OpenPageLabelPrompt(options) end,
         onConfirmRemoveRow = function(options) self:OpenRowRemoveConfirm(options) end,
+        -- A label prompt or row removal edits this editor's tag, so it closes too, even when reopening
         onClose = function(value)
-            if self.layoutEditor == value then
-                self.layoutEditor = nil
-                -- A label prompt or row removal edits this editor's tag, so it closes too
-                self:Close("textPrompt")
-                self:Close("rowRemoveConfirm")
-            end
+            if self.layoutEditor == value then self.layoutEditor = nil end
+            self:Close("textPrompt")
+            self:Close("rowRemoveConfirm")
         end,
     })
     self.layoutEditor = editor
@@ -306,11 +306,6 @@ function Windows:OpenTagSettings(tag, isNew, onSaved)
     self:SyncEditorOverlays()
 end
 
--- Show current import sources in an open Import/Share window
-function Windows:RefreshImportSources()
-    if self.importShare ~= nil then self.importShare:RefreshSources() end
-end
-
 -- Open Import/Share
 function Windows:OpenImportShare()
     local app = self.app
@@ -321,7 +316,6 @@ function Windows:OpenImportShare()
     window = ImportShare.new(parent, {
         onGetTagExports = function() return app.store:TagExports() end,
         onGetFolders = function() return app.store:GetFolders() end,
-        importProviders = app.imports.providers,
         onChooseImportSprite = function(onSelected)
             if self.importShare ~= window then return end
             self:OpenSpritePicker(window, function(result) onSelected(result.objectId) end)

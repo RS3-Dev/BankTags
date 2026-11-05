@@ -101,14 +101,14 @@ local function pointAt(paneName, column, line)
     local left, top = Geometry.absolutePosition(editor.content)
     local pane = editor.panes[paneName]
     local x, y = Size.GRID_LEFT + column * 44 + 20, 4 + line * 44 + 20 - pane.view.scrollY
-    host.mouse = { x = left + pane.x + x, y = top + pane.y + y }
+    h:PointEditor(pane.x + x, pane.y + y)
     return x, y
 end
 local function drag(fromColumn, fromLine, toColumn, toLine)
-    editor.panes.sorted.surface.hooks.click(nil, pointAt("sorted", fromColumn, fromLine))
+    h:PressEditor(editor.panes.sorted.surface, pointAt("sorted", fromColumn, fromLine))
     pointAt("sorted", toColumn, toLine)
     editor.panes.sorted.surface.hooks.drag()
-    editor.panes.sorted.surface.hooks.release()
+    h:ReleaseEditor()
 end
 
 -- Each editor edit redraws once, through the app ------------------------------------
@@ -126,10 +126,10 @@ reset()
 assert(editor:Undo())
 editedOnce("undo")
 
--- A drag that changes nothing still puts the item back, and nothing else redraws
+-- A drag that changes nothing only selects, so neither grid nor anything else redraws
 reset()
 drag(1, 0, 1, 0)
-assert(counts.center == 1 and #counts.pages == 0 and counts.exports == 0 and counts.writes == 0)
+assert(counts.center == 0 and #counts.pages == 0 and counts.exports == 0 and counts.writes == 0)
 
 -- Outside changes reach only what shows them --------------------------------------
 
@@ -214,13 +214,13 @@ assert(editor.selectedTag == "kit" and counts.center == 1)
 -- even before Bank Core says its page closed; the player's click shows the tag again
 local layout = h:Session().layout
 local other = assert(core.result.Register({ id = "test.other", name = "Other" }))
-assert(other:SetPage({ title = "Other", rows = { { slots = { 385 } } } }) and other:Open())
+assert(other:SetPage({ rows = { { slots = { 385 } } } }) and other:Open())
 reset()
 assert(app:AddItemToTag("kit", 385))
-assert(#counts.pages == 0 and layout.shownPage.title == "Other")
+assert(#counts.pages == 0 and other:IsOpen())
 h:Tick(2)
-assert(app:ShownTag() == nil and layout.shownPage.title == "Other")
-assert(app:ShowTag("kit") and layout.shownPage.title == "Kit" and app:ShownTag() == "kit")
+assert(app:ShownTag() == nil and other:IsOpen())
+assert(app:ShowTag("kit") and not other:IsOpen() and app:ShownTag() == "kit")
 -- Once the player picks a native tab, a change to the tag shows nothing
 layout:SetNativeViewAll(false)
 reset()

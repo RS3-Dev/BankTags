@@ -1,4 +1,5 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
+local BankGrid = require("banktags/ui/bank_grid")
 
 -- Drive the layout editor over a bank Bank Core reports
 -- Moves it saves show up where the page draws them
@@ -44,53 +45,44 @@ assert(editor ~= nil and editor.selectedTag == "melee")
 local editorSize = h:TagsModule("banktags/windows/layout_editor_parts").size
 assert(editorSize.CENTER_COLUMNS == 13)
 assert(editor.window.root.x == bounds.x and editor.window.root.y == bounds.y)
--- A tag rail replaces the tag column: an icon button per tag in sidebar order, named with its folder
-local rail = editor.tagRail
--- Find the rail button for a tag
-local function railButton(tag)
-    for _, button in ipairs(rail.buttons) do
-        if button.tagID == tag then return button end
+-- Tag buttons retain sidebar order and use icons or initials
+local rail = editor.tagTabs
+local function railLabels()
+    local labels = {}
+    for _, entry in ipairs(rail.entries) do labels[#labels + 1] = entry.label end
+    return table.concat(labels, ",")
+end
+local function chosen() return rail:GetSelectedID() end
+local function choose(label)
+    for _, entry in ipairs(rail.entries) do
+        if entry.label == label then return assert(rail:Select(entry.id, true)) end
     end
-    return nil
+    error("no rail entry " .. label)
 end
--- List the rail's tags, then whether only the open one is gold
-local function railTags()
-    local tags = {}
-    for _, button in ipairs(rail.buttons) do tags[#tags + 1] = button.tagID end
-    return table.concat(tags, ",")
-end
-local function railOpen(tag)
-    for _, button in ipairs(rail.buttons) do
-        if button.active ~= (button.tagID == tag) then return false end
-    end
-    return true
-end
-assert(railTags() == "melee,food" and railOpen("melee"))
-assert(rail.entries[1].label == "Combat / Melee" and railButton("melee").tooltipText == "Combat / Melee")
-assert(rail.entries[2].label == "Food" and railButton("food").tooltipText == "Food")
--- The stored icon draws over its button; a tag without one shows its first letters
-local melee = railButton("melee")
-assert(melee.root.text.content == "" and Harness.Find(rail.root, "Fo") == railButton("food").root)
-local railIcon = nil
-for _, node in ipairs(rail.root.children) do
-    if node.associatedObjectID == 4151 and not node.destroyed then railIcon = node end
-end
-assert(railIcon ~= nil and railIcon.clickthrough and railIcon.y > melee.y and railIcon.y < melee.y + melee.height)
--- The open tag is named beside the Layout tab; no Rename or Exit edit mode
-assert(editor.tagName.content == "Combat / Melee" and Harness.Find(editor.content, "Rename") == nil and railOpen("melee"))
-assert(editor.layoutTabs:GetTab(1).text == "Layout" and editor.tagName.parent == editor.centerPanel)
+assert(rail.entries[1].label == "Melee" and rail.entries[2].label == "Food" and chosen() == "melee")
+assert(rail.rows[1].icon.associatedObjectID == 4151 and rail.rows[1].icon.clickthrough)
+assert(rail.rows[2].icon == nil and rail.rows[2].label.content == "F")
+assert(rail.rows[1].background.spriteID == id.Sprite.BANK_TABS_HORIZONTAL_1)
+assert(rail.rows[2].background.spriteID == id.Sprite.BANK_TABS_HORIZONTAL_0)
+assert(editor.tagTitle == nil and editor.tagIcon == nil)
+assert(editor.status.content == "" and editor.status.parent == editor.content)
+assert(editor.status.x >= editor.newLabelButton.x + editor.newLabelButton.width)
+assert(editor.status.x + editor.status.width <= editor.closeButton.x)
+assert(Harness.Find(editor.content, "Rename") == nil and editor.chooser == nil and editor.tabs == nil)
 assert(Harness.Find(editor.content, "Exit edit mode") == nil and editor.exitButton == nil)
--- New Tag and Import/Share stay in the Tags tab, and the window's own close button closes it
 assert(Harness.Find(editor.content, "New Tag") == nil)
--- The sorted grid sits beside the rail, level with Unsorted, over the item actions
-assert(editor.centerPanel.x == editorSize.CENTER_X and rail.root.x + rail.root.width < editorSize.CENTER_X)
-assert(editor.panes.sorted.y > editor.tagName.y + editor.tagName.height)
+assert(editor.unsortedPanel.x < editor.centerPanel.x and editor.centerPanel.x < editor.searchPanel.x)
+assert(rail.root.x >= editor.centerPanel.x and rail.root.y < editor.panes.sorted.y)
+assert(editor.panes.sorted.y == editor.panes.unsorted.y)
+assert(not editor.searchDragSurface.hidden and not editor.panes.unsorted.surface.hidden)
 assert(Harness.Find(editor.content, "Saved automatically") == nil)
 
 -- Quantities come from Bank Core's snapshot; a placeholder is drawn faded
 local function spriteFor(objectID)
-    for _, node in ipairs(editor.centerNodes) do
-        if node.associatedObjectID == objectID then return node end
+    for _, pane in pairs(editor.panes) do
+        for _, sprite in pairs(pane.sprites) do
+            if sprite.associatedObjectID == objectID then return sprite end
+        end
     end
     return nil
 end
@@ -105,19 +97,19 @@ end }
 local function pointAtSlot(paneName, column, row)
     local left, top = Geometry.absolutePosition(editor.content)
     local pane = editor.panes[paneName]
-    local x, y = editorSize.GRID_LEFT + column * 44 + 20, 4 + row * 44 + 20 - pane.view.scrollY
-    host.mouse = { x = left + pane.x + x, y = top + pane.y + y }
+    local x, y = pane.gridLeft + column * 44 + 20, BankGrid.RowItemY(row, pane.labels) + 20 - pane.view.scrollY
+    h:PointEditor(pane.x + x, pane.y + y)
     return x, y
 end
 -- Press on a slot and release over another, as dragging an item does
 local function drag(fromPane, fromColumn, fromRow, toPane, toColumn, toRow)
     local surface = editor.panes[fromPane].surface
-    surface.hooks.click(nil, pointAtSlot(fromPane, fromColumn, fromRow))
+    h:PressEditor(surface, pointAtSlot(fromPane, fromColumn, fromRow))
     pointAtSlot(toPane, toColumn, toRow)
-    surface.hooks.release()
+    h:ReleaseEditor()
 end
 
--- Sorted rows fill the center and Unsorted is the right column's first tab; the shark leads it
+-- Layout fills the center and Unsorted stays visible on the right; the shark leads it
 local sorted, unsorted = editor.panes.sorted, editor.panes.unsorted
 assert(sorted.slots[1].layoutKey == WHIP and unsorted.slots[1].layoutKey == SHARK)
 -- Drag the shark into column 12, which only 13 columns allow
@@ -152,38 +144,49 @@ assert(unsorted[#unsorted].layoutKey == pasted and h:Saved("melee") == "4151 0 0
 drag("sorted", 0, 0, "sorted", 0, 0)
 Harness.Find(editor.content, "Remove").hooks.pressed()
 assert(h:Saved("melee") == "0 0 0 0 0 0 0 0 0 0 0 385 1944 4151", h:Saved("melee"))
--- With nothing selected the buttons explain instead of acting
+-- Removing an empty selection does nothing; Copy still explains its missing selection.
 editor.selectedLayoutKey = nil
 Harness.Find(editor.content, "Remove").hooks.pressed()
-assert(editor.errorBanner ~= nil)
+assert(editor.status.content == "")
+Harness.Find(editor.content, "Copy").hooks.pressed()
+assert(editor.status.content == "Select a layout item first." and editor.status.rgba == 0xE57373FF)
+-- The reason stays in the status line until the next action replaces or clears it
 h:Tick(260)
-assert(editor.errorBanner == nil, "the error fades on the editor's own logic subscription")
+assert(editor.status.content == "Select a layout item first.")
+Harness.Find(editor.content, "Copy").hooks.pressed()
+assert(editor.status.content == "Select a layout item first.")
 
--- New label asks for text and adds the label after the layout
-local labelSurface = editor.labelDragSurface
-local labelLeft, labelTop = Geometry.absolutePosition(editor.content)
-host.mouse = { x = labelLeft + editorSize.LABEL_BUTTON_X + 10,
-    y = labelTop + editorSize.LABEL_BUTTON_Y + 10 }
-labelSurface.hooks.click(nil, 10, 10)
-labelSurface.hooks.release()
+-- New label is a plain button: with nothing selected it asks for text and adds the label after the layout
+assert(editor.newLabelButton.root.hooks.click == nil and editor.labelDragSurface == nil)
+editor.newLabelButton.root.hooks.pressed()
 local prompt = app.windows.textPrompt
 assert(prompt ~= nil and editor.overlayWindows[#editor.overlayWindows] == prompt.window)
 prompt.field:SetText("Weapons")
-prompt.buttons[#prompt.buttons].root.hooks.click()
+Harness.Click(prompt.window.content, "Add")
 local rows = app.store.data.tags.melee.rows
 assert(rows[#rows].kind == "label" and rows[#rows].text == "Weapons")
 
--- Searching without RuneQL finds bank items and says it is limited
-editor.tabs:GetTab(2).hit.hooks.click()
+-- An idle search stays empty; a failed search without RuneQL explains its limits.
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "")
+assert(editor.searchHint.hidden and editor.searchHint.content == "")
+editor.itemSearch.root.hooks.contentchanged(nil, "change", "no matching item")
 assert(string.find(editor.searchHint.content, "Without RuneQL", 1, true) ~= nil)
 editor.itemSearch.root.hooks.contentchanged(nil, "change", "shark")
 assert(#editor.searchResults == 1 and editor.searchResults[1].objectId == 385)
 
--- Pressing another tag in the rail opens that tag
-railButton("food").root.hooks.pressed()
-assert(railOpen("food") and editor.tagName.content == "Food")
+-- A saved action clears the status line
+assert(editor.status.content == "")
+
+-- Choosing another tag opens it, with no icon and a clear status line
+editor:ShowError("An old reason")
+choose("Food")
+assert(chosen() == "food" and editor.tagTabs.rows[2].icon == nil and editor.status.content == "")
 assert(editor.selectedTag == "food" and #editor.panes.sorted.slots == 0 and #editor.panes.unsorted.slots == 0)
+-- Choosing the open tag again changes nothing
+editor.history = { tag = "food", states = {}, index = 1 }
+choose("Food")
+assert(editor.selectedTag == "food" and editor.history ~= nil)
+editor.history = nil
 -- Renaming from the Tags tab opens tag settings in front of the editor
 app.windows:OpenTagSettings("food", false)
 local tagSettings = app.windows.tagSettingsEditor
@@ -192,41 +195,27 @@ assert(editor.overlayWindows[1] == tagSettings.window)
 -- Renaming keeps the tag open and renames it in the rail
 tagSettings.field:SetText("snacks")
 tagSettings.saveButton.root.hooks.click()
-assert(editor.selectedTag == "snacks" and railOpen("snacks") and editor.tagName.content == "Snacks")
-assert(railTags() == "melee,snacks" and railButton("snacks").tooltipText == "Snacks")
+assert(editor.selectedTag == "snacks" and chosen() == "snacks" and railLabels() == "Melee,Snacks")
 assert(app.store:RenameFolder(app.store:GetTagFolder("melee"), "Gear") and app:Changed() == nil)
-assert(railButton("melee").tooltipText == "Gear / Melee" and editor.selectedTag == "snacks")
+assert(railLabels() == "Melee,Snacks" and editor.selectedTag == "snacks" and chosen() == "snacks")
 -- Deleting the open tag opens the first one and drops it from the rail
 assert(app.store:CreateTag("spare"))
 app:Changed()
-railButton("spare").root.hooks.pressed()
-assert(editor.selectedTag == "spare" and railTags() == "melee,snacks,spare")
+choose("Spare")
+assert(editor.selectedTag == "spare" and railLabels() == "Melee,Snacks,Spare")
 assert(app.store:DeleteTag("spare"))
 app:Changed()
-assert(editor.selectedTag == "melee" and railOpen("melee") and railTags() == "melee,snacks")
-assert(editor.tagName.content == "Gear / Melee")
-railButton("snacks").root.hooks.pressed()
--- More tags than fit page with arrows; every tag stays reachable and the open one in view
+assert(editor.selectedTag == "melee" and chosen() == "melee" and railLabels() == "Melee,Snacks")
+-- Every tag of many stays reachable, each by its own entry
 for index = 1, 30 do assert(app.store:CreateTag("extra " .. index)) end
 app:Changed()
-assert(rail.view.arrows and #rail.buttons < 32 and rail.upArrow.disabled and not rail.downArrow.disabled)
-assert(railOpen("snacks") and railButton("snacks") ~= nil)
-local seen = {}
-repeat
-    for _, button in ipairs(rail.buttons) do seen[button.tagID] = true end
-    local paged = not rail.downArrow.disabled
-    if paged then rail.downArrow.root.hooks.pressed() end
-until not paged
-for index = 1, 30 do assert(seen["extra " .. index], "extra " .. index .. " is reachable") end
-assert(seen.melee and seen.snacks and editor.selectedTag == "snacks" and railButton("snacks") == nil)
-railButton("extra 30").root.hooks.pressed()
-assert(editor.selectedTag == "extra 30" and railOpen("extra 30"))
-editor:SelectTag("melee")
-assert(railButton("melee") ~= nil and rail.upArrow.disabled)
+assert(#rail.entries == 32 and chosen() == "melee")
+choose("Extra 30")
+assert(editor.selectedTag == "extra 30" and chosen() == "extra 30")
 for index = 1, 30 do assert(app.store:DeleteTag("extra " .. index)) end
 app:Changed()
-assert(not rail.view.arrows and railTags() == "melee,snacks" and rail.upArrow == nil)
-railButton("snacks").root.hooks.pressed()
+assert(railLabels() == "Melee,Snacks" and editor.selectedTag == "melee" and chosen() == "melee")
+choose("Snacks")
 
 -- Moving the bank, with no item change, moves the open editor within a few ticks
 local window = host.window
@@ -284,7 +273,7 @@ assert(app.store:GetTagSprite("melee") == 385)
 assert(app:ShowTag("snacks"))
 h:Tick(2)
 app.windows:OpenTagDeleteConfirm("snacks")
-app.windows.tagDeleteConfirm.confirmButton.root.hooks.click()
+Harness.Click(app.windows.tagDeleteConfirm.window.content, "Delete")
 h:Tick(2)
 assert(app.store.data.tags.snacks == nil and app:ShownTag() == nil and layout.shownPage == nil)
 
@@ -295,8 +284,7 @@ app.windows:OpenLayoutEditor("melee")
 editor = app.windows.layoutEditor
 editor.closeButton.root.hooks.pressed()
 assert(app.windows.layoutEditor == nil and editor.window == nil)
-assert(editor.panes == nil and editor.onClose == nil)
-assert(editor.tabs == nil and editor.layoutTabs == nil and editor.tagName == nil)
+assert(editor.panes == nil and editor.onClose == nil and editor.tagTabs.root == nil)
 app.windows:OpenLayoutEditor("melee")
 assert(app.windows.layoutEditor ~= nil)
 h.host:Unload("bankcore")

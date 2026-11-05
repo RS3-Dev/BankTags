@@ -7,10 +7,6 @@ assert(TagRules.normalizeTag("a,b") == nil and TagRules.normalizeTag("   ") == n
 assert(TagRules.normalizeTag(string.rep("a", TagRules.MAX_TAG_NAME)) ~= nil)
 assert(TagRules.normalizeTag(string.rep("a", TagRules.MAX_TAG_NAME + 1)) == nil)
 
--- Lists are split on commas, sorted, and skip repeats and invalid names
-local tags = TagRules.parseTagList("Food, gear,food, ," .. string.rep("x", 81))
-assert(#tags == 2 and tags[1] == "food" and tags[2] == "gear")
-
 local key, display = TagRules.folderName("  Gathering   Skills ")
 assert(key == "gathering skills" and display == "Gathering Skills")
 assert(TagRules.folderName(string.rep("f", TagRules.MAX_FOLDER_NAME + 1)) == nil)
