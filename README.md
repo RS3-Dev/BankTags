@@ -52,8 +52,8 @@ Search stays open on the left. Drag a named result into the central Layout, whic
 - **New label** asks for a heading's text and adds it above the selected item or the cell chosen for pasting, or after the layout. To add one at any row, right-click the row and use **Edit row**, then **Add label above** or **Add label below**. Drag a label to move it; drop it back on its own row to rename or remove it.
 - Right-click a Layout item for **Move to Unsorted**, **Edit row**, **Remove from Tag**, and **Cancel**.
 - Right-click an Unsorted item for **Move to Layout** or **Remove from Tag**. Move to Layout fills the first open cell, skipping labels and reserved slots, or adds a row if needed.
-- Right-click a blank cell or label for row editing.
-- **Edit row** offers row insertion, label insertion, and row removal. Removing a populated row asks for confirmation and removes its contents from the tag, not your bank.
+- Click **Add row** in the footer to append an empty row. Right-click a blank cell or label for row editing. The grid shows only saved layout rows, including empty rows you added. On an empty layout, you can also right-click its background and choose **Add row** to start.
+- **Edit row** offers row insertion, label insertion, and row removal. **Add row below** on the last row extends the layout. Empty rows stay saved until you remove them. Removing a populated row asks for confirmation and removes its contents from the tag, not your bank.
 - Click **Close** or the title-bar X to leave the editor. Edits save automatically.
 
 ### Copy, paste, and undo
@@ -97,8 +97,6 @@ Open **Plugin Hub → Manage → Bank Tags → settings cog** to change tag icon
 
 A new installation starts empty. Share codes and saved tags from earlier versions, including the older integrated Bank Utilities plugin, are not read.
 
-## For reviewers and developers
+## Manual installation
 
-[Build, saved-data details, architecture, and validation limits](docs/DEVELOPMENT.md) · [API contract](CONTRACT.md) · [code style](STYLE_GUIDE.md).
-
-The current build has automated regression coverage. Live-client checks are still required for the exact release, especially scaling, drag-and-drop, shortcuts, menus, and tutorial placement.
+This repository contains the Bank Tags 1.0.1 runtime. Copy `main.lua`, `plugin.json`, and `resources/` into a `banktags` folder in your client's development plugins directory, or extract the `banktags` folder from the release ZIP. Enable PrettyUI, Bank Core, RuneQL, and Bank Tags in the plugin manager.
