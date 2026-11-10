@@ -49,6 +49,7 @@ Search stays open on the left. Drag a named result into the central Layout, whic
 
 - Drag items into Layout to position them. Moving onto another item swaps positions.
 - Shift-click Layout items to select a group, then drag a selected item without Shift to move the group. The group keeps its shape. Gold previews fit; red previews are refused.
+- Hold Shift and drag from empty Layout space to draw a selection box and add the enclosed items to your selection. Keep Shift held until you release the mouse. The pane scrolls near its top and bottom edges; the wheel also works. Release Shift early or press Escape to cancel the box and restore your previous selection. Labels are skipped.
 - **New label** asks for a heading's text and adds it above the selected item or the cell chosen for pasting, or after the layout. To add one at any row, right-click the row and use **Edit row**, then **Add label above** or **Add label below**. Drag a label to move it; drop it back on its own row to rename or remove it.
 - Right-click a Layout item for **Move to Unsorted**, **Edit row**, **Remove from Tag**, and **Cancel**.
 - Right-click an Unsorted item for **Move to Layout** or **Remove from Tag**. Move to Layout fills the first open cell, skipping labels and reserved slots, or adds a row if needed.

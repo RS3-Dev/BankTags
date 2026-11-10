@@ -23,7 +23,10 @@ function LayoutEditorKeys:StartShortcuts()
         if not self.menuOnGrid then self.keysOnGrid = false end
     end)
     -- The player may have typed elsewhere while the game was in the background
-    Event.WindowFocusChanged.Subscribe(KEY_EVENT, function() self.keysOnGrid = false end)
+    Event.WindowFocusChanged.Subscribe(KEY_EVENT, function()
+        self.keysOnGrid = false
+        if self.drag ~= nil and self.drag.kind == "box" then self:CancelDrag() end
+    end)
     -- ONKEY is a general key hook, not a field-focus event
     local function takeKeys()
         self.keysOnGrid = false
@@ -124,6 +127,10 @@ end
 -- Run each shortcut once per key press
 function LayoutEditorKeys:KeyPressed(event)
     if event.isRepeat then return end
+    if event.gameKey == GameKey.ESCAPE and self.drag ~= nil and self.drag.kind == "box" then
+        self:CancelDrag()
+        return
+    end
     local held = heldModifiers(event)
     local shortcut, columnStep, lineStep = shortcutFor(event.gameKey, held)
     if DebugLog.IsEnabled() then self:TraceKey(event, held, shortcut) end

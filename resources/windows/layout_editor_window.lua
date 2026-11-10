@@ -18,6 +18,7 @@ for _, methods in ipairs({
     require("resources/windows/layout_editor_keys"),
     require("resources/windows/layout_editor_names"),
     require("resources/windows/layout_editor_group"),
+    require("resources/windows/layout_editor_marquee"),
     require("resources/windows/layout_editor_history"),
     require("resources/windows/layout_editor_clipboard"),
 }) do
@@ -184,6 +185,7 @@ end
 
 -- End drags and load the selected tag's layout
 function LayoutEditorWindow:SelectTag(tag)
+    self:CancelDrag()
     -- Reset scrolling and editing state when switching tags
     if tag ~= self.selectedTag then
         self:ClearHistory()
@@ -215,6 +217,7 @@ end
 
 -- Follow item names and periodically check the bank's position
 function LayoutEditorWindow:FollowHoverAndBank()
+    self:TickBoxSelection()
     self:UpdateItemName()
     self.bankCheckTicks = self.bankCheckTicks + 1
     if self.bankCheckTicks % BANK_CHECK_TICKS == 0 then self.onBankCheck() end

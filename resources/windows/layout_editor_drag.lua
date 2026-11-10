@@ -51,6 +51,9 @@ function LayoutEditorDrag:ScrollWheel(delta, kind)
     if pane ~= nil and not pane.hidden then
         local before = pane.view.scrollY
         pane.view:ScrollBy(delta * Size.GRID_STEP)
+        if self.drag ~= nil and self.drag.kind == "box" then
+            self:UpdateDragAt(self.pointerX, self.pointerY)
+        end
         return pane.view.scrollY == before
     end
     if kind == "search" then
@@ -84,7 +87,10 @@ function LayoutEditorDrag:BindDragSurface(surface, kind, onPress)
     surface:Subscribe(ui.Hook.ONMOUSEREPEAT, follow)
     -- Follow holds only on the surface owning this drag
     surface:Subscribe(ui.Hook.ONHOLD, function(component, x, y)
-        if self:OwnsDrag(surface) then follow(component, x, y) end
+        if self:OwnsDrag(surface) then
+            if self.drag.kind == "box" then self.drag.holdTicks = 0 end
+            follow(component, x, y)
+        end
         return false
     end)
     -- Forget the hover point when its surface is left
@@ -95,6 +101,7 @@ function LayoutEditorDrag:BindDragSurface(surface, kind, onPress)
     end)
     -- Start a press in the surface's fixed coordinates
     surface:Subscribe(ui.Hook.ONCLICK, function(_, x, y)
+        if self.drag ~= nil and self.drag.kind == "box" then self:CommitDrag() end
         if self.drag ~= nil then return false end
         if surface.hidden then return true end
         remember(x, y)
@@ -146,6 +153,11 @@ function LayoutEditorDrag:CreateDragSurfaces()
         self:BindDragSurface(surface, pane.name, function(x, y)
             -- A press here takes focus from any text field
             self.keysOnGrid = true
+            if pane.name == "sorted" and Keyboard.IsShiftDown() then
+                local index = self:SlotIndexAt(pane, x, y)
+                local slot = index ~= nil and pane.slots[index] or nil
+                if slot == nil or slot.kind ~= "item" then return self:BeginBoxSelection(x, y) end
+            end
             -- Label rows sit beneath this surface, so pressing one drags it
             local labelRow = self:LabelRowAt(pane, x, y)
             if labelRow ~= nil then return self:BeginLabelDrag(labelRow) end
@@ -179,15 +191,17 @@ function LayoutEditorDrag:StartDrag(drag, ghost, width, height)
     drag.sourceSurface = self.pointerSurface
     self.drag = drag
     drag.startX, drag.startY = self.pointerX, self.pointerY
-    ghost.alpha = GHOST_ALPHA
-    ghost:SetPos(self.pointerX - width // 2, self.pointerY - height // 2)
+    if ghost ~= nil then
+        ghost.alpha = GHOST_ALPHA
+        ghost:SetPos(self.pointerX - width // 2, self.pointerY - height // 2)
+    end
     local surface = drag.sourceSurface
     local clip = self.surfaceClips[surface]
     clip:SetPos(0, 0)
     clip:SetSize(Size.WIDTH, Size.HEIGHT)
     surface:SetPos(0, 0)
     clip:MoveToFront()
-    ghost:MoveToFront()
+    if ghost ~= nil then ghost:MoveToFront() end
     return false
 end
 
@@ -258,6 +272,7 @@ end
 -- Move the ghost and highlight its destination
 function LayoutEditorDrag:UpdateDragAt(x, y)
     local drag = self.drag
+    if drag.kind == "box" then return self:UpdateBoxSelection(x, y) end
     drag.ghost:SetPos(x - drag.ghostWidth // 2, y - drag.ghostHeight // 2)
     if math.abs(x - drag.startX) >= 4 or math.abs(y - drag.startY) >= 4 then drag.ghost.hidden = false end
     if drag.kind == "label" then
@@ -325,7 +340,13 @@ end
 -- Finish the drag at the latest native pointer position
 function LayoutEditorDrag:CommitDrag()
     local drag = self.drag
+    if drag == nil then return false end
     local x, y = self:ContentPointer()
+    if drag.kind == "box" then
+        if x ~= nil then self:UpdateBoxSelection(x, y) end
+        if self.drag ~= nil then self:CancelDrag(Keyboard.IsShiftDown()) end
+        return false
+    end
     self:CancelDrag()
     if x == nil then return false end
     if drag.kind == "layout" then
@@ -341,11 +362,19 @@ function LayoutEditorDrag:CommitDrag()
 end
 
 -- Remove the ghost and restore the pressed surface
-function LayoutEditorDrag:CancelDrag()
+function LayoutEditorDrag:CancelDrag(keepSelection)
     local drag = self.drag
     if drag == nil then return end
     self.drag = nil
-    drag.ghost:Destroy()
+    if drag.kind == "box" then
+        drag.fill:Destroy()
+        drag.border:Destroy()
+        if not keepSelection then
+            self.selectedLayoutKey, self.groupKeys, self.pasteCell = drag.selectedBefore, drag.groupBefore, drag.pasteBefore
+            self:ShowSelection()
+        end
+    end
+    if drag.ghost ~= nil then drag.ghost:Destroy() end
     if drag.highlight ~= nil then drag.highlight:Destroy() end
     if drag.preview ~= nil then self:ClearGroupPreview(drag) end
     self:PlaceDragSurface(drag.sourceSurface, drag.sourceKind)
