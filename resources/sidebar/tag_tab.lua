@@ -66,7 +66,7 @@ local function addText(parent, content, x, y, width, height, colour, maxLines)
     local text = ui.Text.new(parent)
     text:SetPos(x, y)
     text:SetSize(width, height)
-    text.content = content
+    text.content = Text.plain(content)
     text.font = id.Font.MUSEO_SANS_11PT_REGULAR
     text.rgba = colour
     text.isShadowed = true
@@ -108,7 +108,7 @@ function TagTab:RefreshStatus()
     local controls = self.controls
     if controls == nil then return end
     controls.statusBanner.hidden = self.app.status == nil
-    controls.statusText.content = self.app.status or ""
+    controls.statusText.content = Text.plain(self.app.status)
 end
 
 -- Draw the select-mode panel with its tag, help, and Done
@@ -196,7 +196,7 @@ function TagTab:BuildFooter(controls, height, width)
     owned[#owned + 1] = icon
     -- Show the Help icon's hovered appearance
     help:Subscribe(ui.Hook.ONMOUSEOVER, function()
-        icon.spriteID = NativeUi.SPRITES.HELP_BUTTON + 1
+        icon.spriteID = NativeUi.SPRITES.HELP_HOVER
         return false
     end)
     -- Restore the Help icon after the pointer leaves
@@ -206,12 +206,12 @@ function TagTab:BuildFooter(controls, height, width)
     end)
     -- Show the Help icon's pressed appearance
     help:Subscribe(ui.Hook.ONCLICK, function()
-        icon.spriteID = NativeUi.SPRITES.HELP_BUTTON + 2
+        icon.spriteID = NativeUi.SPRITES.HELP_PRESSED
         return false
     end)
     -- Restore the Help icon after release
     help:Subscribe(ui.Hook.ONRELEASE, function()
-        icon.spriteID = NativeUi.SPRITES.HELP_BUTTON + (help.isMouseOver and 1 or 0)
+        icon.spriteID = help.isMouseOver and NativeUi.SPRITES.HELP_HOVER or NativeUi.SPRITES.HELP_BUTTON
         return false
     end)
 end

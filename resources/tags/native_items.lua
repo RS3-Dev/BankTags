@@ -5,8 +5,7 @@ local Config = require("resources/core/config")
 local NativeItems = {}
 NativeItems.__index = NativeItems
 
-local BANK_INTERFACE = 517
-local ITEM_LAYER = 201
+local ITEM_LAYER = id.Component.BANK__BANK_INV
 local ITEM_HOOK = Config.PLUGIN_REF .. "_native_item"
 local WATCH_EVENT = Config.PLUGIN_REF .. "_native_items"
 local DROP_EVENT = Config.PLUGIN_REF .. "_native_drop"
@@ -20,7 +19,7 @@ local function itemLayer()
     -- Allow the bank to disappear while finding its items
     local ok, layer = pcall(function()
         if ui.Interfaces:GetComponent(id.Component.TOPLEVEL_V2__BANK_WINDOW) == nil then return nil end
-        return ui.Interfaces:GetComponent(BANK_INTERFACE, ITEM_LAYER)
+        return ui.Interfaces:GetComponent(ITEM_LAYER)
     end)
     return ok and layer or nil
 end

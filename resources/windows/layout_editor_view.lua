@@ -6,6 +6,7 @@ local BankGrid = require("resources/ui/bank_grid")
 local Theme = require("resources/ui/theme")
 local Parts = require("resources/windows/layout_editor_parts")
 local TagTabs = require("resources/windows/layout_editor_tabs")
+local Text = require("resources/core/text")
 local Size = Parts.size
 local rectangle, tiledSprite = Parts.rectangle, Parts.tiledSprite
 
@@ -98,20 +99,8 @@ function LayoutEditorView:CreatePane(name, parent, y, columnX, width, columns)
     }
 end
 
--- Draw one native panel heading
-local function panelHeading(parent, width, text)
-    local heading = prettyui.Text.new(parent, {
-        text = text, x = 8, y = Size.HEADER_Y, width = width - 16, height = Size.HEADER_HEIGHT,
-        colour = Theme.HEADING_TEXT, font = id.Font.MUSEO_SANS_15PT_REGULAR,
-        alignVertical = ui.AlignMode.CENTRE, maxLines = 1,
-    })
-    heading.clickthrough = true
-    return heading
-end
-
--- Draw the Unsorted heading and Layout tag tabs
+-- Draw the Layout tag tabs above the central grid
 function LayoutEditorView:CreateHeader()
-    self.unsortedTitle = panelHeading(self.unsortedPanel, Size.UNSORTED_WIDTH, "Unsorted")
     self.tagTabs = TagTabs.new(self.content, {
         x = Size.CENTER_X + Size.TABS_INSET, y = Size.TABS_Y,
         width = Size.CENTER_WIDTH - 2 * Size.TABS_INSET,
@@ -126,6 +115,17 @@ function LayoutEditorView:CreateHeader()
     })
 end
 
+-- Use the same borders, row spacing, and inset for both item lists
+function LayoutEditorView:CreateItemList(panel, width)
+    return prettyui.List.new(panel, {
+        x = Size.SEARCH_INSET, y = Size.SEARCH_LIST_TOP,
+        width = width, height = Size.SEARCH_LIST_HEIGHT,
+        entryHeight = Size.SEARCH_ROW_HEIGHT, maxSelected = 1,
+        backgroundColour = 0x00000000, borderColour = Theme.INNER_FRAME,
+        selectedColour = Theme.ROW_SELECTED,
+    })
+end
+
 -- Keep item search visible beside the layout
 function LayoutEditorView:CreateSearch()
     local inset, listTop = Size.SEARCH_INSET, Size.SEARCH_LIST_TOP
@@ -133,16 +133,10 @@ function LayoutEditorView:CreateSearch()
         x = inset, y = Size.SEARCH_FIELD_TOP,
         width = Size.SEARCH_VIEW_WIDTH, height = Size.SEARCH_FIELD_HEIGHT,
         placeholder = "Search items...", maxLength = 80,
-        onChange = function(_, _, value) self.keysOnGrid = false; self:RunSearch(value) end,
+        onChange = function(field, _, value) self.keysOnGrid = false; self:QueueSearch(Text.cleanField(field, value)) end,
         onSubmit = function(_, value) self:RunSearch(value) end,
     })
-    self.searchList = prettyui.List.new(self.searchPanel, {
-        x = inset, y = listTop,
-        width = Size.SEARCH_VIEW_WIDTH, height = Size.SEARCH_LIST_HEIGHT,
-        entryHeight = Size.SEARCH_ROW_HEIGHT, maxSelected = 1,
-        backgroundColour = 0x00000000, borderColour = Theme.INNER_FRAME,
-        selectedColour = Theme.ROW_SELECTED,
-    })
+    self.searchList = self:CreateItemList(self.searchPanel, Size.SEARCH_VIEW_WIDTH)
     self.searchHint = prettyui.Text.new(self.searchPanel, {
         text = "", x = inset + 8, y = listTop + 4,
         width = Size.SEARCH_VIEW_WIDTH - 16, height = 150,
@@ -193,7 +187,7 @@ function LayoutEditorView:CreatePanels()
             rectangle(panel, 0, 0, panel.width, Size.COLUMN_HEIGHT, FRAME, false)
         end
         -- Keep the sidebar's tiled background visible
-        if panel ~= self.searchPanel then
+        if panel == self.centerPanel then
             local height = Size.AREA_HEIGHT + (panel == self.centerPanel and Size.AREA_BOTTOM or 0)
             itemArea(panel, panel.width, Size.TAB_HEADER, height)
         end
@@ -202,14 +196,21 @@ function LayoutEditorView:CreatePanels()
     self.panes = {
         sorted = self:CreatePane("sorted", self.centerPanel, Size.TAB_HEADER + Size.VIEW_INSET,
             Size.CENTER_X, Size.CENTER_VIEW_WIDTH, Size.CENTER_COLUMNS),
-        unsorted = self:CreatePane("unsorted", self.unsortedPanel, Size.TAB_HEADER + Size.VIEW_INSET,
-            Size.UNSORTED_X, Size.UNSORTED_VIEW_WIDTH, Size.UNSORTED_COLUMNS),
     }
     self:CreateSearch()
+    self:CreateUnsorted()
     self:CreateActions()
     self:CreateDragSurfaces()
     self:RunSearch("")
     self:CreateItemNames()
+end
+
+-- Share exact cell positions between drawing, selection, tooltips, and input
+function LayoutEditorView:GridCellX(pane, column)
+    if pane.gridSpan ~= nil and pane.columns > 1 then
+        return pane.gridLeft + math.floor(column * pane.gridSpan / (pane.columns - 1) + 0.5)
+    end
+    return pane.gridLeft + column * Size.GRID_STEP
 end
 
 -- Draw only the rows belonging to this pane
@@ -218,8 +219,13 @@ function LayoutEditorView:DrawPane(pane, rowCount, labels)
     pane.labels, pane.rowCount = labels, rowCount
     local height = math.max(pane.height, BankGrid.RowItemY(rowCount, labels))
     pane.view:SetContentHeight(height)
-    local gridWidth = (columns - 1) * Size.GRID_STEP + Size.GRID_SLOT_SIZE
-    pane.gridLeft = pane.name == "unsorted" and (pane.view.contentWidth - gridWidth) // 2 or Size.GRID_LEFT
+    pane.gridLeft, pane.gridSpan = Size.GRID_LEFT, nil
+    if pane.name == "unsorted" then
+        -- Side padding matches the first row's top padding inside the border
+        pane.gridLeft = BankGrid.TOP
+        pane.gridSpan = math.max(0, pane.view.contentWidth - 2 * pane.gridLeft - Size.GRID_SLOT_SIZE)
+        if columns == 1 then pane.gridLeft = (pane.view.contentWidth - Size.GRID_SLOT_SIZE) // 2 end
+    end
     if pane.cells ~= nil then pane.cells:Destroy() end
     local cells = Parts.layer(pane.view.content, 0, 0, pane.width, height)
     pane.cells, pane.sprites = cells, {}
@@ -231,7 +237,7 @@ function LayoutEditorView:DrawPane(pane, rowCount, labels)
     for index = 1, rowCount * columns do
         local row = (index - 1) // columns
         if not labelRows[row] then
-            local x, y = pane.gridLeft + (index - 1) % columns * Size.GRID_STEP, BankGrid.RowItemY(row, labels)
+            local x, y = self:GridCellX(pane, (index - 1) % columns), BankGrid.RowItemY(row, labels)
             local grid = ui.Sprite.new(cells)
             grid:SetPos(x, y)
             grid:SetSize(Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE)
@@ -262,11 +268,12 @@ function LayoutEditorView:ShowSelection()
                 mark = rectangle(pane.marks, 0, 0, Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE, GOLD, false)
                 pane.outlines[count] = mark
             end
-            mark:SetPos(pane.gridLeft + (index - 1) % pane.columns * Size.GRID_STEP,
+            mark:SetPos(self:GridCellX(pane, (index - 1) % pane.columns),
                 BankGrid.RowItemY((index - 1) // pane.columns, pane.labels))
             mark.hidden = false
         end
-        for layoutKey, index in pairs(name == "sorted" and self.layout.sortedIndex or self.layout.unsortedIndex) do
+        for layoutKey, index in pairs(name == "sorted" and self.layout.sortedIndex
+            or pane.indexes or self.layout.unsortedIndex) do
             if self:IsSelected(layoutKey) then outline(index) end
         end
         if name == "sorted" and self.pasteCell ~= nil then outline(self.pasteCell) end
@@ -296,6 +303,14 @@ function LayoutEditorView:SlotIndexAt(pane, x, y)
     local row = self:RowAt(pane, x, y)
     if row == nil or self:LabelRowAt(pane, x, y) ~= nil then return nil end
     local column = (x - pane.gridLeft) // Size.GRID_STEP
+    if pane.gridSpan ~= nil then
+        column = nil
+        for candidate = 0, pane.columns - 1 do
+            local left = self:GridCellX(pane, candidate)
+            if x >= left and x < left + Size.GRID_SLOT_SIZE then column = candidate; break end
+        end
+        if column == nil then return nil end
+    end
     if column >= pane.columns then return nil end
     return row * pane.columns + column + 1
 end

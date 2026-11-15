@@ -18,7 +18,8 @@ function LayoutEditorDrag:PlaceDragSurface(surface, kind)
     local pane = self.panes[kind]
     if pane ~= nil then
         clip:SetPos(pane.x, pane.y)
-        clip:SetSize(pane.width - Size.SCROLLBAR_RESERVE, pane.height)
+        local width = pane.name == "unsorted" and pane.view.contentWidth or nil
+        clip:SetSize(width or pane.width - Size.SCROLLBAR_RESERVE, pane.height)
     else
         clip:SetPos(Size.SEARCH_X + Size.SEARCH_INSET, Size.PANEL_TOP + Size.SEARCH_LIST_TOP)
         clip:SetSize(Size.SEARCH_VIEW_WIDTH - Size.SCROLLBAR_RESERVE, Size.SEARCH_LIST_HEIGHT)

@@ -2,6 +2,7 @@
 
 local BankGrid = require("resources/ui/bank_grid")
 local Theme = require("resources/ui/theme")
+local Text = require("resources/core/text")
 local SidebarRows = require("resources/ui/sidebar_rows")
 
 local Parts = {}
@@ -12,15 +13,16 @@ Parts.size = Size
 Size.SIDEBAR_WIDTH = 32 + 8 + 244
 Size.DEFAULT_WIDTH = 714 + Size.SIDEBAR_WIDTH
 Size.DEFAULT_HEIGHT = 650
+-- Core's bank bounds omit the frame surrounding the editor's matching interior
+Size.WINDOW_BORDER = 8
 -- Leave a small inset below the title bar
 Size.PANEL_TOP = 6
 Size.DEFAULT_PANEL_HEIGHT = 600
 -- Each column draws its items in one framed area, its view inset alike
 Size.VIEW_INSET = 4
 Size.COLUMN_GAP = 6
--- Keep Unsorted five columns wide
+-- Keep both side panels aligned around the central layout
 Size.UNSORTED_X = 8
-Size.UNSORTED_COLUMNS = 5
 -- The right column ends where the window's border begins
 Size.RIGHT_MARGIN = 20
 -- The editor grid starts 4px in, not the bank's 8px
@@ -38,10 +40,6 @@ Size.LABEL_GHOST_HEIGHT = 28
 Size.DEFAULT_CENTER_WIDTH = 474
 -- PrettyUI reserves this much for a scroll list's scrollbar and its gap
 Size.SCROLLBAR_RESERVE = 18
--- Fit five cells, their gaps, padding, and a scrollbar
-Size.UNSORTED_WIDTH = (Size.UNSORTED_COLUMNS - 1) * Size.GRID_STEP + Size.GRID_SLOT_SIZE
-    + Size.SCROLLBAR_RESERVE + 2 * Size.VIEW_INSET + 10
-Size.CENTER_X = Size.UNSORTED_X + Size.UNSORTED_WIDTH + Size.COLUMN_GAP
 -- Place Layout and Unsorted headings above their items
 Size.TAB_HEADER = 42
 Size.HEADER_HEIGHT = 20
@@ -72,16 +70,20 @@ function Parts.SizeToBank(columns, bankWidth, bankHeight)
     Size.CENTER_COLUMNS = columns
     -- Labels span the sorted grid's cells
     Size.LABEL_WIDTH = columns * Size.GRID_STEP - (Size.GRID_STEP - Size.GRID_SLOT_SIZE)
-    Size.WIDTH = Size.DEFAULT_WIDTH + extraWidth
-    Size.HEIGHT = Size.DEFAULT_HEIGHT + extraHeight
-    Size.PANEL_HEIGHT = Size.DEFAULT_PANEL_HEIGHT + extraHeight
-    Size.CENTER_WIDTH = Size.DEFAULT_CENTER_WIDTH + extraWidth
+    local frameSize = 2 * Size.WINDOW_BORDER
+    Size.WIDTH = Size.DEFAULT_WIDTH + extraWidth + frameSize
+    Size.HEIGHT = Size.DEFAULT_HEIGHT + extraHeight + frameSize
+    Size.PANEL_HEIGHT = Size.DEFAULT_PANEL_HEIGHT + extraHeight + frameSize
+    Size.CENTER_WIDTH = Size.DEFAULT_CENTER_WIDTH + extraWidth + frameSize
     Size.CENTER_VIEW_WIDTH = Size.CENTER_WIDTH - 2 * Size.VIEW_INSET
+    Size.UNSORTED_WIDTH = (Size.WIDTH - Size.CENTER_WIDTH - 2 * Size.COLUMN_GAP
+        - Size.UNSORTED_X - Size.RIGHT_MARGIN) // 2
+    Size.CENTER_X = Size.UNSORTED_X + Size.UNSORTED_WIDTH + Size.COLUMN_GAP
     -- Keep Search fixed while wider banks expand Layout
     Size.SEARCH_X = Size.CENTER_X + Size.CENTER_WIDTH + Size.COLUMN_GAP
     Size.SEARCH_WIDTH = Size.WIDTH - Size.RIGHT_MARGIN - Size.SEARCH_X
     Size.SEARCH_VIEW_WIDTH = SidebarRows.ContentWidth(Size.SEARCH_WIDTH)
-    Size.UNSORTED_VIEW_WIDTH = Size.UNSORTED_WIDTH - 2 * Size.VIEW_INSET
+    Size.UNSORTED_VIEW_WIDTH = SidebarRows.ContentWidth(Size.UNSORTED_WIDTH)
     -- The actions end the panel; a taller bank grows both columns above them
     Size.ACTIONS_Y = Size.PANEL_HEIGHT - Size.BUTTON_HEIGHT
     Size.COLUMN_HEIGHT = Size.ACTIONS_Y - Size.ACTIONS_GAP
@@ -136,7 +138,7 @@ end
 -- Draw a heading above a separator line
 function Parts.heading(parent, x, y, width, text)
     prettyui.Text.new(parent, {
-        text = text,
+        text = Text.plain(text),
         x = x, y = y, width = width, height = Size.LABEL_LINE_OFFSET,
         colour = Theme.HEADING_TEXT,
         font = id.Font.MUSEO_SANS_11PT_REGULAR,

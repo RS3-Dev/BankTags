@@ -6,6 +6,28 @@ local Theme = require("resources/ui/theme")
 
 local TutorialView = {}
 local WIDTH, HEIGHT = 521, 144
+local FLASH_YELLOW = {
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_1_0,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_1_1,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_1_2,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_1_3,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_1_4,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_1_5,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_1_6,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_1_7,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_1_8,
+}
+local FLASH_WHITE = {
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_2_0,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_2_1,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_2_2,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_2_3,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_2_4,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_2_5,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_2_6,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_2_7,
+    id.Sprite.AIF_EXAMINE_HIGHLIGHT_2_8,
+}
 
 -- Read native coordinates without converting mouse pixels
 local function position(component)
@@ -29,13 +51,13 @@ local function rectangle(parent, colour)
 end
 
 -- Build the native highlight's nine sprite pieces
-local function flashFrame(parent, firstSprite)
+local function flashFrame(parent, sprites)
     local root = ui.Layer.new(parent)
     root.clickthrough = true
     local parts = {}
-    for index = 1, 9 do
+    for index, spriteID in ipairs(sprites) do
         local part = ui.Sprite.new(root)
-        part.spriteID = firstSprite + index - 1
+        part.spriteID = spriteID
         part.clickthrough = true
         part.isTiling = true
         parts[index] = part
@@ -131,8 +153,8 @@ function TutorialView:CreateView(stepCount, rootKey)
     self.highlight = ui.Layer.new(self.root)
     self.highlight.clickthrough = true
     -- TOPLEVEL_V2's FLASH_YELLOW and FLASH_WHITE nine-piece frames
-    self.flashYellow = flashFrame(self.highlight, 11602)
-    self.flashWhite = flashFrame(self.highlight, 11611)
+    self.flashYellow = flashFrame(self.highlight, FLASH_YELLOW)
+    self.flashWhite = flashFrame(self.highlight, FLASH_WHITE)
     self.arrow = ui.Sprite.new(self.root)
     self.arrow.spriteID = NativeUi.SPRITES.TUTORIAL_POINTER
     self.arrow:SetSize(41, 54)

@@ -1,0 +1,11 @@
+{
+  "name": "Bank Tags Click Test",
+  "version": "0.0.2",
+  "contactEmailAddress": "plugins@rs3.dev",
+  "hasRibbonIcon": false,
+  "hasSettingsIcon": false,
+  "requiredDependencies": { "prettyui": 6398181 },
+  "optionalDependencies": {},
+  "requiredPermissions": [],
+  "optionalPermissions": []
+}

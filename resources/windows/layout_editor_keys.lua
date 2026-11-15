@@ -33,6 +33,7 @@ function LayoutEditorKeys:StartShortcuts()
         return true
     end
     self.itemSearch.root:Subscribe(ui.Hook.ONCLICK, KEY_EVENT, takeKeys)
+    if self.unsortedSearch ~= nil then self.unsortedSearch.root:Subscribe(ui.Hook.ONCLICK, KEY_EVENT, takeKeys) end
 end
 
 -- Stop listening for shortcut keys

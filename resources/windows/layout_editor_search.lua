@@ -8,8 +8,10 @@ local Parts = require("resources/windows/layout_editor_parts")
 local Size = Parts.size
 
 local SEARCH_RESULT_LIMIT = 100
+local SEARCH_OPTIONS = { bankableOnly = true, includeFields = false }
 local SEARCH_ICON_SIZE = 24
 local ROW_HEIGHT = Size.SEARCH_ROW_HEIGHT
+local SEARCH_DELAY_TICKS = 3
 
 local LayoutEditorSearch = {}
 
@@ -22,14 +24,31 @@ end
 -- Add the limited-search note when RuneQL is missing
 local function withLimit(message)
     if Catalog.IsFull() then return message end
-    return message .. " " .. Catalog.LIMITED_HINT
+    return message .. " Without RuneQL search support, only items in your bank can be found."
+end
+
+-- Coalesce typing into one name lookup after a short pause
+function LayoutEditorSearch:QueueSearch(value)
+    local query = Text.trim(value)
+    if query == "" then return self:RunSearch("") end
+    self.pendingSearch = query
+    self.searchDelayTicks = SEARCH_DELAY_TICKS
+end
+
+function LayoutEditorSearch:TickSearch()
+    if self.pendingSearch == nil then return end
+    self.searchDelayTicks = self.searchDelayTicks - 1
+    if self.searchDelayTicks <= 0 then self:RunSearch(self.pendingSearch) end
 end
 
 -- Show item matches or explain an unavailable search
 function LayoutEditorSearch:RunSearch(value)
+    self.pendingSearch, self.searchDelayTicks = nil, nil
     local query = Text.trim(value)
     local ok, results = true, {}
-    if query ~= "" then ok, results = pcall(Catalog.Find, query, SEARCH_RESULT_LIMIT, self.bankItemList) end
+    if query ~= "" then
+        ok, results = pcall(Catalog.Find, query, SEARCH_RESULT_LIMIT, self.bankItemList, SEARCH_OPTIONS)
+    end
     if not ok then
         debugLog("Bank Tags could not search items: ", results)
         results = {}
@@ -43,21 +62,27 @@ function LayoutEditorSearch:RunSearch(value)
     else
         self:SetSearchHint(#results == 0 and withLimit("No items match that search.") or nil)
     end
-    -- Add each item's sprite to its search row
-    for index, row in ipairs(self.searchList.rows) do
+    self:DrawSearchIcons(self.searchList, results)
+    self.searchDragSurface:MoveToFront()
+end
+
+-- Place the same icon and name in either side panel's result rows
+function LayoutEditorSearch:DrawSearchIcons(list, results, sprites, bankStyles)
+    for index, row in ipairs(list.rows) do
         local icon = ui.Sprite.new(row.root)
         icon:SetPos(7, (ROW_HEIGHT - SEARCH_ICON_SIZE) // 2)
         icon:SetSize(SEARCH_ICON_SIZE, SEARCH_ICON_SIZE)
         icon:SetAssociatedObject(results[index].objectId)
         icon.outlineWidth = 1
-        icon.associatedObjectQuantityMode = ui.ObjectQuantityDisplayMode.NEVER
+        if bankStyles then self:StyleItem(icon, results[index].objectId, true)
+        else icon.associatedObjectQuantityMode = ui.ObjectQuantityDisplayMode.NEVER end
+        if sprites ~= nil then sprites[index] = icon end
         icon.clickthrough = true
         row.label:SetPos(38, 0)
         -- Follow row width so scrolling and name tooltips agree
         row.label:SetSize(-44, ROW_HEIGHT, 1.0, 0)
         row.label:MoveToFront()
     end
-    self.searchDragSurface:MoveToFront()
 end
 
 -- Build named rows for item search results
@@ -66,7 +91,7 @@ function LayoutEditorSearch:SearchEntries(results)
     for row, result in ipairs(results) do
         entries[row] = {
             id = row,
-            label = result.displayName,
+            label = Text.plain(result.displayName),
             backgroundColour = row % 2 == 1 and Theme.ROW_ODD or Theme.ROW_EVEN,
             hoverColour = Theme.ROW_HOVER,
             selectedColour = Theme.ROW_SELECTED,

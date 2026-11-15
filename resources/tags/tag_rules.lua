@@ -1,7 +1,6 @@
 -- Check tag names, folder names, labels, and layouts before saving or sharing
 
 local Text = require("resources/core/text")
-local trim = Text.trim
 
 local TagRules = {}
 
@@ -20,7 +19,7 @@ end
 
 -- Clean a tag name and check its length
 function TagRules.normalizeTag(value)
-    local name = string.lower(trim(value))
+    local name = string.lower(Text.plain(value))
     if name == "" or #name > TagRules.MAX_TAG_NAME
         or string.find(name, ",", 1, true) then return nil end
     return name
@@ -28,14 +27,14 @@ end
 
 -- Clean a folder name and its lookup key
 function TagRules.folderName(value)
-    local name = trim(value):gsub("%s+", " ")
+    local name = Text.plain(value):gsub("%s+", " ")
     if name == "" or #name > TagRules.MAX_FOLDER_NAME then return nil, nil end
     return string.lower(name), name
 end
 
--- Clean label text, dropping markup angle brackets
+-- Clean label text, dropping complete markup tags
 function TagRules.labelText(value)
-    local text = trim((tostring(value or ""):gsub("[<>]", ""))):gsub("%s+", " ")
+    local text = Text.plain(value):gsub("%s+", " ")
     if text == "" then return nil end
     return string.sub(text, 1, TagRules.MAX_LABEL_TEXT)
 end

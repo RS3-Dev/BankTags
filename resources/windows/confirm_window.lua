@@ -1,6 +1,7 @@
 -- Confirm a removal using PrettyUI's shared dialog lifecycle and actions
 
 local Theme = require("resources/ui/theme")
+local Text = require("resources/core/text")
 
 local ConfirmWindow = {}
 ConfirmWindow.__index = ConfirmWindow
@@ -9,26 +10,47 @@ ConfirmWindow.__index = ConfirmWindow
 function ConfirmWindow.new(parent, options)
     local self = setmetatable({ closed = false }, ConfirmWindow)
     self.dialog = prettyui.Dialog.new(parent, {
-        title = options.title, width = 340, height = 164, modal = false,
+        title = options.title, width = options.messageLines ~= nil and 420 or 340, height = 164, modal = false,
         -- Draw the removal question inside the dialog
         content = function(window)
+            local width = window.contentWidth
             self.message = window:AddText({
-                text = options.message, x = 16, y = 18, width = 292, height = 52, maxLines = 4,
-                colour = Theme.TEXT, alignHorizontal = ui.AlignMode.CENTRE,
+                text = Text.sanitize(options.messageLines ~= nil and options.messageLines[1] or options.message),
+                x = 16, y = 12, width = width - 32,
+                height = options.messageLines ~= nil and 40 or 64,
+                maxLines = options.messageLines ~= nil and 2 or 4,
+                colour = Theme.TEXT, alignHorizontal = ui.AlignMode.CENTRE, alignVertical = ui.AlignMode.CENTRE,
             })
+            if options.messageLines ~= nil then
+                self.question = window:AddText({
+                    text = Text.sanitize(options.messageLines[2]),
+                    x = 16, y = 54, width = width - 32, height = 22, maxLines = 1,
+                    colour = Theme.TEXT, alignHorizontal = ui.AlignMode.CENTRE, alignVertical = ui.AlignMode.CENTRE,
+                })
+            end
+            local buttonWidth, gap = 128, 12
+            local left = math.floor((width - 2 * buttonWidth - gap) / 2)
+            window:AddSimpleButton("Cancel", function()
+                self.closed = true
+                self.dialog:Destroy()
+            end, { x = left, y = -36, yAnchor = 1, width = buttonWidth, height = 28 })
+            -- A failed removal stays open and shows its reason
+            window:AddSimpleButton(options.confirmLabel, function()
+                local saved, reason = options.onConfirm()
+                if saved then
+                    self.closed = true
+                    self.dialog:Destroy()
+                    return
+                end
+                self.message.content = Text.plain(reason or options.failureText)
+                self.message.rgba = Theme.ERROR_TEXT
+                self.message.maxLines = 4
+                self.message:SetSize(width - 32, 64)
+                if self.question ~= nil then self.question.hidden = true end
+            end, { x = left + buttonWidth + gap, y = -36, yAnchor = 1, width = buttonWidth, height = 28 })
         end,
         onDismiss = function() self.closed = true end,
-        actions = {
-            { label = "Cancel", onClick = function() self.closed = true; return true end },
-            -- Keep rejected removals open with their failure reason
-            { label = options.confirmLabel, onClick = function()
-                local saved, reason = options.onConfirm()
-                if saved then self.closed = true; return true end
-                self.message.content = tostring(reason or options.failureText)
-                self.message.rgba = Theme.ERROR_TEXT
-                return false
-            end },
-        },
+        actions = {},
     })
     self.window = self.dialog.window
     return self
@@ -43,7 +65,7 @@ end
 function ConfirmWindow:Destroy()
     self.closed = true
     self.dialog:Destroy()
-    self.window, self.message = nil, nil
+    self.window, self.message, self.question = nil, nil, nil
 end
 
 return ConfirmWindow

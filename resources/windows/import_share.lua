@@ -1,6 +1,7 @@
 -- Preview imported tags and display share codes
 
 local Config = require("resources/core/config")
+local Text = require("resources/core/text")
 local TagRules = require("resources/tags/tag_rules")
 
 local Draft = require("resources/windows/import_share_draft")
@@ -94,7 +95,7 @@ function ImportShare.new(parent, options)
         maxLines = 1,
         placeholder = "Paste a shared tag code or backup...",
         font = id.Font.MUSEO_SANS_11PT_REGULAR,
-        onChange = function(_, _, content) self:RefreshImportPreview(content) end,
+        onChange = function(field, _, content) self:RefreshImportPreview(Text.cleanField(field, content)) end,
     })
     self.controls.importNameLabel = text(importPage.content, "Tag name", 98, {
         width = 404, height = 20, maxLines = 1,
@@ -108,6 +109,7 @@ function ImportShare.new(parent, options)
         x = 18, y = 127, width = 404, height = 30,
         placeholder = "Tag name", maxLength = 80, maxLines = 1,
         disabled = true,
+        onChange = function(field, _, value) Text.cleanField(field, value) end,
     })
     self.importSpriteSlot = prettyui.ItemSlot.new(importPage.content, nil, {
         x = 430, y = 122, clickthrough = false, disabled = true,
@@ -136,6 +138,7 @@ function ImportShare.new(parent, options)
         x = 18, y = FOLDER_NAME_Y, width = 452, height = 30,
         placeholder = "New folder name", maxLength = TagRules.MAX_FOLDER_NAME,
         maxLines = 1, disabled = true,
+        onChange = function(field, _, value) Text.cleanField(field, value) end,
     })
     self.importFolderName.root.hidden = true
     -- Import the preview after the player's explicit choice
@@ -163,8 +166,11 @@ function ImportShare.new(parent, options)
         font = id.Font.CINZEL_13PT_BOLD,
     })
     self.controls.shareCopy = text(sharePage.content,
-        "Each field contains one compact tag group. Click a field, then press Ctrl+A and Ctrl+C.",
-        38, { height = 32, maxLines = 2 })
+        "Click a code field.",
+        38, { height = 18, maxLines = 1, font = id.Font.MUSEO_SANS_11PT_REGULAR })
+    self.controls.shareCopyShortcut = text(sharePage.content,
+        "Press Ctrl+A, then Ctrl+C to copy the tag.",
+        56, { height = 18, maxLines = 1, font = id.Font.MUSEO_SANS_11PT_REGULAR })
     self:RefreshExports()
     self:RefreshImportPreview("")
     return self
@@ -172,7 +178,7 @@ end
 
 -- Show feedback in green, red, or a given colour
 function ImportShare:SetPageStatus(control, value, success)
-    control.content = tostring(value or "")
+    control.content = Text.plain(value)
     control.rgba = success and STATUS_SUCCESS or STATUS_ERROR
     control.hidden = value == nil or value == ""
 end
@@ -190,7 +196,7 @@ end
 -- Create a row to copy each tag's share code
 function ImportShare:RebuildShareRows(exports)
     self:DestroyShareRows()
-    local startY = 74
+    local startY = 82
     local rowHeight = 34
     for index, export in ipairs(exports) do
         local root = ui.Layer.new(self.sharePage.content)
@@ -198,7 +204,7 @@ function ImportShare:RebuildShareRows(exports)
         root:SetSize(452, 30)
         root.clickthrough = true
         local label = prettyui.Text.new(root, {
-            text = export.tag,
+            text = Text.plain(export.tag),
             x = 0,
             y = 0,
             width = 202,
@@ -206,9 +212,9 @@ function ImportShare:RebuildShareRows(exports)
             colour = export.value ~= nil and 0xD8CCAEFF or 0xE57373FF,
             maxLines = 1,
             alignVertical = ui.AlignMode.CENTRE,
-            tooltip = export.reason,
+            tooltip = export.reason ~= nil and Text.plain(export.reason) or nil,
         })
-        local value = export.value or tostring(export.reason or "Unavailable")
+        local value = Text.sanitize(export.value or tostring(export.reason or "Unavailable"))
         local tooLarge = #value > Config.LONG_INPUT_LIMIT
         if tooLarge then
             value = "Too large for the game field (" .. tostring(#value) .. " characters)"

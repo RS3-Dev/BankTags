@@ -12,6 +12,7 @@ LayoutEditorWindow.__index = LayoutEditorWindow
 -- Combine the editor's drawing and input helpers
 for _, methods in ipairs({
     require("resources/windows/layout_editor_view"),
+    require("resources/windows/layout_editor_unsorted"),
     require("resources/windows/layout_editor_rows"),
     require("resources/windows/layout_editor_drag"),
     require("resources/windows/layout_editor_search"),
@@ -66,8 +67,8 @@ function LayoutEditorWindow.new(parent, options)
     Parts.SizeToBank(self.columns, self.bounds.width, self.bounds.height)
     self.window = prettyui.Window.new(parent, {
         title = "Bank Layout Editor",
-        x = self.bounds.x,
-        y = self.bounds.y,
+        x = self.bounds.x - Size.WINDOW_BORDER,
+        y = self.bounds.y - Size.WINDOW_BORDER,
         xAnchor = 0,
         yAnchor = 0,
         width = Size.WIDTH,
@@ -125,7 +126,8 @@ function LayoutEditorWindow:Show()
     if window == nil then return end
     self:HideItemName()
     local root, bounds = window.root, self.bounds
-    if root.x ~= bounds.x or root.y ~= bounds.y then root:SetPos(bounds.x, bounds.y, 0, 0) end
+    local x, y = bounds.x - Size.WINDOW_BORDER, bounds.y - Size.WINDOW_BORDER
+    if root.x ~= x or root.y ~= y then root:SetPos(x, y, 0, 0) end
     -- Show raises a PrettyUI window with its overlays
     window:Show()
     for _, overlay in ipairs(self.overlayWindows) do
@@ -144,7 +146,7 @@ end
 
 -- Show an error beside the footer actions
 function LayoutEditorWindow:ShowError(message, colour)
-    self.status.content = message or "Something went wrong."
+    self.status.content = Text.plain(message or "Something went wrong.")
     self.status.rgba = colour or Theme.ERROR_TEXT
 end
 
@@ -203,20 +205,19 @@ end
 function LayoutEditorWindow:RefreshCenter()
     self:CancelDrag()
     local layout = self.store:EditorLayout(self.selectedTag, Size.CENTER_COLUMNS)
-    local sorted, unsorted = self.panes.sorted, self.panes.unsorted
+    local sorted = self.panes.sorted
     self.layout = layout
-    self.unsortedTitle.content = "Unsorted (" .. #layout.unsorted .. ")"
-    sorted.slots, unsorted.slots = layout.slots, layout.unsorted
+    sorted.slots = layout.slots
     -- A group keeps only the items still sorted
     self:PruneSelection()
     self:DrawPane(sorted, layout.lines, layout.labels)
-    -- Unsorted packs its items at its own columns
-    self:DrawPane(unsorted, math.ceil(#layout.unsorted / unsorted.columns), {})
+    self:RefreshUnsorted()
     self:ShowSelection()
 end
 
 -- Follow item names and periodically check the bank's position
 function LayoutEditorWindow:FollowHoverAndBank()
+    self:TickSearch()
     self:TickBoxSelection()
     self:UpdateItemName()
     self.bankCheckTicks = self.bankCheckTicks + 1
@@ -308,7 +309,7 @@ function LayoutEditorWindow:Destroy(closing)
     if onClose ~= nil then onClose(self) end
     self:DestroyItemNames()
     for _, control in ipairs({
-        self.panes.sorted.view, self.panes.unsorted.view, self.itemSearch, self.searchList, self.tagTabs,
+        self.panes.sorted.view, self.panes.unsorted.view, self.unsortedSearch, self.itemSearch, self.searchList, self.tagTabs,
         self.copyButton, self.pasteButton, self.removeButton, self.addRowButton, self.newLabelButton,
         self.closeButton,
     }) do

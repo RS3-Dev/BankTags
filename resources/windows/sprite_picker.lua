@@ -61,6 +61,7 @@ function SpritePicker.new(parent, options)
         maxLength = 80,
         placeholder = "Search item names...",
         onSubmit = function(_, value) self:RunSearch(value) end,
+        onChange = function(field, _, value) Text.cleanField(field, value) end,
     })
     -- Search using the text currently entered
     self.button = prettyui.SimpleButton.new(content, "Search", function()
@@ -98,7 +99,7 @@ end
 -- Show a status message in the picker
 function SpritePicker:SetStatus(message, colour)
     if self.status == nil then return end
-    self.status.content = tostring(message or "")
+    self.status.content = Text.plain(message)
     self.status.rgba = colour or MUTED
 end
 
@@ -135,7 +136,7 @@ function SpritePicker:ShowResults(results, totalMatches, limited)
             hit:SetSize(SLOT_SIZE, SLOT_SIZE)
             hit.clickthrough = false
             hit:MoveToFront()
-            local tooltipText = tostring(result.displayName)
+            local tooltipText = Text.plain(result.displayName)
             local tooltip = prettyui.Tooltip.attach(slot.root, self.grid.root, tooltipText)
             -- Show the hovered search item's name
             hit:Subscribe(ui.Hook.ONMOUSEOVER, function()

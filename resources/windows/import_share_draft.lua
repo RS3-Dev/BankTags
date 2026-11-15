@@ -3,6 +3,7 @@
 local TagData = require("resources/tags/tag_data")
 local ItemIdentity = require("resources/tags/item_identity")
 local ObjectConfig = require("resources/core/object_config")
+local Text = require("resources/core/text")
 
 local ImportDraft = {}
 
@@ -93,7 +94,7 @@ function ImportDraft:RefreshImportFolders(selectedID)
         local entryID = IMPORT_FOLDER_PREFIX .. key
         if available[entryID] then return end
         available[entryID] = true
-        entries[#entries + 1] = { id = entryID, label = name, order = #entries + 1 }
+        entries[#entries + 1] = { id = entryID, label = Text.plain(name), order = #entries + 1 }
     end
     for _, folder in ipairs(folders) do addFolder(folder.key, folder.name) end
     if self.importSingleTag ~= nil then

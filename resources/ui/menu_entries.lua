@@ -1,8 +1,7 @@
 -- Find and position added menu actions in the client's order
 
 local MenuEntries = {}
-
-local NAME_COLOUR = "f2c66d"
+local Text = require("resources/core/text")
 
 -- Find the Cancel entry
 local function cancelIndex(menu)
@@ -32,8 +31,8 @@ end
 
 -- Write an entry's label, with its subject in gold
 function MenuEntries.Text(label, subject)
-    if subject == nil then return label end
-    return label .. " <col=" .. NAME_COLOUR .. ">" .. subject .. "</col>"
+    if subject == nil then return Text.plain(label) end
+    return Text.plain(label) .. " " .. Text.plain(subject)
 end
 
 -- Add one entry and find where the host put it

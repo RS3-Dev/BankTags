@@ -42,12 +42,19 @@ local function result(objectID, name)
         displayName = name, name = name }
 end
 
+-- Noted item configs are useful as icons but cannot occupy bank layout slots
+local function allowedConfig(configName, options)
+    return not (options ~= nil and options.bankableOnly
+        and type(configName) == "string" and string.sub(configName, 1, 5) == "CERT_")
+end
+
 -- Search RuneQL and keep items this client recognizes
-local function findFull(find, query, limit)
-    local results, total = find(query, limit)
+local function findFull(find, query, limit, options)
+    local results, total, reason = find(query, limit, options)
+    if results == nil and reason ~= nil then error(reason) end
     local resolved = {}
     for _, entry in ipairs(results or {}) do
-        local objectID = ObjectConfig.ObjectID(entry.configName)
+        local objectID = allowedConfig(entry.configName, options) and ObjectConfig.ObjectID(entry.configName) or nil
         if objectID ~= nil and #resolved < limit then
             resolved[#resolved + 1] = {
                 objectId = objectID,
@@ -62,13 +69,19 @@ local function findFull(find, query, limit)
 end
 
 -- Search exact references and unique bank item names
-local function findLimited(query, limit, bankItems)
+local function findLimited(query, limit, bankItems, options)
     local resolved, seen = {}, {}
+    local bankIDs
+    if options ~= nil and options.bankableOnly then
+        bankIDs = {}
+        for _, item in ipairs(bankItems or {}) do bankIDs[item.objectID] = true end
+    end
     -- Add one object once, while there is room
-    local function add(objectID)
+    local function add(objectID, name)
         if objectID == nil or seen[objectID] or #resolved >= limit then return end
-        local entry = result(objectID)
-        if entry ~= nil then
+        if bankIDs ~= nil and not bankIDs[objectID] then return end
+        local entry = result(objectID, name)
+        if entry ~= nil and allowedConfig(entry.configName, options) then
             seen[objectID] = true
             resolved[#resolved + 1] = entry
         end
@@ -83,8 +96,7 @@ local function findLimited(query, limit, bankItems)
             checked[item.objectID] = true
             local name = ObjectConfig.DisplayName(item.objectID)
             if name ~= nil and string.find(string.lower(name), wanted, 1, true) ~= nil then
-                seen[item.objectID] = true
-                resolved[#resolved + 1] = result(item.objectID, name)
+                add(item.objectID, name)
             end
         end
     end
@@ -92,13 +104,13 @@ local function findLimited(query, limit, bankItems)
 end
 
 -- Search item names, returning results, total, and whether limited
-function Catalog.Find(query, limit, bankItems)
+function Catalog.Find(query, limit, bankItems, options)
     local find = runeqlFind()
     if find ~= nil then
-        local results, total = findFull(find, query, limit)
+        local results, total = findFull(find, query, limit, options)
         return results, total, false
     end
-    local results, total = findLimited(query, limit, bankItems)
+    local results, total = findLimited(query, limit, bankItems, options)
     return results, total, true
 end
 

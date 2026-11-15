@@ -3,23 +3,18 @@
 local NativeUi = {}
 
 NativeUi.SPRITES = {
-    PANEL_BACKGROUND = 8082,
-    TUTORIAL_INFO = 9966,
-    TUTORIAL_POINTER = 21393,
-    TUTORIAL_NAV_ARROW = 9403,
-    HELP_BUTTON = 36389,
-}
-
-local STYLE_FALLBACK_IDS = {
-    BUTTON_PANEL = 318,
+    PANEL_BACKGROUND = id.Sprite.OLD_BACKGROUND_TEXTURE,
+    TUTORIAL_INFO = id.Sprite.TUTSYS_INFO_ICON,
+    TUTORIAL_POINTER = id.Sprite.RS3_INFO_DISPLAY_POINTER,
+    TUTORIAL_NAV_ARROW = id.Sprite.RS3_ICON_CALENDAR_NAVIGATION_24PX_0,
+    HELP_BUTTON = id.Sprite.RS3_ICON_INFO_21PX_2,
+    HELP_HOVER = id.Sprite.RS3_ICON_INFO_21PX_3,
+    HELP_PRESSED = id.Sprite.RS3_ICON_INFO_21PX_4,
 }
 
 -- Look up a native style ID by name
 function NativeUi.styleID(styleName)
-    if id ~= nil and id.StyleSheet ~= nil and id.StyleSheet[styleName] ~= nil then
-        return id.StyleSheet[styleName]
-    end
-    return STYLE_FALLBACK_IDS[styleName]
+    return id.StyleSheet[styleName]
 end
 
 -- Create a native-style text button

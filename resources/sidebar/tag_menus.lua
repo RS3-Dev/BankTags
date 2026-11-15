@@ -250,6 +250,8 @@ function TagMenus:AddEditorEntries(menu)
         MenuEntries.AddTop(menu, {
             { label = "Add row", action = chosen(function() editor:InsertEmptyRow(0) end) },
         })
+        -- Empty-space clicks belong to the editor, not a default mini-menu action
+        MenuEntries.PromoteCancel(menu)
         self.rowMenu = rowMenu
         return
     end
@@ -271,6 +273,7 @@ function TagMenus:AddEditorEntries(menu)
         title = "Edit row", position = target.layoutKey ~= nil and 2 or "top",
     })
     MenuEntries.PlaceSubmenu(menu, "Edit row <col=ffffff><gt></col>", position)
+    if target.layoutKey == nil then MenuEntries.PromoteCancel(menu) end
     self.rowMenu = rowMenu
 end
 

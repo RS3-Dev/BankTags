@@ -4,7 +4,8 @@ local Json = require("resources/core/json")
 local TagRules = require("resources/tags/tag_rules")
 local TagLayouts = require("resources/tags/tag_layouts")
 local ItemIdentity = require("resources/tags/item_identity")
-local trim = require("resources/core/text").trim
+local Text = require("resources/core/text")
+local trim = Text.trim
 
 local TagData = {}
 
@@ -28,16 +29,27 @@ end
 
 -- Write an item's reference or its reserved blank
 local function slotText(slot)
-    if slot.kind ~= "item" then return slot.dormant or "" end
-    return ItemIdentity.Reference(slot.objectID)
+    if slot.kind ~= "item" then return Text.sanitize(slot.dormant or "") end
+    return Text.sanitize(ItemIdentity.Reference(slot.objectID))
 end
 
 -- Read one saved slot, keeping unresolved items as blanks
 local function readSlot(text)
     if type(text) ~= "string" or text == "" then return { kind = "blank" } end
+    text = Text.plain(text)
+    if text == "" then return { kind = "blank" } end
     local objectID = ItemIdentity.ObjectID(text)
     if objectID == nil then return { kind = "blank", dormant = text } end
     return TagLayouts.Item(objectID)
+end
+
+-- Clean individual JSON strings so tags cannot cross field boundaries
+local function cleanStrings(value)
+    if type(value) == "string" then return Text.sanitize(value) end
+    if type(value) ~= "table" then return value end
+    local cleaned = {}
+    for key, child in pairs(value) do cleaned[cleanStrings(key)] = cleanStrings(child) end
+    return cleaned
 end
 
 -- Encode every tag, or only the named one, as JSON
@@ -62,7 +74,7 @@ function TagData.Encode(data, onlyTag)
             if tag.folder ~= nil then saved.folders[tag.folder] = data.folders[tag.folder] end
         end
     end
-    return Json.encode(saved)
+    return Json.encode(cleanStrings(saved))
 end
 
 -- Count a tag's entries the way a save counts them
@@ -77,7 +89,7 @@ end
 -- Read one saved tag, dropping invalid entries
 local function readTag(value, entryLimit)
     local tag = {
-        icon = type(value.icon) == "string" and value.icon or nil,
+        icon = type(value.icon) == "string" and Text.plain(value.icon) or nil,
         rows = {},
         unsorted = {},
     }
@@ -153,7 +165,7 @@ function TagData.Decode(text, allowEmpty)
                 folderCount = folderCount + 1
                 if folderCount > TagData.MAX_FOLDERS then return nil, "The import has too many folders." end
                 data.folders[key] = { name = display, collapsed = folder.collapsed == true,
-                    icon = type(folder.icon) == "string" and folder.icon or nil }
+                    icon = type(folder.icon) == "string" and Text.plain(folder.icon) or nil }
             end
             tag.folder = key
             data.tags[name] = tag

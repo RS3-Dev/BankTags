@@ -43,9 +43,9 @@ To remove an item, view the tag, right-click the item, and choose **Remove from*
 
 Right-click the tag and choose **Edit**, or use the sidebar's Edit button while that tag is open.
 
-The editor follows the bank from left to right: **Unsorted → Layout → Search**. The compact left tray holds five item columns at the default bank size. Native bank tabs above Layout show each tag's item icon, or its first letter; hover for the full name. Tabs follow the sidebar's tag order, including folder members. Left/right arrows appear on overflow; arrows and the wheel scroll through tabs without changing the selected page.
+The editor follows the bank from left to right: **Unsorted → Layout → Search**. Both side panes use matching search fields and borders. Unsorted displays a grid inside its border; Search displays named result rows. Native bank tabs above Layout show each tag's item icon, or its first letter; hover for the full name. Tabs follow the sidebar's tag order, including folder members. Left/right arrows appear on overflow; arrows and the wheel scroll through tabs without changing the selected page.
 
-Search stays open on the left. Drag a named result into the central Layout, which keeps the bank's item spacing and column count. Hover a result to read its full item name. Unsorted stays open on the right and packs four columns at the default bank size. Its items still belong to the tag; they simply have no chosen layout position. Each area scrolls independently. Editing actions and persistent status feedback sit in the footer, with Close at the right.
+Search stays open on the right. Drag a named result into the central Layout, which keeps the bank's item spacing and column count. Item tooltips are centered beneath the hovered item, moving above it when there is no room below. Unsorted stays open on the left; search its grid by item name to find items already in the tag that have no chosen layout position. Filtering does not remove, reorder, or add items. Drag an item into Layout, or right-click it for Move to Layout and Remove from Tag. Each area scrolls independently. Editing actions and persistent status feedback sit in the footer, with Close at the right.
 
 - Drag items into Layout to position them. Moving onto another item swaps positions.
 - Shift-click Layout items to select a group, then drag a selected item without Shift to move the group. The group keeps its shape. Gold previews fit; red previews are refused.
@@ -96,8 +96,19 @@ Open **Plugin Hub → Manage → Bank Tags → settings cog** to change tag icon
 - **Shortcut does nothing:** close dialogs, click the grid, and release Shift/Alt before using Ctrl.
 - **Save error:** read the displayed message. Unreadable saved data is protected from being overwritten; do not delete it without a backup.
 
+Names, folder names, labels, and imported share data are plain text. Bank Tags uses
+Bank Core's `SanitizeString` when available, with a local fallback, to remove markup
+tags before saving or displaying text. Existing saved data is cleaned as it loads;
+you do not need to delete PluginData.db.
+
 A new installation starts empty. Share codes and saved tags from earlier versions, including the older integrated Bank Utilities plugin, are not read.
 
 ## Manual installation
 
-This repository contains the Bank Tags 1.0.1 runtime. Copy `main.lua`, `plugin.json`, and `resources/` into a `banktags` folder in your client's development plugins directory, or extract the `banktags` folder from the release ZIP. Enable PrettyUI, Bank Core, RuneQL, and Bank Tags in the plugin manager.
+This repository contains the Bank Tags 1.0.3 runtime. Copy `main.lua`, `plugin.json`, and `resources/` into a `banktags` folder in your client's development plugins directory, or extract the release ZIP's contents into that folder. The ZIP opens directly to `main.lua`, `plugin.json`, and `resources/`. Enable PrettyUI, Bank Core, RuneQL, and Bank Tags in the plugin manager.
+
+Older local builds used the manifest name `banktags`. The required listing name,
+`Bank Tags`, uses a different client database namespace even though the save keys
+and tag format are unchanged. Export tags from the old build before switching,
+then import them in the new build. This release does not automatically migrate
+the old namespace. Do not delete PluginData.db; it also stores other plugins' data.

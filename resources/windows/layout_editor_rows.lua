@@ -58,7 +58,9 @@ function LayoutEditorRows:RowMenuTarget()
     local x, y = self:ContentPointer()
     local pane, paneX, paneY
     if x ~= nil then pane, paneX, paneY = self:PaneAt(x, y) end
-    if pane == nil or paneX >= pane.width - Size.SCROLLBAR_RESERVE then return nil end
+    if pane == nil then return nil end
+    local contentWidth = pane.name == "unsorted" and pane.view.contentWidth or nil
+    if paneX >= (contentWidth or pane.width - Size.SCROLLBAR_RESERVE) then return nil end
     local row = self:RowAt(pane, paneX, paneY)
     -- An empty layout offers a first row from its background
     if pane.name == "sorted" and self.layout.lines == 0 and paneX >= pane.gridLeft then row = 0 end
@@ -95,10 +97,10 @@ end
 
 -- Describe what removing a line takes out of the tag
 local function removeRowMessage(tag, contents)
-    local name = "<col=ffcb05>\"" .. tostring(tag) .. "\"</col>"
+    local name = "\"" .. tostring(tag) .. "\""
     if contents.label ~= nil then
-        return "Remove the label <col=ffcb05>\"" .. contents.label .. "\"</col> from " .. name
-            .. "?<br>The rows below it move up."
+        return "Remove the label \"" .. contents.label .. "\" from " .. name
+            .. "?\nThe rows below it move up."
     end
     local parts = {}
     if contents.items > 0 then
@@ -108,7 +110,7 @@ local function removeRowMessage(tag, contents)
         parts[#parts + 1] = contents.reserved .. (contents.reserved == 1 and " reserved slot" or " reserved slots")
     end
     return "Remove this row and its " .. table.concat(parts, " and ") .. " from " .. name
-        .. "?<br>Only the tag changes; your bank keeps every item."
+        .. "?\nOnly the tag changes; your bank keeps every item."
 end
 
 -- Remove an empty row or ask before removing contents

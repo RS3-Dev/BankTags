@@ -1,6 +1,7 @@
 -- Describe a saved tag as the Bank Core page that shows it
 
 local TagData = require("resources/tags/tag_data")
+local Text = require("resources/core/text")
 
 local TagPage = {}
 
@@ -20,7 +21,7 @@ function TagPage.Rows(record)
     for _, entry in ipairs(record.rows) do
         if entry.kind == "label" then
             -- Bank Core refuses control characters in label text
-            local text = string.gsub(entry.text, "%c", "")
+            local text = Text.plain(entry.text)
             rows[#rows + 1] = text ~= "" and { label = text } or { slots = {} }
             count = count + 1
         else

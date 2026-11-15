@@ -2,6 +2,7 @@
 
 local objectFromID = require("resources/core/object_config").FromID
 local TagRules = require("resources/tags/tag_rules")
+local Text = require("resources/core/text")
 
 local TagSettingsEditor = {}
 TagSettingsEditor.__index = TagSettingsEditor
@@ -55,10 +56,11 @@ function TagSettingsEditor.new(parent, options)
         y = 31,
         width = FIELD_WIDTH,
         height = 30,
-        text = options.tag or "",
+        text = Text.plain(options.tag),
         placeholder = options.nameLabel or "Tag name",
         maxLength = options.maxLength or TagRules.MAX_TAG_NAME,
         onSubmit = function(_, value) self:Save(value) end,
+        onChange = function(field, _, value) Text.cleanField(field, value) end,
     })
     local selectedObject = objectFromID(self.spriteObjectID)
     self.spriteSlot = prettyui.ItemSlot.new(content, selectedObject, {
@@ -118,7 +120,7 @@ function TagSettingsEditor:Save(value)
     if success then
         self.window:Close()
     else
-        self.status.content = tostring(reason or "Could not save the tag.")
+        self.status.content = Text.plain(reason or "Could not save the tag.")
         self.status.rgba = 0xE57373FF
         self.status.hidden = false
     end

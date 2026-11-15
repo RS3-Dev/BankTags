@@ -233,8 +233,10 @@ function Windows:OpenTagDeleteConfirm(tag)
     if parent == nil then return end
     self.tagDeleteConfirm = ConfirmWindow.new(parent, {
         title = "Delete Bank Tag",
-        message = "Delete <col=ffcb05>\"" .. tostring(tag)
-            .. "\"</col> from every tagged item?<br><br>Do you wish to continue?",
+        messageLines = {
+            "You are about to delete " .. tostring(tag) .. ".",
+            "Do you want to continue?",
+        },
         confirmLabel = "Delete",
         failureText = "Could not delete the tag.",
         -- Delete the tag and refresh its views

@@ -65,7 +65,7 @@ function TagList.new(parent, options)
         text = self.state.searchQuery,
         -- Keep the search text while refreshing visible rows
         onChange = function(_, _, content)
-            self.state.searchQuery = tostring(content or "")
+            self.state.searchQuery = Text.cleanField(self.search, content)
             self:Refresh()
         end,
     })
@@ -122,7 +122,7 @@ function TagList:Entries()
                 local expanded = query ~= "" or not node.collapsed
                 entries[#entries + 1] = {
                     id = FOLDER_ENTRY_PREFIX .. node.key,
-                    label = node.name,
+                    label = Text.plain(node.name),
                     enabled = true,
                     expanded = expanded,
                     memberCount = #node.tags,

@@ -1,7 +1,7 @@
 {
-  "name": "banktags",
-  "version": "1.0.1",
-  "description": "Bank Tags: tags, folders, layouts, select mode, and Import/Share for the bank. Requires Bank Core.",
+  "name": "Bank Tags",
+  "version": "1.0.3",
+  "contactEmailAddress": "plugins@rs3.dev",
   "hasRibbonIcon": false,
   "hasSettingsIcon": true,
   "requiredDependencies": {
