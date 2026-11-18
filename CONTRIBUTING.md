@@ -11,6 +11,8 @@ editing their layouts. Shared bank integration belongs in Bank Core.
   Explain necessary technical terms in plain language; avoid repeating the code.
 - AI assistance is welcome, but you must understand and review everything you
   submit. Do not submit code you cannot explain or maintain.
+- Do not use AI to generate your PR body. The PR body must be handwritten.
+  Pull requests with AI-generated bodies will be closed.
 - Run `lua tests/run.lua` with Lua 5.4 from the repository root. Set `BANKCORE_ROOT`
   to a Bank Core checkout or installation to include its integration test. See
   the [test instructions](README.md#tests) for details.

@@ -107,13 +107,11 @@ A new installation starts empty. Share codes and saved tags from earlier version
 
 ## Manual installation
 
-This repository contains the Bank Tags 1.0.3 runtime. Copy `main.lua`, `plugin.json`, and `resources/` into a `banktags` folder in your client's development plugins directory, or extract the release ZIP's contents into that folder. The ZIP opens directly to `main.lua`, `plugin.json`, and `resources/`. Enable PrettyUI, Bank Core, RuneQL, and Bank Tags in the plugin manager.
-
-Older local builds used the manifest name `banktags`. The required listing name,
-`Bank Tags`, uses a different client database namespace even though the save keys
-and tag format are unchanged. Export tags from the old build before switching,
-then import them in the new build. This release does not automatically migrate
-the old namespace. Do not delete PluginData.db; it also stores other plugins' data.
+Grab the latest release ZIP from the [latest release](https://github.com/RS3-Dev/BankTags/releases/latest).
+Extract it into a `banktags` folder in your RuneScape beta client's plugins
+directory, so `main.lua`, `plugin.json`, and `resources/` sit directly inside that
+folder. Enable PrettyUI, Bank Core, RuneQL, and Bank Tags in the plugin manager
+to use Bank Tags on the RuneScape beta server.
 
 ## Tests
 
