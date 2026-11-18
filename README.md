@@ -114,3 +114,20 @@ Older local builds used the manifest name `banktags`. The required listing name,
 and tag format are unchanged. Export tags from the old build before switching,
 then import them in the new build. This release does not automatically migrate
 the old namespace. Do not delete PluginData.db; it also stores other plugins' data.
+
+## Tests
+
+Run the suite from the repository root with Lua 5.4:
+
+```sh
+lua tests/run.lua
+```
+
+The tests use native UI stubs and fresh globals and module caches for each case.
+They run outside the game client and require no Python packages or test framework.
+Failures print a traceback and return a nonzero exit code.
+
+To also test sanitization against a Bank Core checkout or installation, set
+`BANKCORE_ROOT` to its root directory before running the suite. Without it, that
+integration test is reported as skipped. A configured path must contain
+`lib/core/public_api.lua`; an invalid path fails the test.
