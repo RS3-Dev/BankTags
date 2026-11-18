@@ -6,6 +6,8 @@ Bank Tags lets you group bank items into named tags and arrange them into your o
 
 Enable **PrettyUI**, **Bank Core 1.1.0 or later**, **RuneQL**, and **Bank Tags** in the client's plugin manager. All three libraries are required. RuneQL lets item and icon searches cover its full catalog.
 
+Bank Core remains a required dependency. A background check recovers missing or stale registrations after Core loads or reloads without replacing a working connection or relying on optional-dependency notifications.
+
 Open a bank and click **Bank Tags** on the left rail. There is no separate Bank Tags ribbon panel.
 
 ## Make your first tag

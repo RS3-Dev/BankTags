@@ -25,9 +25,13 @@ local OPEN_REFUSALS = {
     filter_active = "Clear the bank filter to view this tag.",
     bank_closed = "Open your bank to view this tag.",
     busy = "The bank is still updating. Try again.",
+    stale = "Bank Tags lost its connection to Bank Core. Reload Bank Tags and try again.",
+    no_page = "This tag has no prepared page. Select the tag again.",
+    failed = "Bank Core could not draw this tag. Try again.",
 }
 -- Bank Tags' preferences draw on its own Plugin Hub settings page
 local SETTINGS_EVENT = Config.PLUGIN_REF .. "_settings"
+local CONNECTION_EVENT = Config.PLUGIN_REF .. "_core_connection"
 
 -- Find the native state blocking tag pages
 local function bankStateBlocker(state)
@@ -85,6 +89,21 @@ function App:Start()
     self.started = true
     Event.SettingsLayerReady.Subscribe(SETTINGS_EVENT, function(event) self:MountSettings(event.component) end)
     self:Connect()
+    local ticks = 0
+    Event.Logic.Subscribe(CONNECTION_EVENT, function()
+        ticks = ticks + 1
+        if ticks % 50 == 0 then self:CheckConnection() end
+    end)
+end
+
+-- Recover a missing or stopped registration without replacing a live one
+function App:CheckConnection()
+    if self.shutDown then return end
+    if self.ext ~= nil then
+        local state, reason = self.ext:GetBankState()
+        if state ~= nil or reason ~= "stale" then return end
+    end
+    self:Connect()
 end
 
 -- Register with Bank Core, replacing any earlier registration
@@ -93,12 +112,18 @@ function App:Connect()
     self:Disconnect()
     local api = findBank()
     if api == nil then return false, "unavailable" end
-    local ext, reason, detail = api.Register({
+    local registration = {
         id = Config.PLUGIN_REF,
         name = Config.OWNER_LABEL,
         icon = "LIST_LAYOUT",
         column = self.tab.callbacks,
-        onClose = function() self.tab:Refresh() end,
+        onClose = function()
+            if self.ext ~= nil then
+                local blocked = bankStateBlocker(self.ext:GetBankState())
+                if blocked ~= nil then self:ShowStateNotice(blocked) end
+            end
+            self.tab:Refresh()
+        end,
         onBankItems = function() self:OnBankItems() end,
         onBankStateChanged = function(state) self:OnBankStateChanged(state) end,
         -- Stop bank tools when the bank closes
@@ -108,7 +133,15 @@ function App:Connect()
             self.select:Stop()
             self.windows:CloseBankWindows()
         end,
-    })
+    }
+    local ext, reason, detail = api.Register(registration)
+    -- An injected export may still refer to the session Core just stopped
+    if ext == nil and reason == "stopped" then
+        local published = rawget(_G, Config.CORE_API_KEY)
+        if type(published) == "table" and type(published.Register) == "function" and published ~= api then
+            ext, reason, detail = published.Register(registration)
+        end
+    end
     if ext == nil then
         debugLog("Bank Tags could not register with Bank Core: ", tostring(reason), " ", tostring(detail))
         return false, reason
@@ -141,11 +174,26 @@ end
 -- Close tag pages when native controls restrict the bank
 function App:OnBankStateChanged(state)
     local blocked = bankStateBlocker(state)
-    if blocked ~= nil and self.ext:IsOpen() then
-        self.ext:Close()
+    if blocked == nil and self.stateNotice ~= nil then
+        if self.status == self.stateNotice then self:ShowStatus(nil) end
+        self.stateNotice = nil
+    end
+    if blocked ~= nil and self.ext ~= nil and self.ext:IsOpen() then
+        local closed, reason = self.ext:Close()
+        if not closed then
+            self:ShowStatus(OPEN_REFUSALS[reason] or ("This tag could not be closed (" .. tostring(reason) .. ")."))
+            return blocked
+        end
+        self:ShowStateNotice(blocked)
         self.tab:Refresh()
     end
     return blocked
+end
+
+-- Track restriction notices so returning to an available bank clears them
+function App:ShowStateNotice(reason)
+    self.stateNotice = OPEN_REFUSALS[reason] or ("This tag could not be shown (" .. tostring(reason) .. ").")
+    self:ShowStatus(self.stateNotice)
 end
 
 -- Refresh bank items when a new list is available
@@ -192,33 +240,45 @@ function App:ShowTag(tag)
     if self.ext == nil or self.store.data.tags[tag] == nil then return false end
     local blocked = self:OnBankStateChanged(self.ext:GetBankState())
     if blocked ~= nil then
-        self:ShowStatus(OPEN_REFUSALS[blocked] or ("This tag could not be shown (" .. blocked .. ")."))
-        return false
+        self:ShowStateNotice(blocked)
+        return false, blocked
     end
     -- Core copies native sprite styles when opening a page
     self.nativeItems:RestoreHighlights()
+    local previousTag, previousKeys, previousRevision = self.pageTag, self.pageKeys, self.revision
     local shown, problem = self:SetTagPage(tag)
+    local openReason
     if shown then
         local reason
         shown, reason = self.ext:Open()
+        openReason = reason
         if not shown then
             problem = OPEN_REFUSALS[reason] or ("This tag could not be shown (" .. tostring(reason) .. ").")
+            -- A refusal can leave the previous tag page displayed
+            self.pageTag, self.pageKeys, self.revision = previousTag, previousKeys, previousRevision
         end
     end
     -- Select mode works over the bank's own view, so a shown tag ends it
     if shown then self.select:Stop() end
     if not shown then self.nativeItems:Refresh() end
-    self:ShowStatus(problem)
+    if openReason == "not_all_items" or openReason == "preset_open" or openReason == "bank_closed" then
+        self:ShowStateNotice(openReason)
+    else
+        self:ShowStatus(problem)
+    end
     self.tab:Refresh()
-    return shown
+    return shown, openReason
 end
 
 -- Toggle between a tag and the normal bank
 function App:ToggleTag(tag)
     if self:ShownTag() == tag then
-        local left = self.ext:Close()
+        local left, reason = self.ext:Close()
+        if not left then
+            self:ShowStatus(OPEN_REFUSALS[reason] or ("This tag could not be closed (" .. tostring(reason) .. ")."))
+        end
         self.tab:Refresh()
-        return left
+        return left, reason
     end
     return self:ShowTag(tag)
 end
@@ -362,6 +422,7 @@ end
 function App:Shutdown()
     if self.shutDown then return end
     self.shutDown = true
+    Event.Logic.Unsubscribe(CONNECTION_EVENT)
     -- Release one part while allowing other cleanup to continue
     local function cleanup(label, action)
         local ok, message = pcall(action)

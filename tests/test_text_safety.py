@@ -63,7 +63,7 @@ class TextSafetyTests(unittest.TestCase):
     def test_actual_installed_core_api(self):
         self.lua.globals().corePath = CORE_API.as_posix()
         self.lua.execute('''
-            bankcore=assert(loadfile(corePath))().new(nil,nil)
+            bankcore=assert(loadfile(corePath))().new({},nil)
             assert(Text.sanitize('Food<img=-1><sprite=-999>')=='Food')
         ''')
 
