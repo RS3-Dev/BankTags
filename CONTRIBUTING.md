@@ -20,3 +20,5 @@ editing their layouts. Shared bank integration belongs in Bank Core.
   and closing, reloads, dragging, scrolling and different interface scales.
 - Explain what changed, why, how you checked it and any problems still known.
   Update the docs or examples when their behavior changes.
+
+Contributions use the project's [BSD-2-Clause license](LICENSE).
