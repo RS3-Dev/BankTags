@@ -66,7 +66,7 @@ function ImportShare.new(parent, options)
     })
 
     self.tabs = prettyui.Tabs.new(self.window.content, {
-        { kind = "text", text = "Import", value = "import" },
+        { kind = "text", text = "Import", value = "import", scrollable = true },
         { kind = "text", text = "Share", value = "share", scrollable = true },
     }, {
         x = 0,
@@ -86,17 +86,9 @@ function ImportShare.new(parent, options)
     self.controls.importCodeLabel = text(importPage.content, "Import code", 32, {
         height = 20, maxLines = 1,
     })
-    self.importField = prettyui.TextField.new(importPage.content, {
-        x = 18,
-        y = 56,
-        width = 452,
-        height = 30,
-        maxLength = Config.LONG_INPUT_LIMIT,
-        maxLines = 1,
-        placeholder = "Paste a shared tag code or backup...",
-        font = id.Font.MUSEO_SANS_11PT_REGULAR,
-        onChange = function(field, _, content) self:RefreshImportPreview(Text.cleanField(field, content)) end,
-    })
+    self.importPage = importPage
+    self.importFields = {}
+    self:AddImportField()
     self.controls.importNameLabel = text(importPage.content, "Tag name", 98, {
         width = 404, height = 20, maxLines = 1,
     })
@@ -169,11 +161,61 @@ function ImportShare.new(parent, options)
         "Click a code field.",
         38, { height = 18, maxLines = 1, font = id.Font.MUSEO_SANS_11PT_REGULAR })
     self.controls.shareCopyShortcut = text(sharePage.content,
-        "Press Ctrl+A, then Ctrl+C to copy the tag.",
+        "Ctrl+A, Ctrl+C to copy. Copy numbered parts in order.",
         56, { height = 18, maxLines = 1, font = id.Font.MUSEO_SANS_11PT_REGULAR })
     self:RefreshExports()
-    self:RefreshImportPreview("")
+    self:RefreshImportInputs()
     return self
+end
+
+-- Add a continuation field when the previous input reaches the game limit.
+function ImportShare:AddImportField()
+    local index = #self.importFields + 1
+    local field = prettyui.TextField.new(self.importPage.content, {
+        x = 18, y = 56 + (index - 1) * 38, width = 452, height = 30,
+        maxLength = Config.LONG_INPUT_LIMIT, maxLines = 1,
+        placeholder = index == 1 and "Paste a shared tag code or backup..."
+            or "Paste the next part of the import code...",
+        font = id.Font.MUSEO_SANS_11PT_REGULAR,
+        onChange = function(field, _, content)
+            Text.cleanField(field, content)
+            self:RefreshImportInputs()
+        end,
+    })
+    self.importFields[index] = field
+end
+
+-- Join the input parts without inserting separators or trimming their contents.
+function ImportShare:GetImportText()
+    local parts = {}
+    for index, field in ipairs(self.importFields) do
+        parts[index] = Text.cleanField(field, field:GetText())
+    end
+    return table.concat(parts)
+end
+
+-- Keep a spare input after a full field and move the draft below all parts.
+function ImportShare:RefreshImportInputs()
+    if self.closed then return end
+    local input = self:GetImportText()
+    local fields = self.importFields
+    while #fields > 1 and fields[#fields]:GetText() == ""
+        and #fields[#fields - 1]:GetText() < Config.LONG_INPUT_LIMIT do
+        fields[#fields]:Destroy()
+        table.remove(fields)
+    end
+    if #fields[#fields]:GetText() >= Config.LONG_INPUT_LIMIT then self:AddImportField() end
+    self.importInputOffset = (#fields - 1) * 38
+    local offset = self.importInputOffset
+    self.controls.importNameLabel:SetPos(18, 98 + offset)
+    self.controls.importSpriteLabel:SetPos(422, 98 + offset)
+    self.importNameField.root:SetPos(18, 127 + offset)
+    self.importSpriteSlot.root:SetPos(430, 122 + offset)
+    self.controls.importFolderLabel:SetPos(18, 170 + offset)
+    self.importFolder.root:SetPos(18, 194 + offset)
+    self.importFolderName.root:SetPos(18, FOLDER_NAME_Y + offset)
+    self:UpdateImportFolderControls()
+    self:RefreshImportPreview(input)
 end
 
 -- Show feedback in green, red, or a given colour
@@ -198,44 +240,46 @@ function ImportShare:RebuildShareRows(exports)
     self:DestroyShareRows()
     local startY = 82
     local rowHeight = 34
-    for index, export in ipairs(exports) do
-        local root = ui.Layer.new(self.sharePage.content)
-        root:SetPos(18, startY + (index - 1) * rowHeight)
-        root:SetSize(452, 30)
-        root.clickthrough = true
-        local label = prettyui.Text.new(root, {
-            text = Text.plain(export.tag),
-            x = 0,
-            y = 0,
-            width = 202,
-            height = 28,
-            colour = export.value ~= nil and 0xD8CCAEFF or 0xE57373FF,
-            maxLines = 1,
-            alignVertical = ui.AlignMode.CENTRE,
-            tooltip = export.reason ~= nil and Text.plain(export.reason) or nil,
-        })
+    for _, export in ipairs(exports) do
         local value = Text.sanitize(export.value or tostring(export.reason or "Unavailable"))
-        local tooLarge = #value > Config.LONG_INPUT_LIMIT
-        if tooLarge then
-            value = "Too large for the game field (" .. tostring(#value) .. " characters)"
-            label.rgba = 0xE57373FF
+        local partCount = math.max(1, math.ceil(#value / Config.LONG_INPUT_LIMIT))
+        for part = 1, partCount do
+            local root = ui.Layer.new(self.sharePage.content)
+            root:SetPos(18, startY + #self.shareRows * rowHeight)
+            root:SetSize(452, 30)
+            root.clickthrough = true
+            local name = Text.plain(export.tag)
+            if partCount > 1 then name = name .. " (" .. part .. "/" .. partCount .. ")" end
+            local label = prettyui.Text.new(root, {
+                text = name,
+                x = 0,
+                y = 0,
+                width = 202,
+                height = 28,
+                colour = export.value ~= nil and 0xD8CCAEFF or 0xE57373FF,
+                maxLines = 1,
+                alignVertical = ui.AlignMode.CENTRE,
+                tooltip = export.reason ~= nil and Text.plain(export.reason) or name,
+            })
+            -- Keep each copyable part within the game field's limit.
+            local start = (part - 1) * Config.LONG_INPUT_LIMIT + 1
+            local field = prettyui.TextField.new(root, {
+                x = 210,
+                y = 1,
+                width = 242,
+                height = 27,
+                maxLength = Config.LONG_INPUT_LIMIT,
+                maxLines = 1,
+                font = id.Font.MUSEO_SANS_11PT_REGULAR,
+                text = string.sub(value, start, start + Config.LONG_INPUT_LIMIT - 1),
+            })
+            self.shareRows[#self.shareRows + 1] = {
+                tag = export.tag,
+                root = root,
+                label = label,
+                field = field,
+            }
         end
-        local field = prettyui.TextField.new(root, {
-            x = 210,
-            y = 1,
-            width = 242,
-            height = 27,
-            maxLength = Config.LONG_INPUT_LIMIT,
-            maxLines = 1,
-            font = id.Font.MUSEO_SANS_11PT_REGULAR,
-            text = value,
-        })
-        self.shareRows[#self.shareRows + 1] = {
-            tag = export.tag,
-            root = root,
-            label = label,
-            field = field,
-        }
     end
     if #self.shareRows == 0 then
         local empty = text(self.sharePage.content, "No bank tags to share.", startY + 10, {
@@ -271,8 +315,9 @@ function ImportShare:Destroy()
     for _, control in pairs(self.controls) do
         if control ~= nil then pcall(function() control:Destroy() end) end
     end
+    for _, field in ipairs(self.importFields) do field:Destroy() end
+    self.importFields = {}
     for _, control in ipairs({
-        self.importField,
         self.importNameField,
         self.importSpriteSlot,
         self.importFolder,

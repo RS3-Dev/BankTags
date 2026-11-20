@@ -1,4 +1,4 @@
--- Own native bank-item highlights and drops without a Bank Core item API
+-- Own native item highlights and bank-item drops without a Bank Core item API
 
 local Config = require("resources/core/config")
 
@@ -46,11 +46,41 @@ function NativeItems:RefreshHighlights()
     self:RestoreHighlights()
     local tag = self.app.select:Tag()
     if tag == nil then return end
-    local counts, stacks = {}, {}
+    local counts = {}
     for _, slot in ipairs(self.app.store:GetTaggedItems(tag)) do
         if slot.objectID ~= nil then counts[slot.objectID] = (counts[slot.objectID] or 0) + 1 end
     end
-    for _, entry in ipairs(self.items) do stacks[#stacks + 1] = entry end
+    self:HighlightItems(self.items, counts)
+    if itemLayer() == nil then return end
+    for _, name in ipairs({ "BANK__INVENTORY_SLOTS", "BANK__WORN_CONTENT_LAYER" }) do
+        -- A panel may be absent while switching between inventory and equipment.
+        local ok, layer = pcall(function() return ui.Interfaces:GetComponent(id.Component[name]) end)
+        if ok and layer ~= nil then
+            local items, seen = {}, {}
+            -- Equipment sprites can sit inside static slot layers.
+            local function collect(component)
+                if seen[component] then return false end
+                seen[component] = true
+                local objectID = component.associatedObjectID
+                if objectID ~= nil and objectID >= 0 then
+                    items[#items + 1] = { component = component, objectID = objectID }
+                else
+                    component:IterateStaticComponents(collect)
+                    component:IterateDynamicComponents(collect)
+                end
+                return false
+            end
+            collect(layer)
+            self:HighlightItems(items, counts)
+        end
+    end
+end
+
+-- Match tag copies independently in each panel using the bank's outline styling.
+function NativeItems:HighlightItems(items, taggedCounts)
+    local stacks, counts = {}, {}
+    for objectID, count in pairs(taggedCounts) do counts[objectID] = count end
+    for _, entry in ipairs(items) do stacks[#stacks + 1] = entry end
     -- Place stocked stacks first, then follow bank order
     table.sort(stacks, function(a, b)
         local aStocked = (a.component.associatedObjectQuantity or 0) > 0
