@@ -52,19 +52,25 @@ function NativeItems:RefreshHighlights()
     end
     self:HighlightItems(self.items, counts)
     if itemLayer() == nil then return end
-    for _, name in ipairs({ "BANK__INVENTORY_SLOTS", "BANK__WORN_CONTENT_LAYER" }) do
+    for _, name in ipairs({ "BANK__INVENTORY_INV_CONTENTS", "BANK__WORN_CONTENT_LAYER" }) do
         -- A panel may be absent while switching between inventory and equipment.
         local ok, layer = pcall(function() return ui.Interfaces:GetComponent(id.Component[name]) end)
         if ok and layer ~= nil then
             local items, seen = {}, {}
-            -- Equipment sprites can sit inside static slot layers.
+            -- Native slots may draw the item through a button's sprite data.
             local function collect(component)
                 if seen[component] then return false end
                 seen[component] = true
-                local objectID = component.associatedObjectID
-                if objectID ~= nil and objectID >= 0 then
-                    items[#items + 1] = { component = component, objectID = objectID }
-                else
+                local kind = component.type
+                if kind == ui.ComponentType.SPRITE or kind == ui.ComponentType.BUTTON then
+                    local objectID = component.associatedObjectID
+                    if objectID ~= nil and objectID >= 0 then
+                        items[#items + 1] = { component = component, objectID = objectID,
+                            visual = kind == ui.ComponentType.BUTTON and component.sprite or component }
+                    end
+                end
+                -- Native item containers are layers; decorative and item controls have no children.
+                if kind == ui.ComponentType.LAYER then
                     component:IterateStaticComponents(collect)
                     component:IterateDynamicComponents(collect)
                 end
@@ -94,7 +100,7 @@ function NativeItems:HighlightItems(items, taggedCounts)
         local count = counts[entry.objectID] or 0
         if count > 0 then
             counts[entry.objectID] = count - 1
-            local component = entry.component
+            local component = entry.visual or entry.component
             self.visuals[#self.visuals + 1] = { component = component,
                 outlineWidth = component.outlineWidth, shadowRGBA = component.shadowRGBA }
             component.outlineWidth = math.max(component.outlineWidth or 0, OUTLINE_WIDTH)
