@@ -21,7 +21,7 @@ Opening an empty tag list offers an eight-step tutorial, starting with **New Tag
 
 ## Add several bank items
 
-Right-click a tag and choose **Select items**. Click bank items to add them to that tag. Click **Done** in the sidebar to finish. Select mode works in any bank tab.
+Right-click a tag and choose **Select items**. Click bank, inventory, or worn-equipment items to add them to that tag. Selected items receive a gold outline in each panel. Click **Done** in the sidebar to finish. Select mode works in any bank tab.
 
 Items already in the tag have a gold outline during select mode. Adding another copy outlines its next available stack, with stocked stacks before placeholders. Leaving select mode restores the items' normal appearance.
 
@@ -84,7 +84,9 @@ Arrow-key movement is **off by default**. Enable it through the Bank Tags settin
 Click **Import/Share** at the bottom-left of the sidebar.
 
 - **Share:** select the tag's code field and copy its text.
-- **Import:** paste a share code or full backup, review the preview, then confirm the import. For a single tag, you can change its name, icon, and folder before importing.
+- **Import:** paste a share code or full backup, review the preview, then confirm the import. When a field reaches 9,999 characters, another input appears for the next part. Paste parts in order. For a single tag, you can change its name, icon, and folder before importing.
+
+Share codes longer than 9,999 characters are split into numbered fields. Copy each part in order into the corresponding import fields.
 
 Sharing a tag shares its layout, labels, icon, and folder information, not bank ownership or quantities. Keep a share code for important layouts before making large changes.
 

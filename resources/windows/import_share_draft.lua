@@ -115,9 +115,10 @@ function ImportDraft:UpdateImportFolderControls()
         and self.importFolder:GetSelectedID() == IMPORT_NEW_FOLDER
     self.importFolderName.root.hidden = not creating
     self.importFolderName:SetDisabled(not creating)
-    local buttonY = creating and FOLDER_NAME_Y + 42 or FOLDER_NAME_Y
+    local buttonY = FOLDER_NAME_Y + (self.importInputOffset or 0) + (creating and 42 or 0)
     self.importButton.root:SetPos(18, buttonY)
     self.importStatus:SetPos(18, buttonY + 36)
+    self.importPage:SetContentHeight(math.max(424, buttonY + 80))
 end
 
 -- Change the imported draft's icon and preview
@@ -139,7 +140,7 @@ end
 -- Save the readable draft to the chosen destination
 function ImportDraft:Import()
     if self.closed then return end
-    self:RefreshImportPreview(self.importField:GetText())
+    self:RefreshImportPreview(self:GetImportText())
     -- Only a readable draft from the current input can be saved
     if self.importState ~= "ready" then return end
     local overrides = self.importSingleTag ~= nil and {
