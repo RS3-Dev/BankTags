@@ -87,6 +87,7 @@ function TutorialView:CreateView(stepCount, rootKey)
     self.root:SetSize(0, 0, 1, 1)
     self.root.clickthrough = true
     self.window = prettyui.Window.new(self.root, {
+        categoryID = "auto",
         title = "Bank Tags Help", width = WIDTH, height = HEIGHT,
         minWidth = WIDTH, maxWidth = WIDTH, minHeight = HEIGHT, maxHeight = HEIGHT,
         x = 0, y = 0, scrollable = false, destroyOnClose = true,

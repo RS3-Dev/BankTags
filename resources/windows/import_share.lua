@@ -46,6 +46,7 @@ function ImportShare.new(parent, options)
     }, ImportShare)
 
     self.window = prettyui.Window.new(parent, {
+        categoryID = "auto",
         title = "Bank Tag Import / Share",
         x = -math.floor(WIDTH / 2),
         y = -math.floor(HEIGHT / 2),

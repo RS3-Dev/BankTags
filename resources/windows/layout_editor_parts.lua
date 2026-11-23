@@ -1,6 +1,7 @@
 -- Share layout editor measurements and drawing helpers
 
 local BankGrid = require("resources/ui/bank_grid")
+local NativeUi = require("resources/ui/native_ui")
 local Theme = require("resources/ui/theme")
 local Text = require("resources/core/text")
 local SidebarRows = require("resources/ui/sidebar_rows")
@@ -105,7 +106,7 @@ Parts.SizeToBank(BankGrid.DEFAULT_COLUMNS)
 
 -- Create a click-through rectangle, filled or outlined inward
 function Parts.rectangle(parent, x, y, width, height, colour, fill)
-    local value = ui.Rectangle.new(parent)
+    local value = NativeUi.newComponent(ui.Rectangle, parent)
     value:SetPos(x, y)
     value:SetSize(width, height)
     value.fill = fill ~= false
@@ -117,7 +118,7 @@ end
 
 -- Fill a panel with a repeating native sprite
 function Parts.tiledSprite(parent, x, y, width, height, spriteID)
-    local value = ui.Sprite.new(parent)
+    local value = NativeUi.newComponent(ui.Sprite, parent)
     value:SetPos(x, y)
     value:SetSize(width, height)
     value.spriteID = spriteID
@@ -128,6 +129,15 @@ end
 
 -- Create a click-through layer over part of a parent
 function Parts.layer(parent, x, y, width, height)
+    local value = NativeUi.newComponent(ui.Layer, parent)
+    value:SetPos(x, y)
+    value:SetSize(width, height)
+    value.clickthrough = true
+    return value
+end
+
+-- Create a category-0 content host layer for PrettyUI views, tabs, and lists
+function Parts.contentLayer(parent, x, y, width, height)
     local value = ui.Layer.new(parent)
     value:SetPos(x, y)
     value:SetSize(width, height)

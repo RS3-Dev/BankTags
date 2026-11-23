@@ -66,6 +66,7 @@ function LayoutEditorWindow.new(parent, options)
     self:SetBankItems(options.bankItems)
     Parts.SizeToBank(self.columns, self.bounds.width, self.bounds.height)
     self.window = prettyui.Window.new(parent, {
+        categoryID = "auto",
         title = "Bank Layout Editor",
         x = self.bounds.x - Size.WINDOW_BORDER,
         y = self.bounds.y - Size.WINDOW_BORDER,

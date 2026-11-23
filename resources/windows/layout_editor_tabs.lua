@@ -2,6 +2,7 @@
 
 local BankControls = require("resources/ui/bank_controls")
 local Geometry = require("resources/ui/geometry")
+local NativeUi = require("resources/ui/native_ui")
 local Parts = require("resources/windows/layout_editor_parts")
 local Theme = require("resources/ui/theme")
 
@@ -73,12 +74,12 @@ function Tabs:Draw()
         local root = Parts.layer(self.root, inset + (index - self.first) * STEP, 0, WIDTH, HEIGHT)
         tooltipContext(root, self.root.parent)
         root.clickthrough = false
-        local background = ui.Sprite.new(root)
+        local background = NativeUi.newComponent(ui.Sprite, root)
         background:SetSize(WIDTH, HEIGHT)
         background.clickthrough = true
         local row = { entry = entry, root = root, background = background }
         if entry.objectID ~= nil then
-            row.icon = ui.Sprite.new(root)
+            row.icon = NativeUi.newComponent(ui.Sprite, root)
             row.icon:SetPos((WIDTH - ICON) // 2, (HEIGHT - ICON) // 2)
             row.icon:SetSize(ICON, ICON)
             row.icon:SetAssociatedObject(entry.objectID)

@@ -95,12 +95,14 @@ function LayoutEditorRows:InsertEmptyRow(line)
     end))
 end
 
--- Describe what removing a line takes out of the tag
-local function removeRowMessage(tag, contents)
+-- Describe what removing a line takes out of the tag as separate lines (RS3 fonts do not render \n)
+local function removeRowLines(tag, contents)
     local name = "\"" .. tostring(tag) .. "\""
     if contents.label ~= nil then
-        return "Remove the label \"" .. contents.label .. "\" from " .. name
-            .. "?\nThe rows below it move up."
+        return {
+            "Remove the label \"" .. contents.label .. "\" from " .. name .. "?",
+            "The rows below it move up.",
+        }
     end
     local parts = {}
     if contents.items > 0 then
@@ -109,8 +111,10 @@ local function removeRowMessage(tag, contents)
     if contents.reserved > 0 then
         parts[#parts + 1] = contents.reserved .. (contents.reserved == 1 and " reserved slot" or " reserved slots")
     end
-    return "Remove this row and its " .. table.concat(parts, " and ") .. " from " .. name
-        .. "?\nOnly the tag changes; your bank keeps every item."
+    return {
+        "Remove this row and its " .. table.concat(parts, " and ") .. " from " .. name .. "?",
+        "Only the tag changes; your bank keeps every item.",
+    }
 end
 
 -- Remove an empty row or ask before removing contents
@@ -128,8 +132,11 @@ function LayoutEditorRows:RemoveRow(line)
     if contents.empty then return (remove()) end
     if self.onConfirmRemoveRow == nil then return false end
     local target = { tag = tag, row = line, columns = Size.CENTER_COLUMNS, data = self.store.data }
+    local displayName = self.store.GetTagName ~= nil and self.store:GetTagName(tag) or tag
+    local lines = removeRowLines(displayName, contents)
     self.onConfirmRemoveRow({
-        message = removeRowMessage(tag, contents),
+        message = lines[1] .. " " .. lines[2],
+        messageLines = lines,
         -- Refuse removal if the confirmed row has changed
         onConfirm = function()
             -- Any save, another tag or size, or a closed editor makes it out of date

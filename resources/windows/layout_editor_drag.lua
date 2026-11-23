@@ -134,10 +134,8 @@ end
 
 -- Create one input surface over its panel
 function LayoutEditorDrag:CreateDragSurface(kind)
-    local clip = ui.Layer.new(self.content)
-    clip.clickthrough = true
-    local surface = ui.Layer.new(clip)
-    surface:SetSize(Size.WIDTH, Size.HEIGHT)
+    local clip = Parts.layer(self.content, 0, 0, Size.WIDTH, Size.HEIGHT)
+    local surface = Parts.layer(clip, 0, 0, Size.WIDTH, Size.HEIGHT)
     surface.clickthrough = false
     self.surfaceClips[surface] = clip
     self:PlaceDragSurface(surface, kind)
