@@ -41,9 +41,11 @@ function SettingsSection.new(parent, options)
     self.parts[#self.parts + 1] = label(parent, "Bank Tags", x + 10, 12, width - 20, 28, GOLD)
     self:AddToggle(parent, "showTagSprites", "Show tag sprites", x + 10, 50,
         width - 20, "Display the selected item icon beside each tag")
-    self.parts[#self.parts + 1] = label(parent, "New tagged items", x, 90, width, 20, GOLD)
+    self:AddToggle(parent, "restoreLastTag", "Reopen last tag", x + 10, 82,
+        width - 20, "Reopen the last viewed tag when opening the Bank Tags sidebar")
+    self.parts[#self.parts + 1] = label(parent, "New tagged items", x, 122, width, 20, GOLD)
     self.placement = prettyui.ComboBox.new(parent, {
-        x = x, y = 114, width = width, height = 30,
+        x = x, y = 146, width = width, height = 30,
         font = id.Font.MUSEO_SANS_11PT_REGULAR,
         entries = {
             { id = "preserve", label = "Preserve layout (tag only)", order = 1 },
@@ -52,14 +54,14 @@ function SettingsSection.new(parent, options)
         selectedID = self.settings.preserveTagLayout and "preserve" or "fill",
         onChange = function(_, selected) self:Change("preserveTagLayout", selected == "preserve") end,
     })
-    self:AddToggle(parent, "arrowKeyMovement", "Arrow-key movement", x + 10, 158, width - 20,
+    self:AddToggle(parent, "arrowKeyMovement", "Arrow-key movement", x + 10, 190, width - 20,
         "Move the layout editor's selected items with the arrow keys")
-    self.parts[#self.parts + 1] = label(parent, "Arrow keys also move the camera.", x + 10, 186,
+    self.parts[#self.parts + 1] = label(parent, "Arrow keys also move the camera.", x + 10, 218,
         width - 20, 18, MUTED)
-    self:AddToggle(parent, "enableDebug", "Enable debug logging", x + 10, 214, width - 20,
+    self:AddToggle(parent, "enableDebug", "Enable debug logging", x + 10, 246, width - 20,
         "Write Bank Tags diagnostics to the client log")
     self.status = prettyui.Text.new(parent, {
-        text = "", x = x, y = 254, width = width, height = 60,
+        text = "", x = x, y = 286, width = width, height = 60,
         font = id.Font.MUSEO_SANS_11PT_REGULAR,
         colour = 0xE57373FF, maxLines = 3,
     })

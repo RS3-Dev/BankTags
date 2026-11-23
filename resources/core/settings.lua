@@ -4,12 +4,13 @@ local Config = require("resources/core/config")
 
 local Settings = {}
 
-local KEYS = { "showTagSprites", "preserveTagLayout", "arrowKeyMovement", "enableDebug", "tutorialSeen" }
+local KEYS = { "showTagSprites", "restoreLastTag", "preserveTagLayout", "arrowKeyMovement", "enableDebug", "tutorialSeen" }
 
 -- Create a fresh set of preferences with their default values
 function Settings.defaults()
     return {
         showTagSprites = true,
+        restoreLastTag = true,
         preserveTagLayout = true,
         arrowKeyMovement = false,
         enableDebug = false,

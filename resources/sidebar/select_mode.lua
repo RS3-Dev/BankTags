@@ -36,7 +36,10 @@ function SelectMode:Start(tag)
     local app = self.app
     local ext = app.ext
     if ext == nil or app.store.data.tags[tag] == nil then return false end
-    if ext:IsOpen() and not ext:Close() then return false end
+    if app.CancelPendingRestore ~= nil then app:CancelPendingRestore() end
+    local wasOpen = ext:IsOpen()
+    if wasOpen and not ext:Close() then return false end
+    if wasOpen then app.restoreTag = nil end
     self.session = { tag = tag }
     app.nativeItems:Refresh()
     app:ShowStatus(nil)

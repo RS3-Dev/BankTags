@@ -92,7 +92,9 @@ Sharing a tag shares its layout, labels, icon, and folder information, not bank 
 
 ## Settings and troubleshooting
 
-Open **Plugin Hub → Manage → Bank Tags → settings cog** to change tag icons, new-item placement, arrow-key movement, or debug logging.
+Open **Plugin Hub → Manage → Bank Tags → settings cog** to change tag icons, automatic last-tag reopening, new-item placement, arrow-key movement, or debug logging.
+
+When **Reopen last tag** is enabled (default), reopening the Bank Tags sidebar restores the last tag you had open in the current session as long as the bank is on **All Items** with no search, filter, or preset selector active. If the bank is on another native tab when the sidebar opens, switching directly to **All Items** restores that tag; doing any other bank action cancels the pending restore.
 
 - **Nothing appears:** check that Bank Core and PrettyUI are enabled.
 - **Cannot open a tag:** the error appears at the top center of the bank, over its title. Close the preset selector, clear native bank search and filters, switch to All Items, and try again. These controls also close a shown tag; clearing them lets you select it again. A tag with more than 10,000 rows, labels, and items cannot be shown; remove some in the layout editor.

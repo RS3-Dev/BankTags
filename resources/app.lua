@@ -32,6 +32,28 @@ local OPEN_REFUSALS = {
 -- Bank Tags' preferences draw on its own Plugin Hub settings page
 local SETTINGS_EVENT = Config.PLUGIN_REF .. "_settings"
 local CONNECTION_EVENT = Config.PLUGIN_REF .. "_core_connection"
+local RESTORE_ACTION_EVENT = Config.PLUGIN_REF .. "_restore_action"
+local RESTORE_INVENTORY_EVENT = Config.PLUGIN_REF .. "_restore_inventory"
+
+-- Subscribe (handler) or unsubscribe (nil) safely when Event[name] exists
+local function setEvent(name, key, handler)
+    local target = type(Event) == "table" and Event[name] or nil
+    if type(target) ~= "table" then return end
+    local method = handler ~= nil and target.Subscribe or target.Unsubscribe
+    if type(method) == "function" then method(key, handler) end
+end
+
+-- Normalize a native mini-menu verb, stripping markup and outer spaces
+local function menuVerb(event)
+    local verb = event and event.entry and event.entry.verbText
+    return type(verb) == "string" and string.lower(verb:gsub("<[^>]->", ""):match("^%s*(.-)%s*$")) or nil
+end
+
+-- Check whether an inventory update came from the bank container
+local function isBankInventoryEvent(event)
+    local bankInvID = type(id) == "table" and type(id.Inv) == "table" and id.Inv.BANK or nil
+    return bankInvID ~= nil and event and event.inv and event.inv.id == bankInvID
+end
 
 -- Find the native state blocking tag pages
 local function bankStateBlocker(state)
@@ -66,6 +88,10 @@ function App.new()
         revision = 0,
         pageKeys = {},
         bankItems = nil,
+        -- Session-only page restoration state
+        restoreTag = nil,
+        sidebarSelected = false,
+        pendingRestore = nil,
         -- A notice shown over the bank title
         status = nil,
         -- Preferences drawn on the Plugin Hub settings page
@@ -112,34 +138,36 @@ function App:Connect()
     self:Disconnect()
     local api = findBank()
     if api == nil then return false, "unavailable" end
+    local function tryRegister(spec)
+        local ext, reason, detail = api.Register(spec)
+        -- An injected export may still refer to the session Core just stopped
+        if ext == nil and reason == "stopped" then
+            local published = rawget(_G, Config.CORE_API_KEY)
+            if type(published) == "table" and type(published.Register) == "function" and published ~= api then
+                ext, reason, detail = published.Register(spec)
+            end
+        end
+        return ext, reason, detail
+    end
     local registration = {
         id = Config.PLUGIN_REF,
         name = Config.OWNER_LABEL,
         icon = "LIST_LAYOUT",
         column = self.tab.callbacks,
-        onClose = function()
-            if self.ext ~= nil then
-                local blocked = bankStateBlocker(self.ext:GetBankState())
-                if blocked ~= nil then self:ShowStateNotice(blocked) end
-            end
-            self.tab:Refresh()
-        end,
+        onSelect = function() self:OnSidebarSelected() end,
+        onDeselect = function() self:OnSidebarDeselected() end,
+        onClose = function() self:OnPageClosed() end,
         onBankItems = function() self:OnBankItems() end,
         onBankStateChanged = function(state) self:OnBankStateChanged(state) end,
-        -- Stop bank tools when the bank closes
-        onBankClose = function()
-            self.nativeItems:Stop()
-            self.tutorial:Stop(false)
-            self.select:Stop()
-            self.windows:CloseBankWindows()
-        end,
+        onBankClose = function() self:OnBankClose() end,
     }
-    local ext, reason, detail = api.Register(registration)
-    -- An injected export may still refer to the session Core just stopped
-    if ext == nil and reason == "stopped" then
-        local published = rawget(_G, Config.CORE_API_KEY)
-        if type(published) == "table" and type(published.Register) == "function" and published ~= api then
-            ext, reason, detail = published.Register(registration)
+    local ext, reason, detail = tryRegister(registration)
+    -- Fall back gracefully when connected to an older Bank Core without selection hooks
+    if ext == nil and reason == "invalid" then
+        registration.onSelect, registration.onDeselect = nil, nil
+        ext, reason, detail = tryRegister(registration)
+        if ext ~= nil then
+            debugLog("Bank Core rejected sidebar selection hooks; update Bank Core to 1.1.5+ for tag restoration")
         end
     end
     if ext == nil then
@@ -156,6 +184,9 @@ end
 
 -- Drop the extension and everything that needs Bank Core
 function App:Disconnect()
+    self:CancelPendingRestore()
+    self:ClearStateNotice()
+    self.sidebarSelected = false
     self.nativeItems:Stop()
     self.tutorial:Stop(false)
     self.windows:CloseBankWindows()
@@ -171,13 +202,103 @@ function App:ShownTag()
     return self.ext ~= nil and self.ext:IsOpen() and self.pageTag or nil
 end
 
+-- Wait for All Items or bank readiness, canceling if the player does another action first
+function App:StartPendingRestore(mode)
+    self.pendingRestore = mode
+    setEvent("MiniMenuEntrySelected", RESTORE_ACTION_EVENT, function(event)
+        local verb = menuVerb(event)
+        if self.pendingRestore == nil or (verb ~= "view all" and verb ~= "cancel") then
+            self:CancelPendingRestore()
+        end
+    end)
+    setEvent("InventoryUpdated", RESTORE_INVENTORY_EVENT, function(event)
+        if self.pendingRestore == "not_all_items" and isBankInventoryEvent(event) then
+            self:CancelPendingRestore()
+        end
+    end)
+end
+
+-- Stop waiting to restore the last viewed tag
+function App:CancelPendingRestore()
+    if self.pendingRestore == nil then return end
+    self.pendingRestore = nil
+    setEvent("MiniMenuEntrySelected", RESTORE_ACTION_EVENT, nil)
+    setEvent("InventoryUpdated", RESTORE_INVENTORY_EVENT, nil)
+end
+
+-- Reopen the previous tag quietly, or defer/cancel when blocked
+function App:TryRestore(blocked, pending)
+    local mode = pending and self.pendingRestore or nil
+    if pending and mode == nil then return false end
+    local tag = self.restoreTag
+    if self.ext == nil or not self.sidebarSelected
+        or (self.settings ~= nil and self.settings.restoreLastTag == false)
+        or self:ShownTag() ~= nil
+        or (self.select ~= nil and self.select.Tag ~= nil and self.select:Tag() ~= nil)
+        or tag == nil or self.store.data.tags[tag] == nil then
+        if tag ~= nil and self.store.data.tags[tag] == nil then self.restoreTag = nil end
+        if pending then self:CancelPendingRestore() end
+        return false
+    end
+    if not pending then blocked = bankStateBlocker(self.ext:GetBankState()) end
+    if blocked == nil then
+        if pending then self:CancelPendingRestore() end
+        local shown, reason = self:ShowTag(tag, true)
+        if not shown and (reason == "not_all_items" or reason == "bank_closed" or reason == "busy") then
+            self:StartPendingRestore(reason == "not_all_items" and "not_all_items" or "attaching")
+        end
+        return shown, reason
+    end
+    if blocked == "not_all_items" then
+        if not pending or mode == "attaching" then self:StartPendingRestore("not_all_items") end
+    elseif blocked == "bank_closed" and (not pending or mode == "attaching") then
+        if not pending then self:StartPendingRestore("attaching") end
+    elseif pending then
+        self:CancelPendingRestore()
+    end
+    return false, blocked
+end
+
+-- Track sidebar selection and restore the previously open tag when available
+function App:OnSidebarSelected()
+    self.sidebarSelected = true
+    self:CancelPendingRestore()
+    self:TryRestore(nil, false)
+end
+
+-- Track sidebar deselection and cancel any deferred restore
+function App:OnSidebarDeselected()
+    self.sidebarSelected = false
+    self:CancelPendingRestore()
+    self:ClearStateNotice()
+end
+
+-- Update restoration memory after a tag page closes
+function App:OnPageClosed()
+    local blocked = self.ext ~= nil and bankStateBlocker(self.ext:GetBankState()) or nil
+    if blocked ~= nil and self.sidebarSelected then self:ShowStateNotice(blocked) end
+    -- Explicit return to the normal bank while selected forgets the restored tag
+    if self.sidebarSelected and self:ShownTag() == nil and blocked == nil then
+        self.restoreTag = nil
+    end
+    self.tab:Refresh()
+end
+
+-- Stop bank tools when the bank closes
+function App:OnBankClose()
+    self.sidebarSelected = false
+    self:CancelPendingRestore()
+    self:ClearStateNotice()
+    self.nativeItems:Stop()
+    self.tutorial:Stop(false)
+    self.select:Stop()
+    self.windows:CloseBankWindows()
+end
+
 -- Close tag pages when native controls restrict the bank
 function App:OnBankStateChanged(state)
     local blocked = bankStateBlocker(state)
-    if blocked == nil and self.stateNotice ~= nil then
-        if self.status == self.stateNotice then self:ShowStatus(nil) end
-        self.stateNotice = nil
-    end
+    if blocked == nil then self:ClearStateNotice() end
     if blocked ~= nil and self.ext ~= nil and self.ext:IsOpen() then
         local closed, reason = self.ext:Close()
         if not closed then
@@ -187,6 +308,7 @@ function App:OnBankStateChanged(state)
         self:ShowStateNotice(blocked)
         self.tab:Refresh()
     end
+    if self.pendingRestore ~= nil then self:TryRestore(blocked, true) end
     return blocked
 end
 
@@ -194,6 +316,13 @@ end
 function App:ShowStateNotice(reason)
     self.stateNotice = OPEN_REFUSALS[reason] or ("This tag could not be shown (" .. tostring(reason) .. ").")
     self:ShowStatus(self.stateNotice)
+end
+
+-- Clear any active restriction notice without touching unrelated errors
+function App:ClearStateNotice()
+    local notice = self.stateNotice
+    self.stateNotice = nil
+    if notice ~= nil and self.status == notice then self:ShowStatus(nil) end
 end
 
 -- Refresh bank items when a new list is available
@@ -207,6 +336,9 @@ function App:OnBankItems()
     end
     self.windows:CheckBankBounds()
     self.tutorial:Offer()
+    if self.pendingRestore ~= nil and self.sidebarSelected then
+        self:TryRestore(bankStateBlocker(self.ext:GetBankState()), true)
+    end
 end
 
 -- Return the last known bank items
@@ -235,12 +367,14 @@ function App:SetTagPage(tag)
     return true, nil
 end
 
--- Show a tag, explaining refusals over the bank title
-function App:ShowTag(tag)
+-- Show a tag, explaining refusals over the bank title unless quiet
+function App:ShowTag(tag, quiet)
+    if not quiet then self:CancelPendingRestore() end
     if self.ext == nil or self.store.data.tags[tag] == nil then return false end
-    local blocked = self:OnBankStateChanged(self.ext:GetBankState())
+    local blocked = quiet and bankStateBlocker(self.ext:GetBankState())
+        or self:OnBankStateChanged(self.ext:GetBankState())
     if blocked ~= nil then
-        self:ShowStateNotice(blocked)
+        if not quiet then self:ShowStateNotice(blocked) end
         return false, blocked
     end
     -- Core copies native sprite styles when opening a page
@@ -259,22 +393,31 @@ function App:ShowTag(tag)
         end
     end
     -- Select mode works over the bank's own view, so a shown tag ends it
-    if shown then self.select:Stop() end
-    if not shown then self.nativeItems:Refresh() end
-    if openReason == "not_all_items" or openReason == "preset_open" or openReason == "bank_closed" then
-        self:ShowStateNotice(openReason)
-    else
-        self:ShowStatus(problem)
+    if shown then
+        self.restoreTag = tag
+        self.select:Stop()
+        self:ClearStateNotice()
     end
-    self.tab:Refresh()
+    if not shown then self.nativeItems:Refresh() end
+    if not quiet then
+        if openReason == "not_all_items" or openReason == "preset_open" or openReason == "bank_closed" then
+            self:ShowStateNotice(openReason)
+        else
+            self:ShowStatus(problem)
+        end
+    end
+    if shown or not quiet then self.tab:Refresh() end
     return shown, openReason
 end
 
 -- Toggle between a tag and the normal bank
 function App:ToggleTag(tag)
+    self:CancelPendingRestore()
     if self:ShownTag() == tag then
         local left, reason = self.ext:Close()
-        if not left then
+        if left then
+            self.restoreTag = nil
+        else
             self:ShowStatus(OPEN_REFUSALS[reason] or ("This tag could not be closed (" .. tostring(reason) .. ")."))
         end
         self.tab:Refresh()
@@ -285,6 +428,10 @@ end
 
 -- Refresh views affected by a saved change
 function App:Changed(tag)
+    if self.restoreTag ~= nil and self.store.data.tags[self.restoreTag] == nil then
+        self.restoreTag = nil
+        self:CancelPendingRestore()
+    end
     -- The Tags tab shows only tag names and folders
     if tag == nil then self.tab:Refresh() end
     self.windows:StoreChanged(tag)
@@ -295,6 +442,7 @@ function App:Changed(tag)
         if self.store.data.tags[shown] ~= nil then set, problem = self:SetTagPage(shown) end
         if not set then
             self.ext:Close()
+            if self.restoreTag == shown then self.restoreTag = nil end
             if problem ~= nil then self:ShowStatus(problem) end
             self.tab:Refresh()
         end
@@ -309,11 +457,13 @@ function App:Renamed(oldTag, newTag)
     self.select:Rename(oldTag, newTag)
     self.windows:TagRenamed(oldTag, newTag)
     if self.pageTag == oldTag then self.pageTag = newTag end
+    if self.restoreTag == oldTag then self.restoreTag = newTag end
     self:Changed()
 end
 
 -- Add a slot for an object to a tag
 function App:AddItemToTag(tag, objectID)
+    self:CancelPendingRestore()
     local saved, reason = self.store:AddTag(tag, objectID)
     if not saved then
         self:ShowStatus(tostring(reason))
@@ -326,6 +476,7 @@ end
 
 -- Remove one slot from a tag
 function App:RemoveFromTag(tag, layoutKey)
+    self:CancelPendingRestore()
     local saved, reason, removed = self.store:RemoveTag(tag, layoutKey)
     if not saved then
         self:ShowStatus(tostring(reason))
@@ -337,6 +488,7 @@ end
 
 -- Collapse or expand a folder
 function App:ToggleFolder(folderKey)
+    self:CancelPendingRestore()
     local folder = self.store:GetFolder(folderKey)
     if folder == nil then return false end
     local saved, reason = self.store:SetFolderCollapsed(folderKey, not folder.collapsed)
@@ -350,6 +502,7 @@ end
 
 -- Move a tag and expand its destination folder
 function App:MoveTagToFolder(tag, folderKey)
+    self:CancelPendingRestore()
     -- Save the move and folder expansion together
     local saved, reason = self.store:SaveTogether(function()
         local moved, problem = self.store:SetTagFolder(tag, folderKey)
@@ -367,6 +520,7 @@ end
 
 -- Move a sidebar row and save its order
 function App:MoveSidebarEntry(source, target, after)
+    self:CancelPendingRestore()
     local saved, reason = self.store:MoveSidebarEntry(source, target, after)
     if not saved then
         if reason ~= nil then self:ShowStatus(tostring(reason)) end
@@ -378,6 +532,7 @@ end
 
 -- Remove a folder while keeping its tags
 function App:DeleteFolder(folderKey)
+    self:CancelPendingRestore()
     local saved, reason = self.store:DeleteFolder(folderKey)
     if not saved then
         self:ShowStatus(tostring(reason))
@@ -397,6 +552,7 @@ function App:SetSetting(key, value)
     nextSettings[key] = value
     if not Settings.save(nextSettings) then return false, "Could not save the setting." end
     self.settings = nextSettings
+    if key == "restoreLastTag" and not value then self:CancelPendingRestore() end
     DebugLog.SetEnabled(nextSettings.enableDebug)
     self.store:SetLayoutPlacement(nextSettings.preserveTagLayout)
     self:Changed()

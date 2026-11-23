@@ -21,12 +21,28 @@ suite.tests.missing_core_then_late_load = function()
     local handle={GetBankState=function() return {bankOpen=false} end}
     bankcore={Register=function(spec)
         assert(spec.id=='banktags' and spec.icon=='LIST_LAYOUT')
+        assert(type(spec.onSelect)=='function' and type(spec.onDeselect)=='function')
         count=count+1; return handle
     end}
     app:CheckConnection()
     assert(app.ext==handle and count==1)
     app:CheckConnection()
     assert(count==1,'a healthy connection must not register again')
+end
+
+suite.tests.older_core_without_selection_hooks_falls_back = function()
+    app.Disconnect=function(self) self.ext=nil end
+    app.OnBankStateChanged=function() end
+    app.nativeItems.Start=function() end
+    app.menus={Start=function() end}
+    local calls=0
+    local handle={GetBankState=function() return {bankOpen=false} end}
+    bankcore={Register=function(spec)
+        calls=calls+1
+        if spec.onSelect~=nil or spec.onDeselect~=nil then return nil,'invalid','unknown field' end
+        return handle
+    end}
+    assert(app:Connect() and app.ext==handle and calls==2)
 end
 
 suite.tests.stale_export_falls_back_to_replacement = function()
