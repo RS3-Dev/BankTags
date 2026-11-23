@@ -12,32 +12,17 @@ local GHOST_ALPHA = 0.88
 
 local LayoutEditorDrag = {}
 
--- Place a surface over its grid or search list
+-- Place a surface over its grid pane
 function LayoutEditorDrag:PlaceDragSurface(surface, kind)
     local clip = self.surfaceClips[surface]
     local pane = self.panes[kind]
-    if pane ~= nil then
-        clip:SetPos(pane.x, pane.y)
-        local width = pane.name == "unsorted" and pane.view.contentWidth or nil
-        clip:SetSize(width or pane.width - Size.SCROLLBAR_RESERVE, pane.height)
-    else
-        clip:SetPos(Size.SEARCH_X + Size.SEARCH_INSET, Size.PANEL_TOP + Size.SEARCH_LIST_TOP)
-        clip:SetSize(Size.SEARCH_VIEW_WIDTH - Size.SCROLLBAR_RESERVE, Size.SEARCH_LIST_HEIGHT)
-    end
+    if pane == nil then return end
+    clip:SetPos(pane.x, pane.y)
+    local width = (pane.name == "unsorted" or pane.name == "bank" or pane.name == "search")
+        and pane.view.contentWidth or nil
+    clip:SetSize(width or pane.width - Size.SCROLLBAR_RESERVE, pane.height)
     surface:SetPos(-clip.x, -clip.y)
-    clip:MoveToFront()
-end
-
--- Find the search result under a search-panel point
-function LayoutEditorDrag:SearchSurfaceResult(y)
-    return self.searchResults[(y + self.searchList.scrollY) // Size.SEARCH_ROW_HEIGHT + 1]
-end
-
--- Check whether a content point is over search results
-function LayoutEditorDrag:OnSearchList(x, y)
-    local left, top = Size.SEARCH_X + Size.SEARCH_INSET, Size.PANEL_TOP + Size.SEARCH_LIST_TOP
-    return x >= left and x < left + Size.SEARCH_VIEW_WIDTH - Size.SCROLLBAR_RESERVE
-        and y >= top and y < top + Size.SEARCH_LIST_HEIGHT
+    if not clip.hidden then clip:MoveToFront() end
 end
 
 -- Scroll the pane under the pointer during a drag
@@ -46,7 +31,7 @@ function LayoutEditorDrag:ScrollWheel(delta, kind)
         local x, y = self:ContentPointer()
         if x == nil then return true end
         local pane = self:PaneAt(x, y)
-        kind = pane ~= nil and pane.name or (self:OnSearchList(x, y) and "search" or nil)
+        kind = pane ~= nil and pane.name or nil
     end
     local pane = self.panes[kind]
     if pane ~= nil and not pane.hidden then
@@ -56,12 +41,6 @@ function LayoutEditorDrag:ScrollWheel(delta, kind)
             self:UpdateDragAt(self.pointerX, self.pointerY)
         end
         return pane.view.scrollY == before
-    end
-    if kind == "search" then
-        local list = self.searchList
-        local before = list.scrollY
-        list:SetScrollPosition(before + delta * Size.SEARCH_ROW_HEIGHT)
-        return list.scrollY == before
     end
     return true
 end
@@ -152,10 +131,20 @@ function LayoutEditorDrag:CreateDragSurfaces()
         self:BindDragSurface(surface, pane.name, function(x, y)
             -- A press here takes focus from any text field
             self.keysOnGrid = true
-            if pane.name == "sorted" and Keyboard.IsShiftDown() then
+            if Keyboard.IsShiftDown() then
                 local index = self:SlotIndexAt(pane, x, y)
                 local slot = index ~= nil and pane.slots[index] or nil
-                if slot == nil or slot.kind ~= "item" then return self:BeginBoxSelection(x, y) end
+                if slot == nil or slot.kind ~= "item" then return self:BeginBoxSelection(x, y, pane) end
+            end
+            if pane.name == "bank" then
+                return self:BeginBankDrag(pane, self:SlotIndexAt(pane, x, y))
+            end
+            if pane.name == "search" then
+                local index = self:SlotIndexAt(pane, x, y)
+                local slot = index ~= nil and pane.slots[index] or nil
+                local result = slot ~= nil and slot.kind == "item"
+                    and (slot.result or { objectId = slot.objectID }) or nil
+                return self:BeginSearchDrag(result)
             end
             -- Label rows sit beneath this surface, so pressing one drags it
             local labelRow = self:LabelRowAt(pane, x, y)
@@ -163,11 +152,6 @@ function LayoutEditorDrag:CreateDragSurfaces()
             return self:BeginCenterDrag(pane, self:SlotIndexAt(pane, x, y))
         end)
     end
-    self.searchDragSurface = self:CreateDragSurface("search")
-    -- Begin dragging the search result pressed here
-    self:BindDragSurface(self.searchDragSurface, "search", function(_, y)
-        return self:BeginSearchDrag(self:SearchSurfaceResult(y))
-    end)
 end
 
 -- Read the latest pointer position within the editor
@@ -230,9 +214,21 @@ function LayoutEditorDrag:BeginCenterDrag(pane, index)
         self:ShowSelection()
         return false
     end
+    if shift and pane.name == "unsorted" then
+        self:ToggleUnsortedGroupItem(slot.layoutKey)
+        self:ShowSelection()
+        return false
+    end
     -- Pressing a group item keeps the group so it can be dragged
-    if self:GroupCount() > 1 and self.groupKeys[slot.layoutKey] then
+    if pane.name == "sorted" and self:GroupCount() > 1 and self.groupKeys[slot.layoutKey] then
         return self:BeginGroupDrag(slot)
+    end
+    if pane.name == "unsorted" and self.unsortedGroupKeys ~= nil and self.unsortedGroupKeys[slot.layoutKey] then
+        local keys = self:SelectedUnsortedKeys()
+        if #keys > 1 then
+            self.selectedLayoutKey = slot.layoutKey
+            return self:BeginMultiDrag("unsorted_group", "unsorted", slot.objectID, keys, true)
+        end
     end
     self:SelectOnly(slot.layoutKey)
     self:ShowSelection()
@@ -250,7 +246,7 @@ function LayoutEditorDrag:FinishCenterDrag(drag, x, y)
         self:SaveEdit("Could not save the layout position.", function()
             return self.store:MoveLayoutItem(self.selectedTag, drag.layoutKey, destination, Size.CENTER_COLUMNS)
         end)
-    elseif pane ~= nil and drag.sourceKind == "sorted" then
+    elseif pane ~= nil and pane.name == "unsorted" and drag.sourceKind == "sorted" then
         -- The same as Move to Unsorted
         self:SaveEdit("Could not save the layout position.", function()
             return self.store:UnarrangeLayoutItem(self.selectedTag, drag.layoutKey)
@@ -258,9 +254,68 @@ function LayoutEditorDrag:FinishCenterDrag(drag, x, y)
     end
 end
 
--- Start dragging a search result into the layout
+-- Select, Shift-multiselect, or drag bank item(s) into the layout
+function LayoutEditorDrag:BeginBankDrag(pane, index)
+    local slot = index ~= nil and pane.slots[index] or nil
+    local shift = Keyboard.IsShiftDown()
+    if slot == nil or slot.kind ~= "item" then
+        if shift then return false end
+        self:SelectOnly(nil)
+        self:ShowSelection()
+        return false
+    end
+    if shift then
+        self:ToggleBankItem(slot.objectID)
+        self:ShowSelection()
+        return false
+    end
+    if self.bankSelected ~= nil and self.bankSelected[slot.objectID] then
+        local ids = self:SelectedBankObjectIDs()
+        if #ids > 1 then
+            if self.selectedTag == nil then
+                self:ShowError("Choose a tag before adding items.")
+                return false
+            end
+            return self:BeginMultiDrag("bank_group", "bank", slot.objectID, ids, true)
+        end
+    end
+    self:SelectBankOnly(slot.objectID)
+    self:ShowSelection()
+    if self.selectedTag == nil then
+        self:ShowError("Choose a tag before adding an item.")
+        return false
+    end
+    return self:StartItemDrag({ kind = "search", result = { objectId = slot.objectID }, sourceKind = "bank" },
+        slot.objectID, true)
+end
+
+-- Select, Shift-multiselect, or drag search result(s) into the layout
 function LayoutEditorDrag:BeginSearchDrag(result)
-    if result == nil then return false end
+    local shift = Keyboard.IsShiftDown()
+    if result == nil then
+        if not shift then
+            self:SelectOnly(nil)
+            self:ShowSelection()
+        end
+        return false
+    end
+    if shift then
+        self:ToggleSearchItem(result.objectId)
+        self:ShowSelection()
+        return false
+    end
+    if self.searchSelected ~= nil and self.searchSelected[result.objectId] then
+        local ids = self:SelectedSearchObjectIDs()
+        if #ids > 1 then
+            if self.selectedTag == nil then
+                self:ShowError("Choose a tag before adding items.")
+                return false
+            end
+            return self:BeginMultiDrag("search_group", "search", result.objectId, ids, false)
+        end
+    end
+    self:SelectSearchOnly(result.objectId)
+    self:ShowSelection()
     if self.selectedTag == nil then
         self:ShowError("Choose a tag before adding an item.")
         return false
@@ -278,6 +333,8 @@ function LayoutEditorDrag:UpdateDragAt(x, y)
         self:ShowLabelDropRow(self:RowFromContentPoint(x, y))
     elseif drag.kind == "group" then
         self:ShowGroupPreview(x, y)
+    elseif drag.kind == "unsorted_group" or drag.kind == "bank_group" or drag.kind == "search_group" then
+        self:ShowMultiPreview(x, y)
     end
     drag.ghost:MoveToFront()
 end
@@ -352,6 +409,8 @@ function LayoutEditorDrag:CommitDrag()
         self:FinishCenterDrag(drag, x, y)
     elseif drag.kind == "group" then
         self:FinishGroupDrag(drag, x, y)
+    elseif drag.kind == "unsorted_group" or drag.kind == "bank_group" or drag.kind == "search_group" then
+        self:FinishMultiDrag(drag, x, y)
     elseif drag.kind == "search" then
         self:FinishSearchDrag(drag, x, y)
     else
@@ -370,6 +429,9 @@ function LayoutEditorDrag:CancelDrag(keepSelection)
         drag.border:Destroy()
         if not keepSelection then
             self.selectedLayoutKey, self.groupKeys, self.pasteCell = drag.selectedBefore, drag.groupBefore, drag.pasteBefore
+            self.unsortedGroupKeys = drag.unsortedGroupBefore
+            self.bankSelected = drag.bankSelectedBefore
+            self.searchSelected = drag.searchSelectedBefore
             self:ShowSelection()
         end
     end

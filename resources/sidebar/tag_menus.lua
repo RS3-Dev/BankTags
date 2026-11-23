@@ -233,10 +233,26 @@ function TagMenus:AddEditorEntries(menu)
             action(editor)
         end)
     end
+    if target.pane == "bank" or target.pane == "search" then
+        local function sourceObjectIDs()
+            if target.pane == "bank" and editor.bankSelected ~= nil and editor.bankSelected[target.objectID] then
+                return editor:SelectedBankObjectIDs()
+            elseif target.pane == "search" and editor.searchSelected ~= nil and editor.searchSelected[target.objectID] then
+                return editor:SelectedSearchObjectIDs()
+            end
+            return { target.objectID }
+        end
+        MenuEntries.AddTop(menu, {
+            { label = "Add to Layout", action = chosen(function() editor:AddItemsToLayout(sourceObjectIDs()) end) },
+            { label = "Add to Unsorted", action = chosen(function() editor:AddItemsToUnsorted(sourceObjectIDs()) end) },
+        })
+        self.rowMenu = rowMenu
+        return
+    end
     if target.pane == "unsorted" then
         MenuEntries.AddTop(menu, {
-            { label = "Move to Layout", action = itemAction(editor.ArrangeSelected) },
-            { label = "Remove from Tag", action = itemAction(editor.RemoveSelected) },
+            { label = "Move to Layout", action = itemAction(editor.ArrangeSelected, true) },
+            { label = "Remove from Tag", action = itemAction(editor.RemoveSelected, true) },
         })
         self.rowMenu = rowMenu
         return

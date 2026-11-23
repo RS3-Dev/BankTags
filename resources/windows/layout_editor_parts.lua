@@ -22,9 +22,10 @@ Size.DEFAULT_PANEL_HEIGHT = 600
 -- Each column draws its items in one framed area, its view inset alike
 Size.VIEW_INSET = 4
 Size.COLUMN_GAP = 6
--- Keep both side panels aligned around the central layout
-Size.UNSORTED_X = 8
--- The right column ends where the window's border begins
+-- Keep the tabbed left panel inset from the window's left edge
+Size.LEFT_X = 8
+Size.UNSORTED_X = Size.LEFT_X
+-- The right layout column ends where the window's border begins
 Size.RIGHT_MARGIN = 20
 -- The editor grid starts 4px in, not the bank's 8px
 Size.GRID_LEFT = 4
@@ -77,21 +78,24 @@ function Parts.SizeToBank(columns, bankWidth, bankHeight)
     Size.PANEL_HEIGHT = Size.DEFAULT_PANEL_HEIGHT + extraHeight + frameSize
     Size.CENTER_WIDTH = Size.DEFAULT_CENTER_WIDTH + extraWidth + frameSize
     Size.CENTER_VIEW_WIDTH = Size.CENTER_WIDTH - 2 * Size.VIEW_INSET
-    Size.UNSORTED_WIDTH = (Size.WIDTH - Size.CENTER_WIDTH - 2 * Size.COLUMN_GAP
-        - Size.UNSORTED_X - Size.RIGHT_MARGIN) // 2
-    Size.CENTER_X = Size.UNSORTED_X + Size.UNSORTED_WIDTH + Size.COLUMN_GAP
-    -- Keep Search fixed while wider banks expand Layout
-    Size.SEARCH_X = Size.CENTER_X + Size.CENTER_WIDTH + Size.COLUMN_GAP
-    Size.SEARCH_WIDTH = Size.WIDTH - Size.RIGHT_MARGIN - Size.SEARCH_X
-    Size.SEARCH_VIEW_WIDTH = SidebarRows.ContentWidth(Size.SEARCH_WIDTH)
-    Size.UNSORTED_VIEW_WIDTH = SidebarRows.ContentWidth(Size.UNSORTED_WIDTH)
+    -- Slide Layout flush against the right edge and expand the left tabbed panel to fill the rest
+    Size.CENTER_X = Size.WIDTH - Size.RIGHT_MARGIN - Size.CENTER_WIDTH
+    Size.LEFT_WIDTH = Size.CENTER_X - Size.COLUMN_GAP - Size.LEFT_X
+    Size.UNSORTED_WIDTH = Size.LEFT_WIDTH
+    Size.SEARCH_X = Size.LEFT_X
+    Size.SEARCH_WIDTH = Size.LEFT_WIDTH
+    Size.LEFT_VIEW_WIDTH = SidebarRows.ContentWidth(Size.LEFT_WIDTH)
+    Size.SEARCH_VIEW_WIDTH = Size.LEFT_VIEW_WIDTH
+    Size.UNSORTED_VIEW_WIDTH = Size.LEFT_VIEW_WIDTH
     -- The actions end the panel; a taller bank grows both columns above them
     Size.ACTIONS_Y = Size.PANEL_HEIGHT - Size.BUTTON_HEIGHT
     Size.COLUMN_HEIGHT = Size.ACTIONS_Y - Size.ACTIONS_GAP
-    -- Both item areas share their top and height
+    -- Both item areas share their top and height below their tab strips
     Size.AREA_HEIGHT = Size.COLUMN_HEIGHT - Size.AREA_BOTTOM - Size.TAB_HEADER
+    Size.LEFT_BODY_TOP = Size.PANEL_TOP + Size.TAB_HEADER
+    Size.LEFT_BODY_HEIGHT = Size.AREA_HEIGHT + Size.AREA_BOTTOM
     Size.VIEW_HEIGHT = Size.AREA_HEIGHT - 2 * Size.VIEW_INSET
-    Size.SEARCH_LIST_HEIGHT = Size.COLUMN_HEIGHT - Size.SEARCH_INSET - Size.SEARCH_LIST_TOP
+    Size.SEARCH_LIST_HEIGHT = Size.LEFT_BODY_HEIGHT - Size.SEARCH_INSET - Size.SEARCH_LIST_TOP
     -- Start actions below Unsorted and keep Close at the right
     Size.ACTION_X = { Size.UNSORTED_X }
     for index = 2, #Size.ACTION_WIDTH - 1 do

@@ -20,19 +20,6 @@ function LayoutEditorNames:CreateItemNames()
     self.nameAnchor.clickthrough = true
 end
 
--- Anchor search item names beneath their icons, even when the row name fits
-function LayoutEditorNames:SearchItemAt(x, y)
-    if not self:OnSearchList(x, y) then return nil end
-    local top = Size.PANEL_TOP + Size.SEARCH_LIST_TOP
-    local row = (y - top + self.searchList.scrollY) // Size.SEARCH_ROW_HEIGHT
-    local result = self.searchResults[row + 1]
-    if result == nil then return nil end
-    local iconSize = 24
-    return { objectID = result.objectId, name = result.displayName, x = Size.SEARCH_X + Size.SEARCH_INSET + 7,
-        y = top + row * Size.SEARCH_ROW_HEIGHT - self.searchList.scrollY
-            + (Size.SEARCH_ROW_HEIGHT - iconSize) // 2, size = iconSize }
-end
-
 -- Find the item and cell under an editor point
 function LayoutEditorNames:GridItemAt(x, y)
     local pane, paneX, paneY = self:PaneAt(x, y)
@@ -47,8 +34,12 @@ function LayoutEditorNames:GridItemAt(x, y)
     if paneX - cellX >= Size.GRID_SLOT_SIZE or paneY < cellY or paneY - cellY >= Size.GRID_SLOT_SIZE then
         return nil
     end
+    local cachedName = slot.displayName
+        or (pane.name == "unsorted" and self.unsortedNames and self.unsortedNames[slot.objectID])
+        or (pane.name == "bank" and self.bankNames and self.bankNames[slot.objectID])
+        or (pane.name == "search" and self.searchNames and self.searchNames[slot.objectID]) or nil
     return { objectID = slot.objectID,
-        name = pane.name == "unsorted" and self.unsortedNames[slot.objectID] or nil,
+        name = cachedName,
         x = pane.x + cellX, y = pane.y + cellY, size = Size.GRID_SLOT_SIZE }
 end
 
@@ -72,7 +63,7 @@ function LayoutEditorNames:UpdateItemName()
         return self:HideItemName()
     end
     local x, y = self:ContentPointer()
-    local item = x ~= nil and (self:GridItemAt(x, y) or self:SearchItemAt(x, y)) or nil
+    local item = x ~= nil and self:GridItemAt(x, y) or nil
     if item == nil then return self:HideItemName() end
     -- The client's name is read only when the pointer reaches another item or cell
     local shown = item.objectID .. "@" .. item.x .. "," .. item.y

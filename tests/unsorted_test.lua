@@ -130,7 +130,8 @@ suite.tests.typing_releases_grid_keys = function()
 end
 
 suite.tests.cells_fill_usable_width_with_equal_edge_padding_and_even_gaps = function()
-    for _,width in ipairs({206,224,225}) do
+    local base = left.columns * 44 + 8
+    for _,width in ipairs({base, base + 18, base + 19}) do
         left.view.contentWidth=width; e:RefreshUnsorted()
         assert(left.gridLeft==4)
         assert(e:GridCellX(left,left.columns-1)+40==width-4)
@@ -169,7 +170,7 @@ suite.tests.grid_stays_inside_shared_border_at_larger_bank_sizes = function()
         e:CreateUnsorted(); e:RefreshUnsorted()
         local pane=e.panes.unsorted
         assert(pane.x==s.UNSORTED_X+s.SEARCH_INSET+1)
-        assert(pane.y==s.PANEL_TOP+s.SEARCH_LIST_TOP+1)
+        assert(pane.y==s.LEFT_BODY_TOP+s.SEARCH_LIST_TOP+1)
         assert(pane.width==s.UNSORTED_VIEW_WIDTH-2 and pane.height==s.SEARCH_LIST_HEIGHT-2)
         local right=e:GridCellX(pane,pane.columns-1)+s.GRID_SLOT_SIZE
         assert(right<=pane.view.contentWidth and pane.gridLeft>=0)

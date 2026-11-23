@@ -36,9 +36,15 @@ function LayoutEditorView:SetBankItems(items)
     self.styles = styles
     self.bankItemList = items
     if self.panes == nil then return end
-    for _, pane in pairs(self.panes) do
-        for index, sprite in pairs(pane.sprites or {}) do self:StyleItem(sprite, pane.slots[index].objectID, true) end
+    for name, pane in pairs(self.panes) do
+        if name ~= "bank" then
+            local absentIsPlaceholder = name ~= "search"
+            for index, sprite in pairs(pane.sprites or {}) do
+                self:StyleItem(sprite, pane.slots[index].objectID, absentIsPlaceholder)
+            end
+        end
     end
+    if self.RefreshBank ~= nil then self:RefreshBank() end
 end
 
 -- Show an item's best stack quantity, fading placeholders
@@ -118,21 +124,10 @@ function LayoutEditorView:CreateHeader()
     })
 end
 
--- Use the same borders, row spacing, and inset for both item lists
-function LayoutEditorView:CreateItemList(panel, width)
-    return prettyui.List.new(panel, {
-        categoryID = "auto",
-        x = Size.SEARCH_INSET, y = Size.SEARCH_LIST_TOP,
-        width = width, height = Size.SEARCH_LIST_HEIGHT,
-        entryHeight = Size.SEARCH_ROW_HEIGHT, maxSelected = 1,
-        backgroundColour = 0x00000000, borderColour = Theme.INNER_FRAME,
-        selectedColour = Theme.ROW_SELECTED,
-    })
-end
-
--- Keep item search visible beside the layout
+-- Create the searchable item grid inside the Search tab (matching the Bank grid)
 function LayoutEditorView:CreateSearch()
     local inset, listTop = Size.SEARCH_INSET, Size.SEARCH_LIST_TOP
+    self.searchNames = {}
     self.itemSearch = prettyui.TextField.new(self.searchPanel, {
         x = inset, y = Size.SEARCH_FIELD_TOP,
         width = Size.SEARCH_VIEW_WIDTH, height = Size.SEARCH_FIELD_HEIGHT,
@@ -140,7 +135,27 @@ function LayoutEditorView:CreateSearch()
         onChange = function(field, _, value) self.keysOnGrid = false; self:QueueSearch(Text.cleanField(field, value)) end,
         onSubmit = function(_, value) self:RunSearch(value) end,
     })
-    self.searchList = self:CreateItemList(self.searchPanel, Size.SEARCH_VIEW_WIDTH)
+    local width, height = Size.SEARCH_VIEW_WIDTH - 2, Size.SEARCH_LIST_HEIGHT - 2
+    local view = prettyui.SimpleView.new(self.searchPanel, {
+        x = inset + 1, y = listTop + 1,
+        width = width, height = height, contentHeight = height, scrollStep = Size.GRID_STEP,
+    })
+    rectangle(self.searchPanel, inset, listTop,
+        Size.SEARCH_VIEW_WIDTH, Size.SEARCH_LIST_HEIGHT, Theme.INNER_FRAME, false)
+    local columns = math.max(1, (width - Size.SCROLLBAR_RESERVE - 2 * Size.GRID_LEFT
+        + Size.GRID_STEP - Size.GRID_SLOT_SIZE) // Size.GRID_STEP)
+    local pane = {
+        name = "search", columns = columns, gridLeft = Size.GRID_LEFT,
+        x = Size.SEARCH_X + inset + 1,
+        y = Size.LEFT_BODY_TOP + listTop + 1,
+        width = width, height = height,
+        slots = {}, sprites = {}, labels = {}, rowCount = 0, view = view, outlines = {},
+        marks = Parts.layer(view.content, 0, 0, width, height),
+    }
+    view.onLayout = function()
+        if self.RenderPaneWindow ~= nil then self:RenderPaneWindow(pane, false) end
+    end
+    self.panes.search = pane
     self.searchHint = prettyui.Text.new(self.searchPanel, {
         text = "", x = inset + 8, y = listTop + 4,
         width = Size.SEARCH_VIEW_WIDTH - 16, height = 150,
@@ -176,26 +191,82 @@ function LayoutEditorView:CreateActions()
     self.status.clickthrough = true
 end
 
--- Build three persistent columns and their input surfaces
-function LayoutEditorView:CreatePanels()
-    self.searchPanel = Parts.contentLayer(self.content, Size.SEARCH_X, Size.PANEL_TOP,
-        Size.SEARCH_WIDTH, Size.COLUMN_HEIGHT)
-    self.centerPanel = Parts.contentLayer(self.content, Size.CENTER_X, Size.PANEL_TOP,
-        Size.CENTER_WIDTH, Size.COLUMN_HEIGHT)
-    self.unsortedPanel = Parts.contentLayer(self.content, Size.UNSORTED_X, Size.PANEL_TOP,
-        Size.UNSORTED_WIDTH, Size.COLUMN_HEIGHT)
-    for _, panel in ipairs({ self.searchPanel, self.centerPanel, self.unsortedPanel }) do
-        -- Bank tabs sit directly on the window background
-        if panel ~= self.centerPanel then
-            tiledSprite(panel, 0, 0, panel.width, Size.COLUMN_HEIGHT, NativeUi.SPRITES.PANEL_BACKGROUND)
-            rectangle(panel, 0, 0, panel.width, Size.COLUMN_HEIGHT, FRAME, false)
-        end
-        -- Keep the sidebar's tiled background visible
-        if panel == self.centerPanel then
-            local height = Size.AREA_HEIGHT + (panel == self.centerPanel and Size.AREA_BOTTOM or 0)
-            itemArea(panel, panel.width, Size.TAB_HEADER, height)
+local LEFT_TAB_INDEX = { unsorted = 1, bank = 2, search = 3 }
+
+-- Create PrettyUI tabs for Unsorted, Bank, and Search on the left panel
+function LayoutEditorView:CreateLeftTabs()
+    self.leftTabs = prettyui.Tabs.new(self.content, {
+        { kind = "text", text = "Unsorted", value = "unsorted", scrollable = false },
+        { kind = "text", text = "Bank", value = "bank", scrollable = false },
+        { kind = "text", text = "Search", value = "search", scrollable = false },
+    }, {
+        x = Size.LEFT_X,
+        y = Size.PANEL_TOP,
+        width = Size.LEFT_WIDTH,
+        height = Size.COLUMN_HEIGHT,
+        scrollable = false,
+        tabInset = Size.TABS_INSET,
+        onChange = function(_, _, value)
+            self:OnLeftTabChanged(value)
+        end,
+    })
+    self.unsortedPanel = self.leftTabs:GetPage(1).content
+    self.bankPanel = self.leftTabs:GetPage(2).content
+    self.searchPanel = self.leftTabs:GetPage(3).content
+end
+
+-- Synchronize pane visibility and drag surfaces after switching left tabs
+function LayoutEditorView:OnLeftTabChanged(tabID)
+    self.activeLeftTab = tabID
+    self.keysOnGrid = false
+    self:HideItemName()
+    self:CancelDrag()
+    self.pointerSurface = nil
+    if self.panes ~= nil then
+        for _, name in ipairs({ "unsorted", "bank", "search" }) do
+            local pane = self.panes[name]
+            if pane ~= nil then
+                pane.hidden = tabID ~= name
+                self:RenderPaneWindow(pane, true)
+            end
         end
     end
+    if self.surfaceClips ~= nil then
+        for _, kind in ipairs({ "unsorted", "bank", "search" }) do
+            local surface = self.panes and self.panes[kind] and self.panes[kind].surface or nil
+            if surface ~= nil then
+                local hidden = kind ~= tabID
+                surface.hidden = hidden
+                self.surfaceClips[surface].hidden = hidden
+                if not hidden then self:PlaceDragSurface(surface, kind) end
+            end
+        end
+    end
+end
+
+-- Switch the active left panel tab programmatically
+function LayoutEditorView:SelectLeftTab(tabID)
+    local index = LEFT_TAB_INDEX[tabID]
+    if index == nil then return end
+    if self.leftTabs ~= nil and self.leftTabs.SetActive ~= nil then
+        self.leftTabs:SetActive(index, false)
+    end
+    self:OnLeftTabChanged(tabID)
+end
+
+-- Build the tabbed left panel, right layout column, and input surfaces
+function LayoutEditorView:CreatePanels()
+    -- Keep the panel backdrop in category 0 ahead of leftTabs so tab pages draw in front of it
+    self.leftPanel = Parts.contentLayer(self.content, Size.LEFT_X, Size.LEFT_BODY_TOP,
+        Size.LEFT_WIDTH, Size.LEFT_BODY_HEIGHT)
+    tiledSprite(self.leftPanel, 0, 0, Size.LEFT_WIDTH, Size.LEFT_BODY_HEIGHT, NativeUi.SPRITES.PANEL_BACKGROUND)
+    rectangle(self.leftPanel, 0, 0, Size.LEFT_WIDTH, Size.LEFT_BODY_HEIGHT, FRAME, false)
+    self:CreateLeftTabs()
+
+    self.centerPanel = Parts.contentLayer(self.content, Size.CENTER_X, Size.PANEL_TOP,
+        Size.CENTER_WIDTH, Size.COLUMN_HEIGHT)
+    itemArea(self.centerPanel, Size.CENTER_WIDTH, Size.TAB_HEADER, Size.AREA_HEIGHT + Size.AREA_BOTTOM)
+
     self:CreateHeader()
     self.panes = {
         sorted = self:CreatePane("sorted", self.centerPanel, Size.TAB_HEADER + Size.VIEW_INSET,
@@ -203,10 +274,15 @@ function LayoutEditorView:CreatePanels()
     }
     self:CreateSearch()
     self:CreateUnsorted()
+    self:CreateBank()
+    self.panes.bank.hidden = true
+    self.panes.search.hidden = true
     self:CreateActions()
     self:CreateDragSurfaces()
     self:RunSearch("")
+    self:RefreshBank()
     self:CreateItemNames()
+    self:SelectLeftTab("unsorted")
 end
 
 -- Share exact cell positions between drawing, selection, tooltips, and input
@@ -318,7 +394,7 @@ function LayoutEditorView:RenderPaneWindow(pane, force)
                         sprite:SetAssociatedObject(slot.objectID)
                         itemPoolObjectIDs[itemCount] = slot.objectID
                     end
-                    self:StyleItem(sprite, slot.objectID, true)
+                    self:StyleItem(sprite, slot.objectID, pane.name ~= "search")
                     sprite.hidden = false
                     sprites[index] = sprite
                 end
@@ -343,7 +419,7 @@ function LayoutEditorView:DrawPane(pane, rowCount, labels)
     pane.contentHeight = height
     pane.view:SetContentHeight(height)
     pane.gridLeft, pane.gridSpan = Size.GRID_LEFT, nil
-    if pane.name == "unsorted" then
+    if pane.name == "unsorted" or pane.name == "bank" or pane.name == "search" then
         -- Side padding matches the first row's top padding inside the border
         pane.gridLeft = BankGrid.TOP
         pane.gridSpan = math.max(0, pane.view.contentWidth - 2 * pane.gridLeft - Size.GRID_SLOT_SIZE)
@@ -370,11 +446,25 @@ function LayoutEditorView:ShowSelection()
                 BankGrid.RowItemY((index - 1) // pane.columns, pane.labels))
             mark.hidden = false
         end
-        for layoutKey, index in pairs(name == "sorted" and self.layout.sortedIndex
-            or pane.indexes or self.layout.unsortedIndex) do
-            if self:IsSelected(layoutKey) then outline(index) end
+        if name == "bank" then
+            if self.bankSelected ~= nil then
+                for index, slot in ipairs(pane.slots or {}) do
+                    if slot.kind == "item" and self.bankSelected[slot.objectID] then outline(index) end
+                end
+            end
+        elseif name == "search" then
+            if self.searchSelected ~= nil then
+                for index, slot in ipairs(pane.slots or {}) do
+                    if slot.kind == "item" and self.searchSelected[slot.objectID] then outline(index) end
+                end
+            end
+        else
+            for layoutKey, index in pairs(name == "sorted" and self.layout.sortedIndex
+                or pane.indexes or self.layout.unsortedIndex) do
+                if self:IsSelected(layoutKey) then outline(index) end
+            end
+            if name == "sorted" and self.pasteCell ~= nil then outline(self.pasteCell) end
         end
-        if name == "sorted" and self.pasteCell ~= nil then outline(self.pasteCell) end
         for index = count + 1, #pane.outlines do pane.outlines[index].hidden = true end
     end
 end

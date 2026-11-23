@@ -13,6 +13,7 @@ LayoutEditorWindow.__index = LayoutEditorWindow
 for _, methods in ipairs({
     require("resources/windows/layout_editor_view"),
     require("resources/windows/layout_editor_unsorted"),
+    require("resources/windows/layout_editor_bank"),
     require("resources/windows/layout_editor_rows"),
     require("resources/windows/layout_editor_drag"),
     require("resources/windows/layout_editor_search"),
@@ -189,12 +190,14 @@ end
 -- End drags and load the selected tag's layout
 function LayoutEditorWindow:SelectTag(tag)
     self:CancelDrag()
-    -- Reset scrolling and editing state when switching tags
+    -- Reset scrolling and editing state when switching tags (keeping Bank & Search scroll)
     if tag ~= self.selectedTag then
         self:ClearHistory()
         self:ClearStatus()
         self.clipboard = nil
-        for _, pane in pairs(self.panes) do pane.view:SetScrollPosition(0) end
+        for name, pane in pairs(self.panes) do
+            if name ~= "bank" and name ~= "search" then pane.view:SetScrollPosition(0) end
+        end
     end
     self.selectedTag = tag
     self:SelectOnly(nil)
@@ -253,8 +256,18 @@ function LayoutEditorWindow:UnarrangeSelected()
     end))
 end
 
--- Place the Unsorted selection in the first open cell
+-- Place the selected Unsorted item or group in the first open cells
 function LayoutEditorWindow:ArrangeSelected()
+    local keys = self.SelectedUnsortedKeys ~= nil and self:SelectedUnsortedKeys() or {}
+    if #keys > 1 then
+        local cells = self.store:OpenLayoutCells(self.selectedTag, #keys, 1, Size.CENTER_COLUMNS)
+        return (self:SaveEdit("Could not move the items to the layout.", function()
+            local saved, moved, reason = self.store:MoveUnsortedItemsToCells(
+                self.selectedTag, keys, cells, Size.CENTER_COLUMNS)
+            if saved and moved ~= nil then self:SelectItems(moved) end
+            return saved, reason
+        end))
+    end
     local entry, paneName = self:SelectedEntry()
     if entry == nil or paneName ~= "unsorted" then return false end
     local labelRows = {}
@@ -277,11 +290,19 @@ function LayoutEditorWindow:RemoveSelected()
     local keys
     if self.groupKeys ~= nil then
         keys = self:SortedKeys(self.groupKeys)
+    elseif self.unsortedGroupKeys ~= nil then
+        keys = self:SelectedUnsortedKeys()
     else
         local entry = self:SelectedEntry()
         keys = entry ~= nil and { entry.layoutKey } or {}
     end
-    if #keys == 0 then return false end
+    if #keys == 0 then
+        if #(self.SelectedBankObjectIDs ~= nil and self:SelectedBankObjectIDs() or {}) > 0
+            or #(self.SelectedSearchObjectIDs ~= nil and self:SelectedSearchObjectIDs() or {}) > 0 then
+            self:ShowError("Bank and Search items cannot be removed here.")
+        end
+        return false
+    end
     -- Remove the entire selection before clearing its outlines
     return (self:SaveEdit("Could not remove the selected items.", function()
         local saved, reason = self.store:RemoveTags(self.selectedTag, keys)
@@ -311,12 +332,15 @@ function LayoutEditorWindow:Destroy(closing)
     if onClose ~= nil then onClose(self) end
     self:DestroyItemNames()
     for _, control in ipairs({
-        self.panes.sorted.view, self.panes.unsorted.view, self.unsortedSearch, self.itemSearch, self.searchList, self.tagTabs,
+        self.panes.sorted.view, self.panes.unsorted.view, self.panes.bank.view, self.panes.search.view,
+        self.unsortedSearch, self.bankSearch, self.itemSearch,
+        self.leftTabs, self.tagTabs,
         self.copyButton, self.pasteButton, self.removeButton, self.addRowButton, self.newLabelButton,
         self.closeButton,
     }) do
-        control:Destroy()
+        if control ~= nil then control:Destroy() end
     end
+    self.leftTabs = nil
     self.panes = nil
     self.surfaceClips = nil
     self.overlayWindows = {}

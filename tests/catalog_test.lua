@@ -94,8 +94,7 @@ suite.tests.sidebar_requests_bankable_options = function()
         assert(options.includeFields==false, 'Name search must not load attribute shards')
         called=true; return {},0,false
     end
-    local editor={bankItemList=bank,searchList={rows={},SetEntries=function() end},
-        searchHint={},searchDragSurface={MoveToFront=function() end}}
+    local editor={bankItemList=bank,searchHint={}}
     for key,value in pairs(search) do editor[key]=value end
     editor:RunSearch(' shark ')
     assert(called and #editor.searchResults==0)
@@ -108,8 +107,7 @@ suite.tests.typing_only_searches_latest_value_after_pause = function()
     Catalog.Find=function(query)
         calls[#calls+1]=query; return {},0,false
     end
-    local editor={bankItemList=bank,searchList={rows={},SetEntries=function() end},
-        searchHint={},searchDragSurface={MoveToFront=function() end}}
+    local editor={bankItemList=bank,searchHint={}}
     for key,value in pairs(search) do editor[key]=value end
     editor:QueueSearch('s'); editor:TickSearch()
     editor:QueueSearch('sh'); editor:TickSearch()
@@ -138,20 +136,26 @@ suite.tests.async_find_supports_runeql_remote_mode_and_cancels_stale_requests = 
         end,
     }}
     assert(Catalog.IsFull())
-    local editor={bankItemList=bank,searchList={rows={},SetEntries=function() end},
-        searchHint={},searchDragSurface={MoveToFront=function() end}}
+    local editor={bankItemList=bank,searchHint={}}
     for key,value in pairs(search) do editor[key]=value end
 
+    -- Start first async query -> shows Searching...
     editor:RunSearch('sh')
     assert(editor.searchHint.content=='Searching...' and #pending==1)
+
+    -- Start second query before first resolves -> cancels first handle
     editor:RunSearch('bank')
     assert(cancelled[1]==true and #pending==2)
+
+    -- Stale first callback is ignored
     pending[1].cb({{configName='other_item',displayName='Other item'}},1,nil)
     editor:TickSearch()
     assert(#editor.searchResults==0)
+
+    -- Active second callback defers UI update onto TickSearch and filters bankable results (dropping CERT_)
     pending[2].cb({{configName='CERT_bank_item',displayName='Bank item'},
         {configName='bank_item',displayName='Bank item'}},2,nil)
-    assert(#editor.searchResults==0)
+    assert(#editor.searchResults==0, 'async callback should defer UI rendering onto Bank Tags TickSearch')
     editor:TickSearch()
     assert(#editor.searchResults==1 and editor.searchResults[1].objectId==10)
     assert(editor.searchHint.hidden==true)
@@ -159,10 +163,11 @@ end
 
 suite.tests.sprite_picker_skips_fields_and_reports_empty_visible_results = function()
     local SpritePicker = require('resources/windows/sprite_picker')
-    local capturedOptions
+    local capturedOptions, statusText
     Catalog.FindAsync = function(query, limit, items, options, cb)
         capturedOptions = options
         assert(query == 'ghost' and limit == 40)
+        -- Remote total > 0, but none resolve to client objects
         cb({}, 5, false, nil)
         return { Cancel = function() end }
     end
@@ -175,7 +180,8 @@ suite.tests.sprite_picker_skips_fields_and_reports_empty_visible_results = funct
     }, { __index = SpritePicker })
     picker:RunSearch('ghost')
     assert(capturedOptions ~= nil and capturedOptions.includeFields == false and capturedOptions.bankableOnly == nil)
-    assert(picker.status.content == 'No matching display names.')
+    statusText = picker.status.content
+    assert(statusText == 'No matching display names.', 'expected empty visible results message, got ' .. tostring(statusText))
 end
 
 return suite
