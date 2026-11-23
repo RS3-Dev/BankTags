@@ -51,15 +51,16 @@ function LayoutEditorRows:DefaultLabelRow()
     return index ~= nil and (index - 1) // Size.CENTER_COLUMNS or math.maxinteger
 end
 
--- Find an uncovered editor row or Unsorted item
+-- Find an uncovered editor row, Unsorted item, Bank item, or Search result
 function LayoutEditorRows:RowMenuTarget()
     if self.window == nil or self.window.root.hidden or self.drag ~= nil
         or self.selectedTag == nil or self:OverlayShown() then return nil end
     local x, y = self:ContentPointer()
-    local pane, paneX, paneY
-    if x ~= nil then pane, paneX, paneY = self:PaneAt(x, y) end
+    if x == nil then return nil end
+    local pane, paneX, paneY = self:PaneAt(x, y)
     if pane == nil then return nil end
-    local contentWidth = pane.name == "unsorted" and pane.view.contentWidth or nil
+    local contentWidth = (pane.name == "unsorted" or pane.name == "bank" or pane.name == "search")
+        and pane.view.contentWidth or nil
     if paneX >= (contentWidth or pane.width - Size.SCROLLBAR_RESERVE) then return nil end
     local row = self:RowAt(pane, paneX, paneY)
     -- An empty layout offers a first row from its background
@@ -67,7 +68,8 @@ function LayoutEditorRows:RowMenuTarget()
     if row == nil then return nil end
     local index = self:SlotIndexAt(pane, paneX, paneY)
     local slot = index ~= nil and pane.slots[index] or nil
-    if pane.name == "unsorted" and (slot == nil or slot.kind ~= "item") then return nil end
+    if (pane.name == "unsorted" or pane.name == "bank" or pane.name == "search")
+        and (slot == nil or slot.kind ~= "item") then return nil end
     return {
         tag = self.selectedTag,
         pane = pane.name,
@@ -76,6 +78,7 @@ function LayoutEditorRows:RowMenuTarget()
         columns = Size.CENTER_COLUMNS,
         data = self.store.data,
         layoutKey = slot ~= nil and slot.kind == "item" and slot.layoutKey or nil,
+        objectID = slot ~= nil and slot.kind == "item" and slot.objectID or nil,
     }
 end
 

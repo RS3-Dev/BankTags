@@ -300,6 +300,106 @@ function TagStoreLayouts:UnarrangeLayoutItem(tag, layoutKey)
     return self:UnarrangeLayoutItems(tag, { layoutKey })
 end
 
+-- Find consecutive open layout cells starting at startIndex, skipping labels and occupied slots
+function TagStoreLayouts:OpenLayoutCells(tag, count, startIndex, columnCount)
+    count = math.tointeger(tonumber(count)) or 0
+    startIndex = math.max(1, math.tointeger(tonumber(startIndex)) or 1)
+    local record = self.data.tags[tag]
+    if record == nil or count <= 0 then return {} end
+    local view = TagLayouts.Render(record.rows, columnCount)
+    local columns = view.columns
+    local cells = {}
+    local index = startIndex
+    while #cells < count do
+        local line = (index - 1) // columns
+        if line >= view.lines then
+            cells[#cells + 1] = index
+            index = index + 1
+        elseif view.cells[index] == nil then
+            -- Skip an entire label row
+            index = (line + 1) * columns + 1
+        elseif TagLayouts.IsOpen(view.slots[index]) then
+            cells[#cells + 1] = index
+            index = index + 1
+        else
+            index = index + 1
+        end
+    end
+    return cells
+end
+
+-- Add and place multiple objects at open layout cells in one save
+function TagStoreLayouts:PlaceItemsAtCells(tag, objectIDs, cells, columnCount)
+    if self.data.tags[tag] == nil or type(objectIDs) ~= "table" or #objectIDs == 0
+        or type(cells) ~= "table" or #cells < #objectIDs then
+        return false, nil, "The layout destination is invalid."
+    end
+    local nextData = copy(self.data)
+    local rows = nextData.tags[tag].rows
+    local view = TagLayouts.Render(rows, columnCount)
+    local writes, keys = {}, {}
+    for position, objectID in ipairs(objectIDs) do
+        objectID = math.tointeger(tonumber(objectID))
+        if objectID == nil or objectID < 0 then return false, nil, "The item is invalid." end
+        local index = math.tointeger(tonumber(cells[position]))
+        if index == nil or index < 1 then return false, nil, "The layout destination is invalid." end
+        local line = (index - 1) // view.columns
+        if line < view.lines and (view.cells[index] == nil or not TagLayouts.IsOpen(view.slots[index])) then
+            return false, nil, "That cell is occupied or belongs to a label."
+        end
+        local slot = TagLayouts.Item(objectID)
+        keys[#keys + 1] = slot.layoutKey
+        writes[index] = slot
+    end
+    writeCells(rows, view, writes)
+    local saved, reason = self:Commit(nextData, "Could not add the items to the layout.")
+    if not saved then return false, nil, reason end
+    return true, keys, nil
+end
+
+-- Move multiple Unsorted items into open layout cells in one save
+function TagStoreLayouts:MoveUnsortedItemsToCells(tag, layoutKeys, cells, columnCount)
+    if self.data.tags[tag] == nil or type(layoutKeys) ~= "table" or #layoutKeys == 0
+        or type(cells) ~= "table" or #cells < #layoutKeys then
+        return false, nil, "The layout destination is invalid."
+    end
+    local nextData = copy(self.data)
+    local record = nextData.tags[tag]
+    local wanted = {}
+    for _, key in ipairs(layoutKeys) do wanted[key] = true end
+    local found, kept = {}, {}
+    for _, slot in ipairs(record.unsorted) do
+        if slot.kind == "item" and wanted[slot.layoutKey] then
+            found[slot.layoutKey] = slot
+        else
+            kept[#kept + 1] = slot
+        end
+    end
+    local ordered = {}
+    for _, key in ipairs(layoutKeys) do
+        if found[key] ~= nil then ordered[#ordered + 1] = found[key] end
+    end
+    if #ordered == 0 then return false, nil, "The selected items are no longer in Unsorted." end
+    record.unsorted = kept
+    local rows = record.rows
+    local view = TagLayouts.Render(rows, columnCount)
+    local writes, movedKeys = {}, {}
+    for position, slot in ipairs(ordered) do
+        local index = math.tointeger(tonumber(cells[position]))
+        if index == nil or index < 1 then return false, nil, "The layout destination is invalid." end
+        local line = (index - 1) // view.columns
+        if line < view.lines and (view.cells[index] == nil or not TagLayouts.IsOpen(view.slots[index])) then
+            return false, nil, "That cell is occupied or belongs to a label."
+        end
+        writes[index] = slot
+        movedKeys[#movedKeys + 1] = slot.layoutKey
+    end
+    writeCells(rows, view, writes)
+    local saved, reason = self:Commit(nextData, "Could not move the items to the layout.")
+    if not saved then return false, nil, reason end
+    return true, movedKeys, nil
+end
+
 -- Paste item copies only when every destination is empty
 function TagStoreLayouts:PasteLayoutItems(tag, items, destinationIndex, columnCount)
     destinationIndex = math.tointeger(tonumber(destinationIndex))

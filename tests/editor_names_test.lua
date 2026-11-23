@@ -34,14 +34,20 @@ suite.tests.layout_and_unsorted_items_center_name_below_cell = function()
     end
 end
 
-suite.tests.search_tooltip_appears_even_when_name_fits = function()
-    local s=require('resources/windows/layout_editor_parts').size
-    e.searchList={scrollY=0}; e.searchResults={{objectId=10,displayName='Shark'}}
-    hover(s.SEARCH_X+s.SEARCH_INSET+8,s.PANEL_TOP+s.SEARCH_LIST_TOP+8)
-    assert(e.nameTooltip.shown and e.nameTooltip.text=='Shark')
-    assert(e.nameAnchor.width==24)
-    assert(e.nameTooltipOptions.x==s.SEARCH_X+s.SEARCH_INSET+7+(24-120)//2)
-    assert(e.nameTooltipOptions.y==s.PANEL_TOP+s.SEARCH_LIST_TOP+4+24+6)
+suite.tests.search_grid_tooltip_centers_below_cell = function()
+    local searchPane = {
+        name = 'search', x = 0, y = 50, width = 180, height = 120, columns = 3, gridLeft = 4,
+        labels = {}, rowCount = 1, view = { scrollY = 0 },
+        slots = { { kind = 'item', objectID = 10, displayName = 'Shark' } },
+    }
+    e.panes.unsorted.hidden = true
+    e.panes.search = searchPane
+    e.activeLeftTab = 'search'
+    hover(searchPane.x + searchPane.gridLeft + 8, searchPane.y + 12)
+    assert(e.nameTooltip.shown and e.nameTooltip.text == 'Shark')
+    assert(e.nameAnchor.width == 40)
+    assert(e.nameTooltipOptions.x == math.floor(searchPane.x + searchPane.gridLeft + (40 - 120) / 2))
+    assert(e.nameTooltipOptions.y == searchPane.y + 4 + 40 + 6)
 end
 
 suite.tests.above_fallback_matches_bank_near_bottom = function()

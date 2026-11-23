@@ -3,14 +3,11 @@
 local Catalog = require("resources/tags/catalog")
 local debugLog = require("resources/core/debug_log").Write
 local Text = require("resources/core/text")
-local Theme = require("resources/ui/theme")
 local Parts = require("resources/windows/layout_editor_parts")
 local Size = Parts.size
 
 local SEARCH_RESULT_LIMIT = 200
 local SEARCH_OPTIONS = { bankableOnly = true, includeFields = false }
-local SEARCH_ICON_SIZE = 24
-local ROW_HEIGHT = Size.SEARCH_ROW_HEIGHT
 local SEARCH_DELAY_TICKS = 3
 local SEARCH_TIMEOUT_TICKS = 300
 
@@ -47,7 +44,8 @@ function LayoutEditorSearch:TickSearch()
     local completed = self.completedSearch
     if completed ~= nil then
         self.completedSearch = nil
-        if completed.requestId == self.searchRequestId and self.searchList ~= nil then
+        local searchPane = self.panes ~= nil and self.panes.search or nil
+        if completed.requestId == self.searchRequestId and (self.panes == nil or searchPane ~= nil) then
             self.searchHandle = nil
             self.searchWaitTicks = nil
             self.activeSearchQuery = nil
@@ -85,20 +83,43 @@ function LayoutEditorSearch:CancelSearch()
     end
 end
 
--- Apply search results or an error message to the search list
+-- Apply search results or an error message to the search grid
 function LayoutEditorSearch:ApplySearchResults(query, results, err)
     self.searchResults = results or {}
-    self.searchList:SetEntries(self:SearchEntries(self.searchResults))
+    self.searchSelected = nil
+    local slots, names = {}, {}
+    for _, result in ipairs(self.searchResults) do
+        local objectID = result.objectId
+        if objectID ~= nil then
+            local displayName = Text.plain(result.displayName or result.name or ("Item " .. objectID))
+            slots[#slots + 1] = {
+                kind = "item",
+                objectID = objectID,
+                result = result,
+                displayName = displayName,
+            }
+            if names[objectID] == nil then names[objectID] = displayName end
+        end
+    end
+    self.searchNames = names
+    local pane = self.panes ~= nil and self.panes.search or nil
+    if pane ~= nil then
+        pane.slots = slots
+        if pane.view ~= nil and pane.view.SetScrollPosition ~= nil then pane.view:SetScrollPosition(0) end
+        if self.DrawPane ~= nil then self:DrawPane(pane, math.ceil(#slots / pane.columns), {}) end
+        if pane.surface ~= nil and not pane.hidden and self.PlaceDragSurface ~= nil then
+            self:PlaceDragSurface(pane.surface, "search")
+        end
+    end
     if err ~= nil then
         logSearchError("Bank Tags could not search items: ", err)
         self:SetSearchHint("Item search is unavailable right now.")
     elseif query == "" then
         self:SetSearchHint(nil)
     else
-        self:SetSearchHint(#self.searchResults == 0 and withLimit("No items match that search.") or nil)
+        self:SetSearchHint(#slots == 0 and withLimit("No items match that search.") or nil)
     end
-    self:DrawSearchIcons(self.searchList, self.searchResults)
-    self.searchDragSurface:MoveToFront()
+    if self.layout ~= nil and self.ShowSelection ~= nil then self:ShowSelection() end
 end
 
 -- Show item matches or explain an unavailable search
@@ -118,7 +139,8 @@ function LayoutEditorSearch:RunSearch(value)
     local handle = Catalog.FindAsync(query, SEARCH_RESULT_LIMIT, self.bankItemList, SEARCH_OPTIONS,
         function(results, _, _, reason)
             settled = true
-            if requestId ~= self.searchRequestId or self.searchList == nil then return end
+            local searchPane = self.panes ~= nil and self.panes.search or nil
+            if requestId ~= self.searchRequestId or (self.panes ~= nil and searchPane == nil) then return end
             local err = results == nil and (reason or "Item search failed.") or nil
             if inCall then
                 self.searchHandle = nil
@@ -145,44 +167,16 @@ function LayoutEditorSearch:RunSearch(value)
     if not settled then
         self.searchHandle = handle
         self.searchResults = {}
-        self.searchList:SetEntries({})
+        self.searchSelected = nil
+        self.searchNames = {}
+        local pane = self.panes ~= nil and self.panes.search or nil
+        if pane ~= nil then
+            pane.slots = {}
+            if self.DrawPane ~= nil then self:DrawPane(pane, 0, {}) end
+        end
         self:SetSearchHint("Searching...")
+        if self.layout ~= nil and self.ShowSelection ~= nil then self:ShowSelection() end
     end
-end
-
--- Place the same icon and name in either side panel's result rows
-function LayoutEditorSearch:DrawSearchIcons(list, results, sprites, bankStyles)
-    for index, row in ipairs(list.rows) do
-        local icon = ui.Sprite.new(row.root)
-        icon:SetPos(7, (ROW_HEIGHT - SEARCH_ICON_SIZE) // 2)
-        icon:SetSize(SEARCH_ICON_SIZE, SEARCH_ICON_SIZE)
-        icon:SetAssociatedObject(results[index].objectId)
-        icon.outlineWidth = 1
-        if bankStyles then self:StyleItem(icon, results[index].objectId, true)
-        else icon.associatedObjectQuantityMode = ui.ObjectQuantityDisplayMode.NEVER end
-        if sprites ~= nil then sprites[index] = icon end
-        icon.clickthrough = true
-        row.label:SetPos(38, 0)
-        -- Follow row width so scrolling and name tooltips agree
-        row.label:SetSize(-44, ROW_HEIGHT, 1.0, 0)
-        row.label:MoveToFront()
-    end
-end
-
--- Build named rows for item search results
-function LayoutEditorSearch:SearchEntries(results)
-    local entries = {}
-    for row, result in ipairs(results) do
-        entries[row] = {
-            id = row,
-            label = Text.plain(result.displayName),
-            backgroundColour = row % 2 == 1 and Theme.ROW_ODD or Theme.ROW_EVEN,
-            hoverColour = Theme.ROW_HOVER,
-            selectedColour = Theme.ROW_SELECTED,
-            textColour = Theme.TEXT,
-        }
-    end
-    return entries
 end
 
 -- Add and place a search result in one save
