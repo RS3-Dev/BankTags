@@ -248,7 +248,7 @@ function ImportShare:RebuildShareRows(exports)
             root:SetPos(18, startY + #self.shareRows * rowHeight)
             root:SetSize(452, 30)
             root.clickthrough = true
-            local name = Text.plain(export.tag)
+            local name = Text.plain(export.name or export.tag)
             if partCount > 1 then name = name .. " (" .. part .. "/" .. partCount .. ")" end
             local label = prettyui.Text.new(root, {
                 text = name,

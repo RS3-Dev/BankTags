@@ -36,12 +36,15 @@ end
 -- Load tags and protect unreadable saves
 function TagStore.new()
     local saved, reason = ChunkedStringStore.Read(TEXT_STORE)
-    local data
-    if saved ~= nil then data, reason = TagData.Decode(saved, true) end
+    local data, migrated
+    if saved ~= nil then data, reason, migrated = TagData.Decode(saved, true) end
     local store = setmetatable({ data = data or TagData.Empty() }, TagStore)
     if reason ~= nil then
         store.loadError = "The saved tags could not be read (" .. tostring(reason)
             .. "). Nothing will be saved until they are fixed or removed."
+    elseif migrated and PersistentDB ~= nil and PersistentDB.SetString ~= nil then
+        -- Persist legacy name-keyed tags under their new UUIDs
+        store:Save()
     end
     return store
 end
@@ -183,15 +186,28 @@ function TagStore:RemoveTag(tag, layoutKey)
 end
 
 -- Add a new empty tag to copied data
-local function addTag(data, name, icon)
-    data.tags[name] = { icon = icon, rows = {}, unsorted = {} }
-    data.order[#data.order + 1] = name
+local function addTag(data, id, name, icon)
+    data.tags[id] = { name = name, icon = icon, rows = {}, unsorted = {} }
+    data.order[#data.order + 1] = id
+end
+
+-- Read a tag's display name
+function TagStore:GetTagName(tag)
+    local record = self.data.tags[tag]
+    if record ~= nil and type(record.name) == "string" and record.name ~= "" then
+        return record.name
+    end
+    return type(tag) == "string" and tag or ""
 end
 
 -- Suggest an unused default name without saving anything
 function TagStore:NextPlaceholderTagName()
+    local used = {}
+    for _, record in pairs(self.data.tags) do
+        if type(record.name) == "string" then used[record.name] = true end
+    end
     local index = 1
-    while self.data.tags["placeholder " .. index] ~= nil do index = index + 1 end
+    while used["placeholder " .. index] do index = index + 1 end
     return "placeholder " .. index
 end
 
@@ -199,14 +215,14 @@ end
 function TagStore:CreateTag(requestedName, spriteObjectID)
     local name = normalizeTag(requestedName)
     if name == nil then return false, nil, INVALID_TAG_NAME end
-    if self.data.tags[name] ~= nil then return false, nil, "A tag with that name already exists." end
     local valid, icon = iconReference(spriteObjectID)
     if not valid then return false, nil, "The selected sprite is invalid." end
     local nextData = copy(self.data)
-    addTag(nextData, name, icon)
+    local id = TagRules.newUUID(nextData.tags)
+    addTag(nextData, id, name, icon)
     local saved, reason = self:Commit(nextData, "Could not create the tag.")
     if not saved then return false, nil, reason end
-    return true, name, nil
+    return true, id, nil
 end
 
 -- Read the object ID of a tag's sidebar icon
@@ -215,27 +231,20 @@ function TagStore:GetTagSprite(tag)
     return record ~= nil and ItemIdentity.ObjectID(record.icon) or nil
 end
 
--- Rename a tag and keep or replace its icon
-function TagStore:UpdateTag(oldTag, newTag, spriteObjectID)
-    local name = normalizeTag(newTag)
-    if self.data.tags[oldTag] == nil then return false, nil, "The existing tag is invalid." end
+-- Rename a tag and keep or replace its icon without changing its ID
+function TagStore:UpdateTag(tagID, newName, spriteObjectID)
+    local name = normalizeTag(newName)
+    if self.data.tags[tagID] == nil then return false, nil, "The existing tag is invalid." end
     if name == nil then return false, nil, INVALID_TAG_NAME end
-    if name ~= oldTag and self.data.tags[name] ~= nil then
-        return false, nil, "A tag with that name already exists."
-    end
     local valid, icon = iconReference(spriteObjectID)
     if not valid then return false, nil, "The selected sprite is invalid." end
     local nextData = copy(self.data)
-    local record = nextData.tags[oldTag]
+    local record = nextData.tags[tagID]
+    record.name = name
     record.icon = icon or record.icon
-    nextData.tags[oldTag] = nil
-    nextData.tags[name] = record
-    for index, tag in ipairs(nextData.order) do
-        if tag == oldTag then nextData.order[index] = name end
-    end
     local saved, reason = self:Commit(nextData, "Could not save the tag.")
     if not saved then return false, nil, reason end
-    return true, name, nil
+    return true, tagID, nil
 end
 
 -- Delete a tag and its saved layout
@@ -275,7 +284,7 @@ function TagStore:TagExports()
     local exports = {}
     for _, tag in ipairs(self.data.order) do
         local value = TagData.Encode(self.data, tag)
-        exports[#exports + 1] = { tag = tag, value = value, length = #value }
+        exports[#exports + 1] = { tag = tag, name = self:GetTagName(tag), value = value, length = #value }
     end
     return exports
 end
@@ -283,12 +292,10 @@ end
 -- Apply a single shared tag's chosen name, icon, and folder
 local function customizeImport(imported, options, current)
     if #imported.order ~= 1 then return false, "Import customization requires a single shared tag." end
-    local original = imported.order[1]
-    local tag = imported.tags[original]
-    local name = normalizeTag(options.name or original)
+    local tag = imported.tags[imported.order[1]]
+    local name = normalizeTag(options.name or tag.name)
     if name == nil then return false, INVALID_TAG_NAME end
-    imported.tags[original] = nil
-    imported.tags[name], imported.order[1] = tag, name
+    tag.name = name
     if options.spriteObjectID ~= nil then
         local valid, icon = iconReference(options.spriteObjectID)
         if not valid then return false, "The selected sprite is invalid." end
@@ -312,7 +319,7 @@ local function customizeImport(imported, options, current)
     return true, nil
 end
 
--- Import shared tags or a backup, replacing same-named tags
+-- Import shared tags or a backup under fresh unique IDs
 function TagStore:ImportText(source, options)
     local imported, reason = TagData.Decode(source)
     if imported == nil then return false, nil, reason end
@@ -321,19 +328,22 @@ function TagStore:ImportText(source, options)
         if not customized then return false, nil, customizeReason end
     end
     local nextData = copy(self.data)
-    for _, name in ipairs(imported.order) do
-        local tag = imported.tags[name]
-        nextData.tags[name] = tag
+    local importedOrder = {}
+    for _, sourceID in ipairs(imported.order) do
+        local tag = imported.tags[sourceID]
+        local id = TagRules.newUUID(nextData.tags)
+        nextData.tags[id] = tag
+        importedOrder[#importedOrder + 1] = id
         if tag.folder ~= nil and nextData.folders[tag.folder] == nil then
             nextData.folders[tag.folder] = imported.folders[tag.folder]
         end
     end
     -- Imported tags go first unless a folder places them
     if options ~= nil and (options.folderKey ~= nil or options.newFolderName ~= nil) then
-        nextData.order = self:FolderTagOrder(imported.order[1], nextData.tags[imported.order[1]].folder)
+        nextData.order = self:FolderTagOrder(importedOrder[1], nextData.tags[importedOrder[1]].folder)
     else
         local order, seen = {}, {}
-        for _, list in ipairs({ imported.order, nextData.order }) do
+        for _, list in ipairs({ importedOrder, nextData.order }) do
             for _, tag in ipairs(list) do
                 if not seen[tag] then
                     seen[tag] = true
@@ -345,7 +355,7 @@ function TagStore:ImportText(source, options)
     end
     local saved, saveReason = self:Commit(nextData, "Could not save the imported bank tags.")
     if not saved then return false, nil, saveReason end
-    return true, { tags = #imported.order }, nil
+    return true, { tags = #importedOrder }, nil
 end
 
 return TagStore

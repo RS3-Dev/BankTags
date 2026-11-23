@@ -13,8 +13,8 @@ local MENU_EVENT = Config.PLUGIN_REF .. "_menu"
 local ACTION_EVENT = Config.PLUGIN_REF .. "_menu_action"
 
 -- Show a tag name as a menu subject
-local function subject(tag)
-    return Text.plain(Text.titleCase(tag))
+local function subject(store, tag)
+    return Text.plain(Text.titleCase(store:GetTagName(tag)))
 end
 
 -- Prepare menu handling for this plugin
@@ -120,7 +120,7 @@ function TagMenus:AddItemEntries(menu, item)
     local current = function()
         return app.ext == ext and app.revision == revision and app:ShownTag() == tag
     end
-    MenuEntries.AddLow(menu, { { label = "Remove from", subject = subject(tag),
+    MenuEntries.AddLow(menu, { { label = "Remove from", subject = subject(app.store, tag),
         action = self:Defer(current, function() app:RemoveFromTag(tag, layoutKey) end) } })
 end
 
@@ -178,7 +178,7 @@ function TagMenus:AddRowEntries(menu)
     else
         local tag = entry.tag
         if app.store.data.tags[tag] == nil then return end
-        local name = subject(tag)
+        local name = subject(app.store, tag)
         offer("Select", name, function() app:ToggleTag(tag) end)
         offer("Edit", name, function() app.windows:OpenLayoutEditor(tag) end)
         offer("Rename", name, function() app.windows:OpenTagSettings(tag, false) end)
@@ -301,7 +301,7 @@ function TagMenus:AddFolderSubmenu(menu, tag, position, chosen, isCurrent)
         action = chosen("Create new folder", function() app.windows:OpenCreateFolderPrompt(tag) end) }
     children[#children + 1] = { label = "Cancel", action = function() end }
     local label = tagFolder ~= nil and "Move to folder" or "Add to folder"
-    local text = MenuEntries.Text(label, subject(tag))
+    local text = MenuEntries.Text(label, subject(app.store, tag))
     MiniMenu.AddSubmenu(menu, text, children, { title = label, position = position })
     MenuEntries.PlaceSubmenu(menu, text .. " <col=ffffff><gt></col>", position)
 end

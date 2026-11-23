@@ -8,6 +8,27 @@ local TagRules = {}
 TagRules.MAX_TAG_NAME = 80
 TagRules.MAX_FOLDER_NAME = 40
 TagRules.MAX_LABEL_TEXT = 60
+local UUID_PATTERN = "^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$"
+
+-- Check whether a tag key already uses a UUID
+function TagRules.isUUID(value)
+    return type(value) == "string" and string.match(value, UUID_PATTERN) ~= nil
+end
+
+-- Generate a lowercase UUID v4 that does not collide with existing keys
+function TagRules.newUUID(existing)
+    local function generate()
+        return (string.gsub("xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx", "[xy]", function(char)
+            local value = char == "x" and math.random(0, 15) or math.random(8, 11)
+            return string.format("%x", value)
+        end))
+    end
+    local id = generate()
+    while type(existing) == "table" and existing[id] ~= nil do
+        id = generate()
+    end
+    return id
+end
 
 -- Copy data so an unsaved edit stays separate
 function TagRules.copy(value)

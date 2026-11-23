@@ -97,7 +97,7 @@ function TagList:Entries()
     local function addTag(tag, folderKey)
         entries[#entries + 1] = {
             id = tag,
-            label = Text.titleCase(tag),
+            label = Text.titleCase(self.store:GetTagName(tag)),
             selected = self.isSelected(tag),
             enabled = true,
             backgroundColour = rowColour(folderKey ~= nil),
@@ -109,13 +109,13 @@ function TagList:Entries()
     end
     for _, node in ipairs(self.store:TagTree()) do
         if node.kind == "tag" then
-            if matches(node.tag) then addTag(node.tag, nil) end
+            if matches(self.store:GetTagName(node.tag)) then addTag(node.tag, nil) end
         else
             -- A folder name match lists every member; searches expand folders
             local folderMatches = query ~= "" and matches(node.name)
             local visible, containsSelected = {}, false
             for _, tag in ipairs(node.tags) do
-                if folderMatches or matches(tag) then visible[#visible + 1] = tag end
+                if folderMatches or matches(self.store:GetTagName(tag)) then visible[#visible + 1] = tag end
                 if self.isSelected(tag) then containsSelected = true end
             end
             if #visible > 0 then

@@ -55,9 +55,9 @@ end
 -- Encode every tag, or only the named one, as JSON
 function TagData.Encode(data, onlyTag)
     local saved = { format = FORMAT, version = VERSION, order = {}, folders = {}, tags = {} }
-    for _, name in ipairs(data.order) do
-        local tag = data.tags[name]
-        if onlyTag == nil or onlyTag == name then
+    for _, id in ipairs(data.order) do
+        local tag = data.tags[id]
+        if onlyTag == nil or onlyTag == id then
             local rows, unsorted = {}, {}
             for _, entry in ipairs(tag.rows) do
                 if entry.kind == "label" then
@@ -69,8 +69,14 @@ function TagData.Encode(data, onlyTag)
                 end
             end
             for _, slot in ipairs(tag.unsorted) do unsorted[#unsorted + 1] = slotText(slot) end
-            saved.order[#saved.order + 1] = name
-            saved.tags[name] = { icon = tag.icon, folder = tag.folder, rows = rows, unsorted = unsorted }
+            saved.order[#saved.order + 1] = id
+            saved.tags[id] = {
+                name = tag.name,
+                icon = tag.icon,
+                folder = tag.folder,
+                rows = rows,
+                unsorted = unsorted,
+            }
             if tag.folder ~= nil then saved.folders[tag.folder] = data.folders[tag.folder] end
         end
     end
@@ -147,33 +153,59 @@ function TagData.Decode(text, allowEmpty)
     table.sort(unlisted)
     for _, name in ipairs(unlisted) do names[#names + 1] = name end
 
-    local data, folderCount = TagData.Empty(), 0
-    for _, savedName in ipairs(names) do
-        local name, value = TagRules.normalizeTag(savedName), saved.tags[savedName]
-        if name ~= nil and type(value) == "table" and value ~= Json.null and data.tags[name] == nil then
-            if #data.order >= TagData.MAX_TAGS then return nil, "The import has too many tags." end
-            local tag = readTag(value, entryLimit)
-            if tag == nil then
-                return nil, "The tag " .. name .. " has more than " .. entryLimit .. " entries."
+    local data, folderCount, migrated = TagData.Empty(), 0, false
+    -- Reserve existing UUID keys so migrated legacy tags never collide with them
+    local usedIDs = {}
+    for savedKey in pairs(saved.tags) do
+        if TagRules.isUUID(savedKey) then usedIDs[string.lower(savedKey)] = true end
+    end
+    for _, savedKey in ipairs(names) do
+        local value = saved.tags[savedKey]
+        if type(value) == "table" and value ~= Json.null then
+            local id, name
+            if TagRules.isUUID(savedKey) and type(value.name) == "string" then
+                name = TagRules.normalizeTag(value.name)
+                if name ~= nil then
+                    id = string.lower(savedKey)
+                    if id ~= savedKey or data.tags[id] ~= nil then
+                        if data.tags[id] ~= nil then id = TagRules.newUUID(usedIDs) end
+                        migrated = true
+                    end
+                end
+            else
+                name = TagRules.normalizeTag(type(value.name) == "string" and value.name or savedKey)
+                if name ~= nil then
+                    id = TagRules.newUUID(usedIDs)
+                    migrated = true
+                end
             end
-            local folder = type(value.folder) == "string" and folders[value.folder] or nil
-            local key, display = nil, nil
-            if type(folder) == "table" and type(folder.name) == "string" then
-                key, display = TagRules.folderName(folder.name)
+            if name ~= nil then
+                if #data.order >= TagData.MAX_TAGS then return nil, "The import has too many tags." end
+                local tag = readTag(value, entryLimit)
+                if tag == nil then
+                    return nil, "The tag " .. name .. " has more than " .. entryLimit .. " entries."
+                end
+                local folder = type(value.folder) == "string" and folders[value.folder] or nil
+                local key, display = nil, nil
+                if type(folder) == "table" and type(folder.name) == "string" then
+                    key, display = TagRules.folderName(folder.name)
+                end
+                if key ~= nil and data.folders[key] == nil then
+                    folderCount = folderCount + 1
+                    if folderCount > TagData.MAX_FOLDERS then return nil, "The import has too many folders." end
+                    data.folders[key] = { name = display, collapsed = folder.collapsed == true,
+                        icon = type(folder.icon) == "string" and Text.plain(folder.icon) or nil }
+                end
+                tag.name = name
+                tag.folder = key
+                usedIDs[id] = true
+                data.tags[id] = tag
+                data.order[#data.order + 1] = id
             end
-            if key ~= nil and data.folders[key] == nil then
-                folderCount = folderCount + 1
-                if folderCount > TagData.MAX_FOLDERS then return nil, "The import has too many folders." end
-                data.folders[key] = { name = display, collapsed = folder.collapsed == true,
-                    icon = type(folder.icon) == "string" and Text.plain(folder.icon) or nil }
-            end
-            tag.folder = key
-            data.tags[name] = tag
-            data.order[#data.order + 1] = name
         end
     end
     if #data.order == 0 and not allowEmpty then return nil, "The import has no tags." end
-    return data, nil
+    return data, nil, migrated
 end
 
 return TagData

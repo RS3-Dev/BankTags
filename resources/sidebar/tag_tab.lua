@@ -42,7 +42,12 @@ end
 
 -- Describe the column's arrangement so refreshes rebuild only on change
 function TagTab:Arrangement()
-    return tostring(self.app.select:Tag()) .. "\n" .. tostring(self.app:ShownTag() ~= nil)
+    local selectTag = self.app.select:Tag()
+    local selectInfo = selectTag ~= nil
+        and (tostring(selectTag) .. "\n" .. self.app.store:GetTagName(selectTag)
+            .. "\n" .. tostring(self.app.store:GetTagSprite(selectTag)))
+        or "nil"
+    return selectInfo .. "\n" .. tostring(self.app:ShownTag() ~= nil)
 end
 
 -- Release the controls owned by this sidebar column
@@ -136,7 +141,7 @@ function TagTab:BuildSelectPanel(controls, top, width)
         icon.clickthrough = true
         nameLeft = PANEL_INSET + 34
     end
-    addText(panel, Text.titleCase(tag), nameLeft, 32, width - nameLeft - PANEL_INSET, 28, Theme.TEXT)
+    addText(panel, Text.titleCase(app.store:GetTagName(tag)), nameLeft, 32, width - nameLeft - PANEL_INSET, 28, Theme.TEXT)
     addText(panel, "Click items in your bank to add them to this tag.",
         PANEL_INSET, 62, width - PANEL_INSET * 2, 30, Theme.MUTED_TEXT, 2)
     owned[#owned + 1] = BankControls.button(parent, "Done", function() app.select:Stop() end, {

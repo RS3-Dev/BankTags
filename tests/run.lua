@@ -2,7 +2,7 @@
 local root = (arg[0]:gsub("\\", "/"):match("^(.*)/tests/run%.lua$")) or "."
 local suites = {
     "bank_state", "catalog", "connection", "editor_menus",
-    "editor_names", "marquee", "text_safety", "unsorted", "import_share", "native_items",
+    "editor_names", "marquee", "text_safety", "unsorted", "import_share", "native_items", "tag_ids",
 }
 
 -- Give each case fresh globals and module caches, including its UI stubs.

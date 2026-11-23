@@ -66,12 +66,13 @@ function ImportDraft:ShowImportResult(state, value)
     self.importData = imported
     local tag = imported ~= nil and #imported.order == 1 and imported.order[1] or nil
     self.importSingleTag = tag
-    self.importNameField:SetText(tag or "", false)
+    local record = tag ~= nil and imported.tags[tag] or nil
+    self.importNameField:SetText(record ~= nil and record.name or "", false)
     self.importNameField:SetDisabled(tag == nil)
     self.importSpriteSlot:SetDisabled(tag == nil)
-    self:SetImportSprite(tag ~= nil and ItemIdentity.ObjectID(imported.tags[tag].icon) or nil)
+    self:SetImportSprite(record ~= nil and ItemIdentity.ObjectID(record.icon) or nil)
     self.importFolderName:SetText("", false)
-    local folderKey = tag ~= nil and imported.tags[tag].folder or nil
+    local folderKey = record ~= nil and record.folder or nil
     self:RefreshImportFolders(folderKey ~= nil and IMPORT_FOLDER_PREFIX .. folderKey or IMPORT_NO_FOLDER)
     self.importButton:SetDisabled(imported == nil)
     if state == "empty" then
