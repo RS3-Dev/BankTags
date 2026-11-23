@@ -10,12 +10,13 @@ return function()
     local App=require('resources/app')
     state={bankOpen=true,viewAll=true}
     opened=false
+    tabRefreshes=0
     ext={GetBankState=function() return state end,
         IsOpen=function() return opened end,
         Close=function() opened=false; return true end,
         Open=function() if refusal then return false,refusal end; opened=true; return true end}
     app=setmetatable({ext=ext,store={data={tags={gear={},other={}}}},
-        tab={Refresh=function() end,RefreshStatus=function() end},
+        tab={Refresh=function() tabRefreshes=tabRefreshes+1 end,RefreshStatus=function() end},
         nativeItems={RestoreHighlights=function() end,Refresh=function() end},
         select={Stop=function() end},pageTag='other',pageKeys={42},revision=3},App)
     function app:SetTagPage(tag) self.pageTag=tag;self.pageKeys={99};self.revision=4;return true end

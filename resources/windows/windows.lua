@@ -13,7 +13,10 @@ local Windows = {}
 Windows.__index = Windows
 
 -- Windows that close with the bank
-local BANK_WINDOWS = { "textPrompt", "layoutEditor", "tagSettingsEditor", "tagDeleteConfirm", "rowRemoveConfirm" }
+local BANK_WINDOWS = {
+    "textPrompt", "layoutEditor", "tagSettingsEditor", "tagDeleteConfirm", "rowRemoveConfirm",
+    "importShare", "spritePicker",
+}
 -- Windows kept in front of the layout editor, the last frontmost
 local EDITOR_OVERLAYS = { "tagSettingsEditor", "spritePicker", "textPrompt", "rowRemoveConfirm" }
 
@@ -54,7 +57,7 @@ function Windows:SyncEditorOverlays()
     self.layoutEditor:SetOverlays(overlays, guideLayer)
 end
 
--- Close every window that needs the open bank; Import/Share stays
+-- Close every window when the bank closes
 function Windows:CloseBankWindows()
     for _, name in ipairs(BANK_WINDOWS) do self:Close(name) end
 end
@@ -62,8 +65,6 @@ end
 -- Close every window
 function Windows:CloseAll()
     self:CloseBankWindows()
-    self:Close("importShare")
-    self:Close("spritePicker")
 end
 
 -- Find the window layer, logging when there is none

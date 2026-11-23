@@ -187,6 +187,7 @@ function App:Disconnect()
     self:CancelPendingRestore()
     self:ClearStateNotice()
     self.sidebarSelected = false
+    if self.tab ~= nil and self.tab.ResetScroll ~= nil then self.tab:ResetScroll() end
     self.nativeItems:Stop()
     self.tutorial:Stop(false)
     self.windows:CloseBankWindows()
@@ -276,7 +277,6 @@ end
 -- Update restoration memory after a tag page closes
 function App:OnPageClosed()
     local blocked = self.ext ~= nil and bankStateBlocker(self.ext:GetBankState()) or nil
-    if blocked ~= nil and self.sidebarSelected then self:ShowStateNotice(blocked) end
     -- Explicit return to the normal bank while selected forgets the restored tag
     if self.sidebarSelected and self:ShownTag() == nil and blocked == nil then
         self.restoreTag = nil
@@ -289,13 +289,14 @@ function App:OnBankClose()
     self.sidebarSelected = false
     self:CancelPendingRestore()
     self:ClearStateNotice()
+    if self.tab ~= nil and self.tab.ResetScroll ~= nil then self.tab:ResetScroll() end
     self.nativeItems:Stop()
     self.tutorial:Stop(false)
     self.select:Stop()
     self.windows:CloseBankWindows()
 end
 
--- Close tag pages when native controls restrict the bank
+-- Close tag pages quietly when native controls restrict the bank
 function App:OnBankStateChanged(state)
     local blocked = bankStateBlocker(state)
     if blocked == nil then self:ClearStateNotice() end
@@ -305,7 +306,6 @@ function App:OnBankStateChanged(state)
             self:ShowStatus(OPEN_REFUSALS[reason] or ("This tag could not be closed (" .. tostring(reason) .. ")."))
             return blocked
         end
-        self:ShowStateNotice(blocked)
         self.tab:Refresh()
     end
     if self.pendingRestore ~= nil then self:TryRestore(blocked, true) end
@@ -374,7 +374,10 @@ function App:ShowTag(tag, quiet)
     local blocked = quiet and bankStateBlocker(self.ext:GetBankState())
         or self:OnBankStateChanged(self.ext:GetBankState())
     if blocked ~= nil then
-        if not quiet then self:ShowStateNotice(blocked) end
+        if not quiet then
+            self:ShowStateNotice(blocked)
+            self.tab:Refresh()
+        end
         return false, blocked
     end
     -- Core copies native sprite styles when opening a page

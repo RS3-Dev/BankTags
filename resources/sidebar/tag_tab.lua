@@ -22,7 +22,7 @@ local PANEL_INSET = 10
 
 -- Create the tab's mount callbacks, kept registered across updates
 function TagTab.new(app)
-    local self = setmetatable({ app = app, ctx = nil, controls = nil, listState = { searchQuery = "" } },
+    local self = setmetatable({ app = app, ctx = nil, controls = nil, listState = { searchQuery = "", scrollY = 0 } },
         TagTab)
     self.callbacks = {
         -- Keep the mounted column and build its controls
@@ -64,6 +64,11 @@ end
 function TagTab:Unmount()
     self:DestroyControls()
     self.ctx = nil
+end
+
+-- Flush remembered sidebar scroll when the bank closes
+function TagTab:ResetScroll()
+    self.listState.scrollY = 0
 end
 
 -- Add a click-through text line to the column
