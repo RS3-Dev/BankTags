@@ -156,7 +156,10 @@ end
 function TagTab:BuildFooter(controls, height, width)
     local app, parent, owned = self.app, controls.parent, controls.owned
     local top = height - 36
-    controls.importShareButton = BankControls.button(parent, nil, function() app.windows:OpenImportShare() end, {
+    controls.importShareButton = BankControls.button(parent, nil, function()
+        app:CancelPendingRestore()
+        app.windows:OpenImportShare()
+    end, {
         x = FOOTER_X, y = top, size = ICON_BUTTON_SIZE, iconSize = 18,
         spriteName = "EXPORT", tooltip = "Import and share bank tags",
     })
@@ -167,6 +170,7 @@ function TagTab:BuildFooter(controls, height, width)
         - (editing and ICON_BUTTON_SIZE + FOOTER_BUTTON_GAP or 0)
     -- Clear any notice before asking for a new tag
     controls.newTagButton = BankControls.button(parent, "New Tag", function()
+        app:CancelPendingRestore()
         app:ShowStatus(nil)
         app.windows:OpenTagSettings(app.store:NextPlaceholderTagName(), true)
     end, {
@@ -184,7 +188,10 @@ function TagTab:BuildFooter(controls, height, width)
         })
         owned[#owned + 1] = controls.editTagButton
     end
-    controls.tutorialButton = BankControls.button(parent, "", function() app.tutorial:Start() end, {
+    controls.tutorialButton = BankControls.button(parent, "", function()
+        app:CancelPendingRestore()
+        app.tutorial:Start()
+    end, {
         x = FOOTER_X + width - HELP_BUTTON_SIZE, y = SidebarRows.SEARCH_TOP,
         size = HELP_BUTTON_SIZE, tooltip = "Help",
     })
