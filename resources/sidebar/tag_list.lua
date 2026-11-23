@@ -76,6 +76,9 @@ function TagList.new(parent, options)
         self:Press(entryID)
     end)
     self:Refresh()
+    if self.state ~= nil and (self.state.scrollY or 0) > 0 and self.list.SetScrollPosition ~= nil then
+        self.list:SetScrollPosition(self.state.scrollY)
+    end
     return self
 end
 
@@ -253,6 +256,9 @@ end
 -- Destroy the controls this list created
 function TagList:Destroy()
     self:StopGesture()
+    if self.state ~= nil and self.list ~= nil then
+        self.state.scrollY = self.list.scrollY or 0
+    end
     for _, control in ipairs({ self.search, self.list, self.emptyLabel }) do
         pcall(function() control:Destroy() end)
     end

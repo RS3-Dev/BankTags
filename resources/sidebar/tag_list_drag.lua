@@ -65,6 +65,12 @@ end
 function TagListDrag:Press(entryID)
     self.clicks = self.clicks + 1
     debugLog("Bank Tags row press ", tostring(entryID), ", clicks ", self.clicks)
+    -- PrettyUI highlights a row immediately on press; keep visual selection tied to actual active state
+    for _, row in ipairs(self.list.rows or {}) do
+        local entry = self.entriesByID[row.entry.id]
+        row.entry.selected = entry ~= nil and entry.selected == true
+    end
+    if self.list._RefreshRows ~= nil then self.list:_RefreshRows() end
     if self:CancelGesture() then return end
     local x, y = self:Pointer()
     self.gesture = { row = self:RowFor(entryID), id = entryID, x = x, y = y, dragging = false }
