@@ -10,21 +10,23 @@ ConfirmWindow.__index = ConfirmWindow
 function ConfirmWindow.new(parent, options)
     local self = setmetatable({ closed = false }, ConfirmWindow)
     self.dialog = prettyui.Dialog.new(parent, {
-        title = options.title, width = options.messageLines ~= nil and 420 or 340, height = 164, modal = false,
+        categoryID = "auto",
+        title = options.title, width = options.messageLines ~= nil and 420 or 340,
+        height = options.messageLines ~= nil and 172 or 164, modal = false,
         -- Draw the removal question inside the dialog
         content = function(window)
             local width = window.contentWidth
             self.message = window:AddText({
                 text = Text.sanitize(options.messageLines ~= nil and options.messageLines[1] or options.message),
-                x = 16, y = 12, width = width - 32,
-                height = options.messageLines ~= nil and 40 or 64,
+                x = 16, y = 10, width = width - 32,
+                height = options.messageLines ~= nil and 38 or 64,
                 maxLines = options.messageLines ~= nil and 2 or 4,
                 colour = Theme.TEXT, alignHorizontal = ui.AlignMode.CENTRE, alignVertical = ui.AlignMode.CENTRE,
             })
             if options.messageLines ~= nil then
                 self.question = window:AddText({
                     text = Text.sanitize(options.messageLines[2]),
-                    x = 16, y = 54, width = width - 32, height = 22, maxLines = 1,
+                    x = 16, y = 52, width = width - 32, height = 36, maxLines = 2,
                     colour = Theme.TEXT, alignHorizontal = ui.AlignMode.CENTRE, alignVertical = ui.AlignMode.CENTRE,
                 })
             end

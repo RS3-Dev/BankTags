@@ -37,7 +37,7 @@ function LayoutEditorView:SetBankItems(items)
     self.bankItemList = items
     if self.panes == nil then return end
     for _, pane in pairs(self.panes) do
-        for index, sprite in pairs(pane.sprites) do self:StyleItem(sprite, pane.slots[index].objectID, true) end
+        for index, sprite in pairs(pane.sprites or {}) do self:StyleItem(sprite, pane.slots[index].objectID, true) end
     end
 end
 
@@ -57,7 +57,7 @@ end
 
 -- Draw an item using its native bank sprite
 function LayoutEditorView:ItemSprite(parent, objectID, absentIsPlaceholder)
-    local sprite = ui.Sprite.new(parent)
+    local sprite = NativeUi.newComponent(ui.Sprite, parent)
     sprite:SetSize(Size.ITEM_WIDTH, Size.ITEM_HEIGHT)
     sprite:SetAssociatedObject(objectID)
     sprite.outlineWidth = 1
@@ -76,6 +76,7 @@ end
 function LayoutEditorView:CreatePane(name, parent, y, columnX, width, columns)
     local height = Size.VIEW_HEIGHT + (name == "sorted" and Size.AREA_BOTTOM or 0)
     local view = prettyui.SimpleView.new(parent, {
+        categoryID = "auto",
         x = Size.VIEW_INSET,
         y = y,
         width = width,
@@ -83,7 +84,7 @@ function LayoutEditorView:CreatePane(name, parent, y, columnX, width, columns)
         contentHeight = height,
         scrollStep = Size.GRID_STEP,
     })
-    return {
+    local pane = {
         name = name,
         x = columnX + Size.VIEW_INSET,
         y = Size.VIEW_Y,
@@ -97,6 +98,8 @@ function LayoutEditorView:CreatePane(name, parent, y, columnX, width, columns)
         view = view,
         marks = Parts.layer(view.content, 0, 0, width, height),
     }
+    view.onLayout = function() self:RenderPaneWindow(pane, false) end
+    return pane
 end
 
 -- Draw the Layout tag tabs above the central grid
@@ -118,6 +121,7 @@ end
 -- Use the same borders, row spacing, and inset for both item lists
 function LayoutEditorView:CreateItemList(panel, width)
     return prettyui.List.new(panel, {
+        categoryID = "auto",
         x = Size.SEARCH_INSET, y = Size.SEARCH_LIST_TOP,
         width = width, height = Size.SEARCH_LIST_HEIGHT,
         entryHeight = Size.SEARCH_ROW_HEIGHT, maxSelected = 1,
@@ -174,11 +178,11 @@ end
 
 -- Build three persistent columns and their input surfaces
 function LayoutEditorView:CreatePanels()
-    self.searchPanel = Parts.layer(self.content, Size.SEARCH_X, Size.PANEL_TOP,
+    self.searchPanel = Parts.contentLayer(self.content, Size.SEARCH_X, Size.PANEL_TOP,
         Size.SEARCH_WIDTH, Size.COLUMN_HEIGHT)
-    self.centerPanel = Parts.layer(self.content, Size.CENTER_X, Size.PANEL_TOP,
+    self.centerPanel = Parts.contentLayer(self.content, Size.CENTER_X, Size.PANEL_TOP,
         Size.CENTER_WIDTH, Size.COLUMN_HEIGHT)
-    self.unsortedPanel = Parts.layer(self.content, Size.UNSORTED_X, Size.PANEL_TOP,
+    self.unsortedPanel = Parts.contentLayer(self.content, Size.UNSORTED_X, Size.PANEL_TOP,
         Size.UNSORTED_WIDTH, Size.COLUMN_HEIGHT)
     for _, panel in ipairs({ self.searchPanel, self.centerPanel, self.unsortedPanel }) do
         -- Bank tabs sit directly on the window background
@@ -213,47 +217,141 @@ function LayoutEditorView:GridCellX(pane, column)
     return pane.gridLeft + column * Size.GRID_STEP
 end
 
--- Draw only the rows belonging to this pane
-function LayoutEditorView:DrawPane(pane, rowCount, labels)
+local WINDOW_OVERSCAN_ROWS = 2
+
+-- Hide all pooled cells and clear visible labels for an empty or hidden pane
+local function hidePanePool(pane)
+    if pane.labelLayer ~= nil then
+        pane.labelLayer:Destroy()
+        pane.labelLayer = nil
+    end
+    for _, grid in ipairs(pane.gridPool or {}) do grid.hidden = true end
+    for _, sprite in ipairs(pane.itemPool or {}) do sprite.hidden = true end
+    pane.sprites = {}
+    pane.renderedFirstRow, pane.renderedLastRow = nil, nil
+end
+
+-- Render only the rows currently inside or near the pane's scroll viewport
+function LayoutEditorView:RenderPaneWindow(pane, force)
+    if pane == nil or pane.drawing then return end
+    local rowCount = pane.rowCount or 0
+    if pane.hidden or rowCount <= 0 then
+        hidePanePool(pane)
+        return
+    end
+    local labels = pane.labels or {}
+    local scrollY = pane.view ~= nil and pane.view.scrollY or 0
+    local topRow = BankGrid.RowAtContentY(math.max(0, scrollY), labels) or 0
+    local bottomRow = BankGrid.RowAtContentY(math.max(0, scrollY + (pane.height or 0)), labels) or (rowCount - 1)
+    local firstRow = math.max(0, topRow - WINDOW_OVERSCAN_ROWS)
+    local lastRow = math.min(rowCount - 1, bottomRow + WINDOW_OVERSCAN_ROWS)
+    if not force and pane.renderedFirstRow == firstRow and pane.renderedLastRow == lastRow then
+        return
+    end
+    pane.renderedFirstRow, pane.renderedLastRow = firstRow, lastRow
+
+    local height = pane.contentHeight or pane.height
+    if pane.cells == nil then
+        pane.cells = Parts.layer(pane.view.content, 0, 0, pane.width, height)
+        pane.gridPool = {}
+        pane.itemPool = {}
+        pane.itemPoolObjectIDs = {}
+    else
+        pane.cells:SetSize(pane.width, height)
+    end
+    local cells = pane.cells
+
+    if pane.labelLayer ~= nil then
+        pane.labelLayer:Destroy()
+        pane.labelLayer = nil
+    end
+    if #labels > 0 then
+        local labelLayer = nil
+        for _, label in ipairs(labels) do
+            if label.row >= firstRow and label.row <= lastRow then
+                if labelLayer == nil then
+                    labelLayer = Parts.layer(cells, 0, 0, pane.width, height)
+                    pane.labelLayer = labelLayer
+                end
+                Parts.heading(labelLayer, Size.GRID_LEFT, BankGrid.LabelY(label.row, labels),
+                    Size.LABEL_WIDTH, label.text)
+            end
+        end
+    end
+
     local columns = pane.columns
+    local labelRows = pane.labelRows or {}
+    local gridPool, itemPool, itemPoolObjectIDs = pane.gridPool, pane.itemPool, pane.itemPoolObjectIDs
+    local gridCount, itemCount = 0, 0
+    local sprites = {}
+    for row = firstRow, lastRow do
+        if not labelRows[row] then
+            local y = BankGrid.RowItemY(row, labels)
+            for col = 0, columns - 1 do
+                local index = row * columns + col + 1
+                local x = self:GridCellX(pane, col)
+                gridCount = gridCount + 1
+                local grid = gridPool[gridCount]
+                if grid == nil then
+                    grid = NativeUi.newComponent(ui.Sprite, cells)
+                    grid:SetSize(Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE)
+                    grid.spriteID = GRID_SLOT_SPRITE
+                    grid.alpha = 0.34
+                    grid.clickthrough = true
+                    gridPool[gridCount] = grid
+                end
+                grid:SetPos(x, y)
+                grid.hidden = false
+                local slot = pane.slots[index]
+                if slot ~= nil and slot.kind == "item" then
+                    itemCount = itemCount + 1
+                    local sprite = itemPool[itemCount]
+                    if sprite == nil then
+                        sprite = NativeUi.newComponent(ui.Sprite, cells)
+                        sprite:SetSize(Size.ITEM_WIDTH, Size.ITEM_HEIGHT)
+                        sprite.outlineWidth = 1
+                        sprite.clickthrough = true
+                        itemPool[itemCount] = sprite
+                    end
+                    sprite:SetPos(x + ITEM_X, y + ITEM_Y)
+                    if itemPoolObjectIDs[itemCount] ~= slot.objectID then
+                        sprite:SetAssociatedObject(slot.objectID)
+                        itemPoolObjectIDs[itemCount] = slot.objectID
+                    end
+                    self:StyleItem(sprite, slot.objectID, true)
+                    sprite.hidden = false
+                    sprites[index] = sprite
+                end
+            end
+        end
+    end
+    for i = gridCount + 1, #gridPool do gridPool[i].hidden = true end
+    for i = itemCount + 1, #itemPool do itemPool[i].hidden = true end
+    pane.sprites = sprites
+    pane.marks:SetSize(pane.width, height)
+    pane.marks:MoveToFront()
+end
+
+-- Update pane geometry and render the currently visible row window
+function LayoutEditorView:DrawPane(pane, rowCount, labels)
+    pane.drawing = true
     pane.labels, pane.rowCount = labels, rowCount
+    local labelRows = {}
+    for _, label in ipairs(labels) do labelRows[label.row] = true end
+    pane.labelRows = labelRows
     local height = math.max(pane.height, BankGrid.RowItemY(rowCount, labels))
+    pane.contentHeight = height
     pane.view:SetContentHeight(height)
     pane.gridLeft, pane.gridSpan = Size.GRID_LEFT, nil
     if pane.name == "unsorted" then
         -- Side padding matches the first row's top padding inside the border
         pane.gridLeft = BankGrid.TOP
         pane.gridSpan = math.max(0, pane.view.contentWidth - 2 * pane.gridLeft - Size.GRID_SLOT_SIZE)
-        if columns == 1 then pane.gridLeft = (pane.view.contentWidth - Size.GRID_SLOT_SIZE) // 2 end
-    end
-    if pane.cells ~= nil then pane.cells:Destroy() end
-    local cells = Parts.layer(pane.view.content, 0, 0, pane.width, height)
-    pane.cells, pane.sprites = cells, {}
-    local labelRows = {}
-    for _, label in ipairs(labels) do
-        labelRows[label.row] = true
-        Parts.heading(cells, Size.GRID_LEFT, BankGrid.LabelY(label.row, labels), Size.LABEL_WIDTH, label.text)
-    end
-    for index = 1, rowCount * columns do
-        local row = (index - 1) // columns
-        if not labelRows[row] then
-            local x, y = self:GridCellX(pane, (index - 1) % columns), BankGrid.RowItemY(row, labels)
-            local grid = ui.Sprite.new(cells)
-            grid:SetPos(x, y)
-            grid:SetSize(Size.GRID_SLOT_SIZE, Size.GRID_SLOT_SIZE)
-            grid.spriteID = GRID_SLOT_SPRITE
-            grid.alpha = 0.34
-            grid.clickthrough = true
-            local slot = pane.slots[index]
-            if slot ~= nil and slot.kind == "item" then
-                local sprite = self:ItemSprite(cells, slot.objectID, true)
-                sprite:SetPos(x + ITEM_X, y + ITEM_Y)
-                pane.sprites[index] = sprite
-            end
-        end
+        if pane.columns == 1 then pane.gridLeft = (pane.view.contentWidth - Size.GRID_SLOT_SIZE) // 2 end
     end
     pane.marks:SetSize(pane.width, height)
-    pane.marks:MoveToFront()
+    pane.drawing = false
+    self:RenderPaneWindow(pane, true)
 end
 
 -- Reuse outlines to show selected items and paste cells

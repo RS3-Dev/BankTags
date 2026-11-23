@@ -43,7 +43,7 @@ function BankControls.button(parent, content, action, options)
     -- and stay click-through
     if self.spriteName ~= nil then
         self.sprites = prettyui.Sprites.SPRITE_BUTTONS[self.spriteName]
-        self.icon = ui.Sprite.new(parent)
+        self.icon = NativeUi.newComponent(ui.Sprite, parent)
         local iconSize = self.iconSize or math.max(12, self.height - 8)
         self.iconSize = iconSize
         self.icon:SetPos(

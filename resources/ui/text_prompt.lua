@@ -19,6 +19,7 @@ function TextPrompt.new(parent, options)
         self:Save(self.field:GetText())
     end }
     self.dialog = prettyui.Dialog.new(parent, {
+        categoryID = "auto",
         title = options.title or "Name", width = 360, height = 176, modal = false,
         actions = actions,
         onDismiss = function() self.closed = true end,

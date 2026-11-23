@@ -38,6 +38,7 @@ function SpritePicker.new(parent, options)
     }, SpritePicker)
 
     self.window = prettyui.Window.new(parent, {
+        categoryID = "auto",
         title = "Choose Tag Sprite",
         x = -math.floor(WIDTH / 2),
         y = -math.floor(HEIGHT / 2),

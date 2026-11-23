@@ -11,7 +11,7 @@ local LayoutEditorNames = {}
 
 -- Create a positioning anchor for the editor's one item-name tooltip
 function LayoutEditorNames:CreateItemNames()
-    self.nameAnchor = ui.Layer.new(self.content)
+    self.nameAnchor = Parts.layer(self.content, 0, 0, 1, 1)
     self.nameAnchor.hidden = true
     self.nameTooltipOptions = { text = " ", parent = self.content, placement = "below" }
     self.nameTooltip = prettyui.Tooltip.attach(self.nameAnchor, self.content, self.nameTooltipOptions)

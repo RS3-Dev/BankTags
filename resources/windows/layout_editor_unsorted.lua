@@ -22,6 +22,7 @@ function Unsorted:CreateUnsorted()
     })
     local width, height = Size.UNSORTED_VIEW_WIDTH - 2, Size.SEARCH_LIST_HEIGHT - 2
     local view = prettyui.SimpleView.new(self.unsortedPanel, {
+        categoryID = "auto",
         x = Size.SEARCH_INSET + 1, y = Size.SEARCH_LIST_TOP + 1,
         width = width, height = height, contentHeight = height, scrollStep = Size.GRID_STEP,
     })
@@ -29,7 +30,7 @@ function Unsorted:CreateUnsorted()
         Size.UNSORTED_VIEW_WIDTH, Size.SEARCH_LIST_HEIGHT, Theme.INNER_FRAME, false)
     local columns = math.max(1, (width - Size.SCROLLBAR_RESERVE - 2 * Size.GRID_LEFT
         + Size.GRID_STEP - Size.GRID_SLOT_SIZE) // Size.GRID_STEP)
-    self.panes.unsorted = {
+    local pane = {
         name = "unsorted", columns = columns, gridLeft = Size.GRID_LEFT,
         x = Size.UNSORTED_X + Size.SEARCH_INSET + 1,
         y = Size.PANEL_TOP + Size.SEARCH_LIST_TOP + 1,
@@ -37,6 +38,10 @@ function Unsorted:CreateUnsorted()
         slots = {}, sprites = {}, labels = {}, rowCount = 0, view = view, outlines = {}, indexes = {},
         marks = Parts.layer(view.content, 0, 0, width, height),
     }
+    view.onLayout = function()
+        if self.RenderPaneWindow ~= nil then self:RenderPaneWindow(pane, false) end
+    end
+    self.panes.unsorted = pane
     self.unsortedHint = prettyui.Text.new(self.unsortedPanel, {
         text = "", x = Size.SEARCH_INSET + 8, y = Size.SEARCH_LIST_TOP + 4,
         width = Size.UNSORTED_VIEW_WIDTH - 16, height = 150,

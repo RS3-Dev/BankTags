@@ -2,8 +2,10 @@
 
 local ConfirmWindow = require("resources/windows/confirm_window")
 local debugLog = require("resources/core/debug_log").Write
+local Geometry = require("resources/ui/geometry")
 local ImportShare = require("resources/windows/import_share")
 local LayoutEditorWindow = require("resources/windows/layout_editor_window")
+local Parts = require("resources/windows/layout_editor_parts")
 local SpritePicker = require("resources/windows/sprite_picker")
 local TagRules = require("resources/tags/tag_rules")
 local TagSettingsEditor = require("resources/windows/tag_settings_editor")
@@ -34,8 +36,12 @@ end
 -- Close one window and the sprite picker it owns
 function Windows:Close(name)
     local window = self[name]
-    if window == nil then return end
+    if window == nil then
+        if name == "layoutEditor" then self:ReleaseEditorKeybindHold() end
+        return
+    end
     self[name] = nil
+    if name == "layoutEditor" then self:ReleaseEditorKeybindHold() end
     if name == "spritePicker" then
         self.spritePickerOwner = nil
     elseif self.spritePickerOwner == window then
@@ -43,6 +49,24 @@ function Windows:Close(name)
     end
     pcall(function() window:Destroy() end)
     self:SyncEditorOverlays()
+end
+
+-- Pause Bank Core's sidebar shortcuts while the layout editor owns keyboard input
+function Windows:AcquireEditorKeybindHold()
+    self:ReleaseEditorKeybindHold()
+    local ext = self.app.ext
+    if ext == nil or type(ext.SuspendKeybinds) ~= "function" then return end
+    local ok, hold = pcall(function() return ext:SuspendKeybinds("layout editor") end)
+    if ok and hold ~= nil then self.editorKeybindHold = hold end
+end
+
+-- Resume Bank Core's sidebar shortcuts after the layout editor closes
+function Windows:ReleaseEditorKeybindHold()
+    local hold = self.editorKeybindHold
+    self.editorKeybindHold = nil
+    if hold ~= nil and type(hold.Release) == "function" then
+        pcall(function() hold:Release() end)
+    end
 end
 
 -- Keep editor dialogs and the tutorial in front
@@ -160,10 +184,49 @@ function Windows:OpenPageLabelPrompt(options)
     self:SyncEditorOverlays()
 end
 
--- Return the open bank's bounds and grid columns, or nil
+local CLASSIC_SIDEBAR_PADDING = 16
+
+-- Measure Bank Core's detached Classic sidebar when it sits outside the native bank frame
+local function detachedSidebarBounds(tab, bankBounds)
+    local ctx = tab ~= nil and tab.ctx or nil
+    local column = ctx ~= nil and ctx.parent or nil
+    local rail = column ~= nil and column.parent or nil
+    local sidebarRoot = rail ~= nil and rail.parent or nil
+    if sidebarRoot ~= nil then
+        local ok, sx, sy, sw, sh = pcall(function()
+            local x, y = Geometry.absolutePosition(sidebarRoot)
+            return x, y, tonumber(sidebarRoot.width) or 0, tonumber(sidebarRoot.height) or 0
+        end)
+        if ok and sw > 0 and sh > 0
+            and (sx < bankBounds.x or sx + sw > bankBounds.x + bankBounds.width) then
+            return { x = sx, y = sy, width = sw, height = sh }
+        end
+    end
+    local isClassic = prettyui ~= nil and type(prettyui.IsClassicUI) == "function" and prettyui.IsClassicUI()
+    if isClassic and bankBounds.width < Parts.size.DEFAULT_WIDTH then
+        local width = Parts.size.SIDEBAR_WIDTH + CLASSIC_SIDEBAR_PADDING
+        return { x = bankBounds.x - width, y = bankBounds.y, width = width, height = bankBounds.height }
+    end
+    return nil
+end
+
+-- Return the open bank's bounds and grid columns, expanded to overlay a detached Classic sidebar
 function Windows:BankBounds()
     local ext = self.app.ext
-    return ext ~= nil and ext:GetBankBounds() or nil
+    local bounds = ext ~= nil and ext:GetBankBounds() or nil
+    if bounds == nil then return nil end
+    local sidebar = detachedSidebarBounds(self.app.tab, bounds)
+    if sidebar == nil then return bounds end
+    local border = Parts.size.WINDOW_BORDER
+    local left = math.min(bounds.x, sidebar.x)
+    local right = math.max(bounds.x + bounds.width, sidebar.x + sidebar.width)
+    return {
+        x = left + border,
+        y = bounds.y,
+        width = math.max(bounds.width, right - left - 2 * border),
+        height = bounds.height,
+        columns = bounds.columns,
+    }
 end
 
 -- Open the layout editor sized to the bank
@@ -188,12 +251,16 @@ function Windows:OpenLayoutEditor(tag)
         onConfirmRemoveRow = function(options) self:OpenRowRemoveConfirm(options) end,
         -- Close pending row and label dialogs with their editor
         onClose = function(value)
-            if self.layoutEditor == value then self.layoutEditor = nil end
+            if self.layoutEditor == value then
+                self.layoutEditor = nil
+                self:ReleaseEditorKeybindHold()
+            end
             self:Close("textPrompt")
             self:Close("rowRemoveConfirm")
         end,
     })
     self.layoutEditor = editor
+    self:AcquireEditorKeybindHold()
     editor:Show()
     self:SyncEditorOverlays()
 end
@@ -259,6 +326,7 @@ function Windows:OpenRowRemoveConfirm(options)
     self.rowRemoveConfirm = ConfirmWindow.new(parent, {
         title = "Remove Row",
         message = options.message,
+        messageLines = options.messageLines,
         confirmLabel = "Remove",
         failureText = "Could not remove the row.",
         onConfirm = options.onConfirm,
