@@ -301,6 +301,7 @@ function LayoutEditorWindow:Destroy(closing)
     self.window = nil
     Event.Logic.Unsubscribe(FOLLOW_EVENT)
     self:StopShortcuts()
+    self:CancelSearch()
     self:CancelDrag()
     self:ClearHistory()
     self.clipboard = nil

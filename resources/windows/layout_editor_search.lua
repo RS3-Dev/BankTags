@@ -7,13 +7,21 @@ local Theme = require("resources/ui/theme")
 local Parts = require("resources/windows/layout_editor_parts")
 local Size = Parts.size
 
-local SEARCH_RESULT_LIMIT = 100
+local SEARCH_RESULT_LIMIT = 200
 local SEARCH_OPTIONS = { bankableOnly = true, includeFields = false }
 local SEARCH_ICON_SIZE = 24
 local ROW_HEIGHT = Size.SEARCH_ROW_HEIGHT
 local SEARCH_DELAY_TICKS = 3
+local SEARCH_TIMEOUT_TICKS = 300
 
 local LayoutEditorSearch = {}
+
+local function logSearchError(message, detail)
+    debugLog(message, detail)
+    if type(log) == "function" then
+        pcall(function() log(message, tostring(detail or "")) end)
+    end
+end
 
 -- Show or hide guidance in the search panel
 function LayoutEditorSearch:SetSearchHint(message)
@@ -36,34 +44,110 @@ function LayoutEditorSearch:QueueSearch(value)
 end
 
 function LayoutEditorSearch:TickSearch()
+    local completed = self.completedSearch
+    if completed ~= nil then
+        self.completedSearch = nil
+        if completed.requestId == self.searchRequestId and self.searchList ~= nil then
+            self.searchHandle = nil
+            self.searchWaitTicks = nil
+            self.activeSearchQuery = nil
+            local ok, err = pcall(function()
+                self:ApplySearchResults(completed.query, completed.results, completed.reason)
+            end)
+            if not ok then
+                logSearchError("Bank Tags search render failed: ", err)
+                self:SetSearchHint("Item search is unavailable right now.")
+            end
+        end
+    elseif self.searchHandle ~= nil then
+        self.searchWaitTicks = (self.searchWaitTicks or 0) + 1
+        if self.searchWaitTicks >= SEARCH_TIMEOUT_TICKS then
+            local timedOutQuery = self.activeSearchQuery or ""
+            self:CancelSearch()
+            logSearchError("Bank Tags search timed out for '" .. timedOutQuery .. "': ", Catalog.Diagnostics())
+            self:ApplySearchResults(timedOutQuery, {}, "Item search timed out.")
+        end
+    end
     if self.pendingSearch == nil then return end
     self.searchDelayTicks = self.searchDelayTicks - 1
     if self.searchDelayTicks <= 0 then self:RunSearch(self.pendingSearch) end
 end
 
--- Show item matches or explain an unavailable search
-function LayoutEditorSearch:RunSearch(value)
-    self.pendingSearch, self.searchDelayTicks = nil, nil
-    local query = Text.trim(value)
-    local ok, results = true, {}
-    if query ~= "" then
-        ok, results = pcall(Catalog.Find, query, SEARCH_RESULT_LIMIT, self.bankItemList, SEARCH_OPTIONS)
+-- Cancel any in-flight async item search
+function LayoutEditorSearch:CancelSearch()
+    self.searchRequestId = (self.searchRequestId or 0) + 1
+    self.completedSearch = nil
+    self.searchWaitTicks = nil
+    self.activeSearchQuery = nil
+    if self.searchHandle ~= nil then
+        pcall(function() self.searchHandle:Cancel() end)
+        self.searchHandle = nil
     end
-    if not ok then
-        debugLog("Bank Tags could not search items: ", results)
-        results = {}
-    end
-    self.searchResults = results
-    self.searchList:SetEntries(self:SearchEntries(results))
-    if not ok then
+end
+
+-- Apply search results or an error message to the search list
+function LayoutEditorSearch:ApplySearchResults(query, results, err)
+    self.searchResults = results or {}
+    self.searchList:SetEntries(self:SearchEntries(self.searchResults))
+    if err ~= nil then
+        logSearchError("Bank Tags could not search items: ", err)
         self:SetSearchHint("Item search is unavailable right now.")
     elseif query == "" then
         self:SetSearchHint(nil)
     else
-        self:SetSearchHint(#results == 0 and withLimit("No items match that search.") or nil)
+        self:SetSearchHint(#self.searchResults == 0 and withLimit("No items match that search.") or nil)
     end
-    self:DrawSearchIcons(self.searchList, results)
+    self:DrawSearchIcons(self.searchList, self.searchResults)
     self.searchDragSurface:MoveToFront()
+end
+
+-- Show item matches or explain an unavailable search
+function LayoutEditorSearch:RunSearch(value)
+    self.pendingSearch, self.searchDelayTicks = nil, nil
+    self:CancelSearch()
+    local query = Text.trim(value)
+    if query == "" then
+        self:ApplySearchResults("", {}, nil)
+        return
+    end
+    local requestId = self.searchRequestId
+    local inCall = true
+    local settled = false
+    self.activeSearchQuery = query
+    self.searchWaitTicks = 0
+    local handle = Catalog.FindAsync(query, SEARCH_RESULT_LIMIT, self.bankItemList, SEARCH_OPTIONS,
+        function(results, _, _, reason)
+            settled = true
+            if requestId ~= self.searchRequestId or self.searchList == nil then return end
+            local err = results == nil and (reason or "Item search failed.") or nil
+            if inCall then
+                self.searchHandle = nil
+                self.searchWaitTicks = nil
+                self.activeSearchQuery = nil
+                local ok, applyErr = pcall(function()
+                    self:ApplySearchResults(query, results or {}, err)
+                end)
+                if not ok then
+                    logSearchError("Bank Tags search render failed: ", applyErr)
+                    self:SetSearchHint("Item search is unavailable right now.")
+                end
+            else
+                -- Defer UI work onto Bank Tags' own Event.Logic tick (off RuneQL's callback stack)
+                self.completedSearch = {
+                    requestId = requestId,
+                    query = query,
+                    results = results or {},
+                    reason = err,
+                }
+            end
+        end)
+    inCall = false
+    if not settled then
+        self.searchHandle = handle
+        self.searchResults = {}
+        self.searchList:SetEntries({})
+        self:SetSearchHint("Searching...")
+    end
 end
 
 -- Place the same icon and name in either side panel's result rows
