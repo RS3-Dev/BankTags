@@ -90,7 +90,7 @@ suite.tests.sidebar_requests_bankable_options = function()
     local search=require('resources/windows/layout_editor_search')
     local called=false
     Catalog.Find=function(query,limit,items,options)
-        assert(query=='shark' and limit==100 and items==bank and options.bankableOnly==true)
+        assert(query=='shark' and limit==200 and items==bank and options.bankableOnly==true)
         assert(options.includeFields==false, 'Name search must not load attribute shards')
         called=true; return {},0,false
     end
@@ -121,6 +121,61 @@ suite.tests.typing_only_searches_latest_value_after_pause = function()
     editor:TickSearch(); assert(#calls==2 and calls[2]=='sharks')
     editor:QueueSearch('sh'); editor:QueueSearch(' ')
     editor:TickSearch(); assert(#calls==2 and #editor.searchResults==0)
+end
+
+suite.tests.async_find_supports_runeql_remote_mode_and_cancels_stale_requests = function()
+    package.loaded['resources/windows/layout_editor_parts']={size={SEARCH_ROW_HEIGHT=32}}
+    local search=require('resources/windows/layout_editor_search')
+    local pending={}
+    local cancelled={}
+    runeql={Catalog={
+        Find=function() return nil,0,'Remote query mode requires SearchAsync / FindAsync' end,
+        FindAsync=function(query,limit,options,cb)
+            assert(options.bankableOnly==true and options.includeFields==false)
+            local index=#pending+1
+            pending[index]={query=query,cb=cb}
+            return {Cancel=function() cancelled[index]=true end}
+        end,
+    }}
+    assert(Catalog.IsFull())
+    local editor={bankItemList=bank,searchList={rows={},SetEntries=function() end},
+        searchHint={},searchDragSurface={MoveToFront=function() end}}
+    for key,value in pairs(search) do editor[key]=value end
+
+    editor:RunSearch('sh')
+    assert(editor.searchHint.content=='Searching...' and #pending==1)
+    editor:RunSearch('bank')
+    assert(cancelled[1]==true and #pending==2)
+    pending[1].cb({{configName='other_item',displayName='Other item'}},1,nil)
+    editor:TickSearch()
+    assert(#editor.searchResults==0)
+    pending[2].cb({{configName='CERT_bank_item',displayName='Bank item'},
+        {configName='bank_item',displayName='Bank item'}},2,nil)
+    assert(#editor.searchResults==0)
+    editor:TickSearch()
+    assert(#editor.searchResults==1 and editor.searchResults[1].objectId==10)
+    assert(editor.searchHint.hidden==true)
+end
+
+suite.tests.sprite_picker_skips_fields_and_reports_empty_visible_results = function()
+    local SpritePicker = require('resources/windows/sprite_picker')
+    local capturedOptions
+    Catalog.FindAsync = function(query, limit, items, options, cb)
+        capturedOptions = options
+        assert(query == 'ghost' and limit == 40)
+        cb({}, 5, false, nil)
+        return { Cancel = function() end }
+    end
+    local picker = setmetatable({
+        bankItems = function() return bank end,
+        tooltips = {},
+        hitTargets = {},
+        grid = { SetObjects = function() end },
+        status = { content = '', rgba = 0 },
+    }, { __index = SpritePicker })
+    picker:RunSearch('ghost')
+    assert(capturedOptions ~= nil and capturedOptions.includeFields == false and capturedOptions.bankableOnly == nil)
+    assert(picker.status.content == 'No matching display names.')
 end
 
 return suite

@@ -159,15 +159,27 @@ function SpritePicker:ShowResults(results, totalMatches, limited)
         end
     end
 
-    if totalMatches == 0 then
+    if #visibleResults == 0 then
         self:SetStatus(limited and ("No matches. " .. Catalog.LIMITED_HINT) or "No matching display names.", MUTED)
     else
         self:SetStatus(limited and Catalog.LIMITED_HINT or "")
     end
 end
 
+local PICKER_SEARCH_OPTIONS = { includeFields = false }
+
+-- Cancel any in-flight async item search
+function SpritePicker:CancelSearch()
+    self.searchRequestId = (self.searchRequestId or 0) + 1
+    if self.searchHandle ~= nil then
+        pcall(function() self.searchHandle:Cancel() end)
+        self.searchHandle = nil
+    end
+end
+
 -- Search items and refresh the choices
 function SpritePicker:RunSearch(value)
+    self:CancelSearch()
     local query = trim(value)
     if query == "" then
         self:ClearInteractions()
@@ -175,16 +187,40 @@ function SpritePicker:RunSearch(value)
         self:SetStatus("Enter an item display name.", ERROR)
         return
     end
+    local requestId = self.searchRequestId
+    local settled = false
     self:SetStatus("Searching...", MUTED)
-    local ok, results, totalMatches, limited = pcall(Catalog.Find, query, 40, self.bankItems())
-    if not ok then
+    self.searchHandle = Catalog.FindAsync(query, 40, self.bankItems(), PICKER_SEARCH_OPTIONS,
+        function(results, totalMatches, limited, reason)
+            settled = true
+            if requestId ~= self.searchRequestId or self.grid == nil then return end
+            self.searchHandle = nil
+            if results == nil then
+                self:ClearInteractions()
+                self.grid:SetObjects({})
+                self:SetStatus("Items could not be searched.", ERROR)
+                debugLog("Bank Tags item search failed: ", reason)
+                if type(log) == "function" then
+                    pcall(function() log("Bank Tags sprite search failed: ", tostring(reason)) end)
+                end
+                return
+            end
+            local ok, err = pcall(function()
+                self:ShowResults(results, totalMatches, limited)
+            end)
+            if not ok then
+                self:ClearInteractions()
+                self.grid:SetObjects({})
+                self:SetStatus("Items could not be searched.", ERROR)
+                if type(log) == "function" then
+                    pcall(function() log("Bank Tags sprite search render failed: ", tostring(err)) end)
+                end
+            end
+        end)
+    if not settled then
         self:ClearInteractions()
         self.grid:SetObjects({})
-        self:SetStatus("Items could not be searched.", ERROR)
-        debugLog("Bank Tags item search failed: ", results)
-        return
     end
-    self:ShowResults(results, totalMatches, limited)
 end
 
 -- Show the picker window
@@ -194,6 +230,7 @@ end
 
 -- Destroy the result controls and picker window
 function SpritePicker:Destroy()
+    self:CancelSearch()
     self:ClearInteractions()
     if self.grid ~= nil then self.grid:Destroy() end
     if self.button ~= nil then self.button:Destroy() end
