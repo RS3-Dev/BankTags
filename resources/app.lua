@@ -376,6 +376,9 @@ function App:ShowTag(tag, quiet)
     if blocked ~= nil then
         if not quiet then
             self:ShowStateNotice(blocked)
+            if blocked == "not_all_items" and self.ext.HighlightAllItems ~= nil then
+                self.ext:HighlightAllItems()
+            end
             self.tab:Refresh()
         end
         return false, blocked

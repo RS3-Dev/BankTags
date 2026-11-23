@@ -2,6 +2,8 @@
 local suite = { setup = require("tests/app_fixture"), tests = {} }
 
 suite.tests.restrictions_refuse_and_clear_notice = function()
+    local highlights = 0
+    ext.HighlightAllItems = function() highlights = highlights + 1; return true end
     for _, case in ipairs({
         {"bankOpen",false,"Open your bank"},
         {"viewAll",false,"All Items"},
@@ -12,13 +14,24 @@ suite.tests.restrictions_refuse_and_clear_notice = function()
         local field,value,message=table.unpack(case)
         state={bankOpen=true,viewAll=true};state[field]=value
         local beforeRefreshes=tabRefreshes
+        local beforeHighlights=highlights
         local ok,reason=app:ShowTag('gear')
         assert(not ok and reason and string.find(app.status,message,1,true))
         assert(tabRefreshes>beforeRefreshes,'refused tag click must refresh sidebar selection')
+        local expectedHighlights = field == "viewAll" and beforeHighlights + 1 or beforeHighlights
+        assert(highlights == expectedHighlights)
         assert(app.pageTag=='other')
         app:OnBankStateChanged({bankOpen=true,viewAll=true})
         assert(app.status==nil)
     end
+    -- Quiet restores and older Bank Core handles without HighlightAllItems stay safe
+    state = { bankOpen = true, viewAll = false }
+    local beforeQuiet = highlights
+    assert(not app:ShowTag('gear', true))
+    assert(highlights == beforeQuiet)
+    ext.HighlightAllItems = nil
+    local ok, reason = app:ShowTag('gear')
+    assert(not ok and reason == 'not_all_items')
 end
 
 suite.tests.core_refusals_preserve_previous_page = function()
