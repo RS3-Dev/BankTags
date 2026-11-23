@@ -100,14 +100,14 @@ suite.tests.bank_close_closes_all_additional_windows_including_import_share = fu
     package.loaded['resources/windows/windows'] = nil
     for _, dep in ipairs({
         'windows/confirm_window', 'core/debug_log', 'windows/import_share',
-        'windows/layout_editor_window', 'windows/sprite_picker', 'tags/tag_rules',
-        'windows/tag_settings_editor', 'ui/text_prompt',
+        'windows/layout_editor_settings', 'windows/layout_editor_window', 'windows/sprite_picker',
+        'tags/tag_rules', 'windows/tag_settings_editor', 'ui/text_prompt',
     }) do
         package.loaded['resources/' .. dep] = { Write = function() end }
     end
     local Windows = require('resources/windows/windows')
     local windows = Windows.new(app)
-    local names = { 'textPrompt', 'layoutEditor', 'tagSettingsEditor', 'tagDeleteConfirm',
+    local names = { 'textPrompt', 'layoutEditor', 'editorSettings', 'tagSettingsEditor', 'tagDeleteConfirm',
         'rowRemoveConfirm', 'importShare', 'spritePicker' }
     local destroyed = {}
     for _, name in ipairs(names) do

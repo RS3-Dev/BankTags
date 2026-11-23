@@ -57,12 +57,14 @@ Size.SEARCH_ROW_HEIGHT = 32
 Size.SEARCH_LIST_TOP = SidebarRows.LIST_TOP
 -- Both grids start under the header, inset in their item areas
 Size.VIEW_Y = Size.PANEL_TOP + Size.TAB_HEADER + Size.VIEW_INSET
--- One row of actions runs under all columns
+-- One row of icon actions runs under all columns, with Close on the right
 Size.BUTTON_HEIGHT = 28
+Size.ICON_BUTTON_WIDTH = 32
 Size.BUTTON_GAP = 4
-Size.BUTTON_GROUP_GAP = 16
+Size.BUTTON_GROUP_GAP = 14
 Size.ACTIONS_GAP = 8
-Size.ACTION_WIDTH = { 72, 72, 88, 96, 96, 80 }
+-- Settings | Copy Paste Remove | AddRow NewLabel | Undo Redo | Close
+Size.ACTION_WIDTH = { 32, 32, 32, 32, 32, 32, 32, 32, 80 }
 
 -- Fit the editor to the bank's columns and size
 function Parts.SizeToBank(columns, bankWidth, bankHeight)
@@ -96,15 +98,17 @@ function Parts.SizeToBank(columns, bankWidth, bankHeight)
     Size.LEFT_BODY_HEIGHT = Size.AREA_HEIGHT + Size.AREA_BOTTOM
     Size.VIEW_HEIGHT = Size.AREA_HEIGHT - 2 * Size.VIEW_INSET
     Size.SEARCH_LIST_HEIGHT = Size.LEFT_BODY_HEIGHT - Size.SEARCH_INSET - Size.SEARCH_LIST_TOP
-    -- Start actions below Unsorted and keep Close at the right
-    Size.ACTION_X = { Size.UNSORTED_X }
+    -- Group compact icon actions from the left and keep Close at the right
+    local groupStarts = { [2] = true, [5] = true, [7] = true }
+    Size.ACTION_X = { Size.LEFT_X }
     for index = 2, #Size.ACTION_WIDTH - 1 do
-        Size.ACTION_X[index] = index == 4 and Size.CENTER_X + Size.VIEW_INSET
-            or Size.ACTION_X[index - 1] + Size.ACTION_WIDTH[index - 1] + Size.BUTTON_GAP
+        local gap = groupStarts[index] and Size.BUTTON_GROUP_GAP or Size.BUTTON_GAP
+        Size.ACTION_X[index] = Size.ACTION_X[index - 1] + Size.ACTION_WIDTH[index - 1] + gap
     end
-    Size.ACTION_X[6] = Size.WIDTH - Size.RIGHT_MARGIN - Size.ACTION_WIDTH[6]
-    Size.STATUS_X = Size.ACTION_X[5] + Size.ACTION_WIDTH[5] + Size.BUTTON_GROUP_GAP
-    Size.STATUS_WIDTH = Size.ACTION_X[6] - Size.BUTTON_GAP - Size.STATUS_X
+    local closeIndex = #Size.ACTION_WIDTH
+    Size.ACTION_X[closeIndex] = Size.WIDTH - Size.RIGHT_MARGIN - Size.ACTION_WIDTH[closeIndex]
+    Size.STATUS_X = Size.ACTION_X[closeIndex - 1] + Size.ACTION_WIDTH[closeIndex - 1] + Size.BUTTON_GROUP_GAP
+    Size.STATUS_WIDTH = Size.ACTION_X[closeIndex] - Size.BUTTON_GAP - Size.STATUS_X
 end
 Parts.SizeToBank(BankGrid.DEFAULT_COLUMNS)
 

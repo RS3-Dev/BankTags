@@ -45,6 +45,7 @@ function LayoutEditorWindow.new(parent, options)
         bankCheckTicks = 0,
         onPromptLabel = options.onPromptLabel,
         onConfirmRemoveRow = options.onConfirmRemoveRow,
+        onOpenSettings = options.onOpenSettings,
         overlayWindows = {},
         searchResults = {},
         selectedLayoutKey = nil,
@@ -52,7 +53,7 @@ function LayoutEditorWindow.new(parent, options)
         groupKeys = nil,
         -- The empty sorted cell Paste fills, outlined in gold
         pasteCell = nil,
-        -- Keep copied items until the tag or editor changes
+        -- Keep copied items across tag switches until the editor closes
         clipboard = nil,
         actionTooltips = {
             copyButton = "Copy the selected item or group (Ctrl+C)",
@@ -190,11 +191,10 @@ end
 -- End drags and load the selected tag's layout
 function LayoutEditorWindow:SelectTag(tag)
     self:CancelDrag()
-    -- Reset scrolling and editing state when switching tags (keeping Bank & Search scroll)
+    -- Reset scrolling and undo history when switching tags (keeping clipboard, Bank & Search scroll)
     if tag ~= self.selectedTag then
         self:ClearHistory()
         self:ClearStatus()
-        self.clipboard = nil
         for name, pane in pairs(self.panes) do
             if name ~= "bank" and name ~= "search" then pane.view:SetScrollPosition(0) end
         end
@@ -328,14 +328,16 @@ function LayoutEditorWindow:Destroy(closing)
     self:ClearHistory()
     self.clipboard = nil
     local onClose = self.onClose
-    self.onClose, self.onChanged, self.onBankCheck, self.onPromptLabel, self.onConfirmRemoveRow = nil, nil, nil, nil, nil
+    self.onClose, self.onChanged, self.onBankCheck, self.onPromptLabel, self.onConfirmRemoveRow, self.onOpenSettings =
+        nil, nil, nil, nil, nil, nil
     if onClose ~= nil then onClose(self) end
     self:DestroyItemNames()
     for _, control in ipairs({
         self.panes.sorted.view, self.panes.unsorted.view, self.panes.bank.view, self.panes.search.view,
         self.unsortedSearch, self.bankSearch, self.itemSearch,
         self.leftTabs, self.tagTabs,
-        self.copyButton, self.pasteButton, self.removeButton, self.addRowButton, self.newLabelButton,
+        self.settingsButton, self.copyButton, self.pasteButton, self.removeButton,
+        self.addRowButton, self.newLabelButton, self.undoButton, self.redoButton,
         self.closeButton,
     }) do
         if control ~= nil then control:Destroy() end

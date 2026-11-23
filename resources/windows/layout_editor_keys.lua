@@ -2,6 +2,7 @@
 
 local Config = require("resources/core/config")
 local DebugLog = require("resources/core/debug_log")
+local Settings = require("resources/core/settings")
 local Parts = require("resources/windows/layout_editor_parts")
 local Size = Parts.size
 
@@ -9,7 +10,20 @@ local KEY_EVENT = Config.PLUGIN_REF .. "_layout_editor_keys"
 local SHIFT_MODIFIER = ModifierKey.SHIFT
 local CONTROL_MODIFIER = ModifierKey.CONTROL
 local ALT_MODIFIER = ModifierKey.ALT
+local META_MODIFIER = ModifierKey.META or 0
 local ANY_MODIFIER = ModifierKey.ANY
+local MODIFIER_BITS = {
+    CONTROL = CONTROL_MODIFIER,
+    SHIFT = SHIFT_MODIFIER,
+    ALT = ALT_MODIFIER,
+    META = META_MODIFIER ~= 0 and META_MODIFIER or CONTROL_MODIFIER,
+}
+local MOVE_STEPS = {
+    moveLeft = { -1, 0 },
+    moveRight = { 1, 0 },
+    moveUp = { 0, -1 },
+    moveDown = { 0, 1 },
+}
 
 local LayoutEditorKeys = {}
 
@@ -34,6 +48,7 @@ function LayoutEditorKeys:StartShortcuts()
     end
     self.itemSearch.root:Subscribe(ui.Hook.ONCLICK, KEY_EVENT, takeKeys)
     if self.unsortedSearch ~= nil then self.unsortedSearch.root:Subscribe(ui.Hook.ONCLICK, KEY_EVENT, takeKeys) end
+    if self.bankSearch ~= nil then self.bankSearch.root:Subscribe(ui.Hook.ONCLICK, KEY_EVENT, takeKeys) end
 end
 
 -- Stop listening for shortcut keys
@@ -88,30 +103,95 @@ function LayoutEditorKeys:NudgeSelected(columnStep, lineStep)
     return changed
 end
 
--- Combine the held modifiers reported by event and keyboard
+-- Combine the held modifiers reported by event and keyboard (including macOS Meta/Command)
+local function isMetaDown()
+    return type(Keyboard) == "table" and type(Keyboard.IsMetaDown) == "function"
+        and Keyboard.IsMetaDown() == true
+end
+
 local function heldModifiers(event)
-    local held = event.modifiers & ANY_MODIFIER
+    local raw = tonumber(event.modifiers) or 0
+    local held = raw & (ANY_MODIFIER | META_MODIFIER)
     if Keyboard.IsShiftDown() then held = held | SHIFT_MODIFIER end
     if Keyboard.IsControlDown() then held = held | CONTROL_MODIFIER end
     if Keyboard.IsAltDown() then held = held | ALT_MODIFIER end
+    if isMetaDown() then
+        held = held | (META_MODIFIER ~= 0 and META_MODIFIER or CONTROL_MODIFIER)
+    end
     return held
 end
 
--- Find the shortcut matching a key and its modifiers
-local function shortcutFor(key, held)
-    if held == CONTROL_MODIFIER then
-        if key == GameKey.Z then return "undo" end
-        if key == GameKey.Y then return "redo" end
-        if key == GameKey.C then return "copy" end
-        if key == GameKey.V then return "paste" end
-        return nil
+-- Read the active editor keybind map with defaults for missing entries
+function LayoutEditorKeys:EditorKeybinds()
+    local current = self.settings ~= nil and self.settings() or nil
+    if type(current) == "table" and type(current.editorKeybinds) == "table" then
+        return current.editorKeybinds
     end
-    if held ~= 0 then return nil end
-    if key == GameKey.DELETE then return "remove" end
-    if key == GameKey.LEFT then return "move", -1, 0 end
-    if key == GameKey.RIGHT then return "move", 1, 0 end
-    if key == GameKey.UP then return "move", 0, -1 end
-    if key == GameKey.DOWN then return "move", 0, 1 end
+    return Settings.defaultEditorKeybinds()
+end
+
+-- Format a keybind's display label for tooltips
+function LayoutEditorKeys:FormatKeybind(action)
+    local names = self:EditorKeybinds()[action]
+    if type(names) ~= "table" or #names == 0 then return nil end
+    local labels = {}
+    for _, name in ipairs(names) do
+        if name == "CONTROL" then labels[#labels + 1] = "Ctrl"
+        elseif name == "SHIFT" then labels[#labels + 1] = "Shift"
+        elseif name == "ALT" then labels[#labels + 1] = "Alt"
+        elseif name == "META" then labels[#labels + 1] = "Cmd"
+        else labels[#labels + 1] = name:gsub("^_", ""):gsub("_", " ") end
+    end
+    return table.concat(labels, "+")
+end
+
+-- Check whether a configured keybind matches a KeyDown event
+-- Any binding requiring CONTROL also accepts macOS Meta/Command
+local function matchesBinding(names, eventKey, held)
+    if type(names) ~= "table" or #names == 0 then return false end
+    local requiredMods, primaryKeys = 0, {}
+    local wantsControl, wantsMeta = false, false
+    for _, name in ipairs(names) do
+        local modBit = MODIFIER_BITS[name]
+        if modBit ~= nil then
+            requiredMods = requiredMods | modBit
+            if name == "CONTROL" then wantsControl = true end
+            if name == "META" then wantsMeta = true end
+        else
+            local code = type(GameKey) == "table" and GameKey[name] or nil
+            if code == nil then return false end
+            primaryKeys[#primaryKeys + 1] = code
+        end
+    end
+    local effectiveHeld = held
+    if wantsControl and not wantsMeta and META_MODIFIER ~= 0 and (effectiveHeld & META_MODIFIER) ~= 0 then
+        effectiveHeld = (effectiveHeld & ~META_MODIFIER) | CONTROL_MODIFIER
+    end
+    if #primaryKeys == 0 then
+        if #names == 1 then
+            local code = type(GameKey) == "table" and GameKey[names[1]] or nil
+            return code ~= nil and eventKey == code and effectiveHeld == requiredMods
+        end
+        return false
+    end
+    if effectiveHeld ~= requiredMods then return false end
+    if #primaryKeys == 1 then return eventKey == primaryKeys[1] end
+    local isDown = type(Keyboard) == "table" and Keyboard.IsGameKeyDown or nil
+    if type(isDown) ~= "function" then return false end
+    return (eventKey == primaryKeys[1] and isDown(primaryKeys[2]))
+        or (eventKey == primaryKeys[2] and isDown(primaryKeys[1]))
+end
+
+-- Find the shortcut matching a key and its modifiers
+function LayoutEditorKeys:ShortcutFor(key, held)
+    local bindings = self:EditorKeybinds()
+    for _, action in ipairs(Settings.EDITOR_KEYBIND_ORDER) do
+        if matchesBinding(bindings[action], key, held) then
+            local step = MOVE_STEPS[action]
+            if step ~= nil then return "move", step[1], step[2] end
+            return action
+        end
+    end
     return nil
 end
 
@@ -133,7 +213,7 @@ function LayoutEditorKeys:KeyPressed(event)
         return
     end
     local held = heldModifiers(event)
-    local shortcut, columnStep, lineStep = shortcutFor(event.gameKey, held)
+    local shortcut, columnStep, lineStep = self:ShortcutFor(event.gameKey, held)
     if DebugLog.IsEnabled() then self:TraceKey(event, held, shortcut) end
     if shortcut == nil or not self:KeysReady() then return end
     if shortcut == "undo" then
@@ -142,13 +222,15 @@ function LayoutEditorKeys:KeyPressed(event)
         self:Redo()
     elseif shortcut == "paste" then
         self:PasteClipboard()
-    elseif self:SelectedEntry() == nil then
+    elseif shortcut == "removeRow" then
+        self:RemoveTargetRow()
+    elseif not (self.HasAnySelection ~= nil and self:HasAnySelection() or self:SelectedEntry() ~= nil) then
         return
     elseif shortcut == "copy" then
         self:CopySelected()
     elseif shortcut == "remove" then
         self:RemoveSelected()
-    elseif self.settings().arrowKeyMovement then
+    elseif self.settings ~= nil and self.settings().arrowKeyMovement then
         self:NudgeSelected(columnStep, lineStep)
     end
 end
