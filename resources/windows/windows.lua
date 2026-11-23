@@ -2,6 +2,7 @@
 
 local ConfirmWindow = require("resources/windows/confirm_window")
 local debugLog = require("resources/core/debug_log").Write
+local EditorSettingsWindow = require("resources/windows/layout_editor_settings")
 local Geometry = require("resources/ui/geometry")
 local ImportShare = require("resources/windows/import_share")
 local LayoutEditorWindow = require("resources/windows/layout_editor_window")
@@ -16,11 +17,11 @@ Windows.__index = Windows
 
 -- Windows that close with the bank
 local BANK_WINDOWS = {
-    "textPrompt", "layoutEditor", "tagSettingsEditor", "tagDeleteConfirm", "rowRemoveConfirm",
+    "textPrompt", "layoutEditor", "editorSettings", "tagSettingsEditor", "tagDeleteConfirm", "rowRemoveConfirm",
     "importShare", "spritePicker",
 }
 -- Windows kept in front of the layout editor, the last frontmost
-local EDITOR_OVERLAYS = { "tagSettingsEditor", "spritePicker", "textPrompt", "rowRemoveConfirm" }
+local EDITOR_OVERLAYS = { "tagSettingsEditor", "spritePicker", "editorSettings", "textPrompt", "rowRemoveConfirm" }
 
 -- Find the layer standalone windows open on
 local function windowParent()
@@ -249,12 +250,14 @@ function Windows:OpenLayoutEditor(tag)
         onBankCheck = function() self:CheckBankBounds() end,
         onPromptLabel = function(options) self:OpenPageLabelPrompt(options) end,
         onConfirmRemoveRow = function(options) self:OpenRowRemoveConfirm(options) end,
-        -- Close pending row and label dialogs with their editor
+        onOpenSettings = function() self:OpenEditorSettings() end,
+        -- Close pending row, settings, and label dialogs with their editor
         onClose = function(value)
             if self.layoutEditor == value then
                 self.layoutEditor = nil
                 self:ReleaseEditorKeybindHold()
             end
+            self:Close("editorSettings")
             self:Close("textPrompt")
             self:Close("rowRemoveConfirm")
         end,
@@ -263,6 +266,37 @@ function Windows:OpenLayoutEditor(tag)
     self:AcquireEditorKeybindHold()
     editor:Show()
     self:SyncEditorOverlays()
+end
+
+-- Open the layout editor's settings and keybinds modal above the editor
+function Windows:OpenEditorSettings()
+    local app = self.app
+    self:Close("editorSettings")
+    local parent = parentFor("editor settings")
+    if parent == nil then return end
+    local modal
+    modal = EditorSettingsWindow.new(parent, {
+        settings = function() return app.settings end,
+        onSetKeybind = function(action, names) return app:SetEditorKeybind(action, names) end,
+        onResetKeybinds = function() return app:ResetEditorKeybinds() end,
+        onSetArrowKeyMovement = function(enabled) return app:SetSetting("arrowKeyMovement", enabled) end,
+        onClose = function(value)
+            if self.editorSettings == value then
+                self.editorSettings = nil
+                self:SyncEditorOverlays()
+            end
+        end,
+    })
+    self.editorSettings = modal
+    modal:Show()
+    self:SyncEditorOverlays()
+end
+
+-- Refresh open editor tooltips after keybind changes
+function Windows:RefreshEditorKeybinds()
+    if self.layoutEditor ~= nil and self.layoutEditor.RefreshActionTooltips ~= nil then
+        self.layoutEditor:RefreshActionTooltips()
+    end
 end
 
 -- Keep a renamed tag open in the layout editor

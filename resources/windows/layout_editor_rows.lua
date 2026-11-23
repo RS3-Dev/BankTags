@@ -153,4 +153,31 @@ function LayoutEditorRows:RemoveRow(line)
     return true
 end
 
+-- Remove the hovered label row, the selected row/paste-cell row, or any hovered layout row
+function LayoutEditorRows:RemoveTargetRow()
+    if self.selectedTag == nil then return false end
+    local x, y = self:ContentPointer()
+    local hoveredRow = nil
+    if x ~= nil then
+        local pane, paneX, paneY = self:PaneAt(x, y)
+        if pane ~= nil and pane.name == "sorted" then
+            local labelRow = self:LabelRowAt(pane, paneX, paneY)
+            if labelRow ~= nil then return self:RemoveRow(labelRow) end
+            hoveredRow = self:RowAt(pane, paneX, paneY)
+        end
+    end
+    local _, paneName, index = self:SelectedEntry()
+    if paneName == "sorted" and index ~= nil then
+        return self:RemoveRow((index - 1) // Size.CENTER_COLUMNS)
+    end
+    if self.pasteCell ~= nil then
+        return self:RemoveRow((self.pasteCell - 1) // Size.CENTER_COLUMNS)
+    end
+    if hoveredRow ~= nil then
+        return self:RemoveRow(hoveredRow)
+    end
+    self:ShowError("Select or hover a layout row or label first.")
+    return false
+end
+
 return LayoutEditorRows

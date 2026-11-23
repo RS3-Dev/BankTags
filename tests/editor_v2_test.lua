@@ -1,4 +1,4 @@
--- Editor v2 layout geometry, left tab switching, searchable Bank/Search grids, and multi-select workflows.
+-- Editor v2 layout geometry, left tab switching, and searchable Bank tab.
 local suite = { tests = {} }
 
 local function component(parent)
@@ -109,6 +109,7 @@ suite.tests.layout_slides_right_and_left_panel_expands = function()
         assert(s.UNSORTED_WIDTH == s.LEFT_WIDTH and s.SEARCH_WIDTH == s.LEFT_WIDTH)
         assert(s.SEARCH_X == s.LEFT_X and s.UNSORTED_X == s.LEFT_X)
         assert(s.LEFT_BODY_TOP == s.PANEL_TOP + s.TAB_HEADER)
+        assert(s.STATUS_WIDTH > 300, "footer status keeps ample width")
     end
 end
 
@@ -212,6 +213,146 @@ suite.tests.bank_tab_tooltips_and_context_menu_work = function()
     assert(target ~= nil and target.pane == "bank" and target.objectID == 20)
 end
 
+suite.tests.custom_keybinds_persist_and_dispatch_editor_actions = function()
+    local Settings = require("resources/core/settings")
+    local defaults = Settings.defaults()
+    assert(defaults.editorKeybinds.copy[1] == "CONTROL" and defaults.editorKeybinds.copy[2] == "C")
+    assert(defaults.editorKeybinds.remove[1] == "DELETE")
+
+    local copied = Settings.copy({
+        editorKeybinds = {
+            copy = { "ALT", "K" },
+            remove = { "X" },
+            undo = {},
+        },
+    })
+    assert(copied.editorKeybinds.copy[1] == "ALT" and copied.editorKeybinds.copy[2] == "K")
+    assert(copied.editorKeybinds.remove[1] == "X")
+    assert(#copied.editorKeybinds.undo == 0)
+    -- Missing keys retain defaults
+    assert(copied.editorKeybinds.paste[1] == "CONTROL" and copied.editorKeybinds.paste[2] == "V")
+
+    GameKey.ALT, GameKey.K, GameKey.X, GameKey.Z, GameKey.CONTROL = 100, 101, 102, 103, 104
+    local namesByCode = { [100] = "ALT", [101] = "K", [102] = "X", [103] = "Z", [104] = "CONTROL" }
+    GameKey.FromID = function(code) return namesByCode[code] end
+    Keyboard.IsControlDown = function() return false end
+    Keyboard.IsAltDown = function() return false end
+    Keyboard.IsShiftDown = function() return false end
+    prettyui.KeybindField = { IsCapturing = function() return false end }
+
+    local ran = {}
+    e.keysOnGrid = true
+    e.settings = function() return copied end
+    e.SelectedEntry = function() return { layoutKey = "a" }, "sorted", 1 end
+    e.CopySelected = function() ran[#ran + 1] = "copy" end
+    e.RemoveSelected = function() ran[#ran + 1] = "remove" end
+    e.Undo = function() ran[#ran + 1] = "undo" end
+
+    -- Rebound Alt+K triggers copy
+    e:KeyPressed({ gameKey = GameKey.K, modifiers = ModifierKey.ALT })
+    assert(#ran == 1 and ran[1] == "copy")
+    -- Rebound X triggers remove
+    e:KeyPressed({ gameKey = GameKey.X, modifiers = 0 })
+    assert(#ran == 2 and ran[2] == "remove")
+    -- Unbound undo does nothing on Ctrl+Z
+    e:KeyPressed({ gameKey = GameKey.Z, modifiers = ModifierKey.CONTROL })
+    assert(#ran == 2)
+    assert(e:FormatKeybind("copy") == "Alt+K")
+    assert(e:FormatKeybind("undo") == nil)
+end
+
+suite.tests.editor_settings_modal_saves_warns_duplicates_and_resets = function()
+    local Settings = require("resources/core/settings")
+    GameKey.CONTROL, GameKey.SHIFT, GameKey.C, GameKey.V, GameKey.DELETE, GameKey.Z, GameKey.Y = 1, 12, 2, 3, 4, 5, 6
+    GameKey.LEFT, GameKey.RIGHT, GameKey.UP, GameKey.DOWN, GameKey.X = 7, 8, 9, 10, 11
+    local byID = {}
+    for name, code in pairs(GameKey) do
+        if type(code) == "number" then byID[code] = name end
+    end
+    GameKey.FromID = function(code) return byID[code] end
+    id.Font.CINZEL_13PT_BOLD = 2
+
+    local state = Settings.defaults()
+    prettyui.Window = { new = function(_, options)
+        return { content = component(), options = options, Show = function() end, Close = function() end, Destroy = function() end }
+    end }
+    prettyui.SimpleButton = { new = function(_, _, fn)
+        return { click = fn, Destroy = function() end }
+    end }
+    prettyui.CheckboxButton = { new = function(_, _, options)
+        local selected = {}
+        for _, v in ipairs(options.selectedValues or {}) do selected[v] = true end
+        return {
+            items = {},
+            IsSelected = function(_, k) return selected[k] == true end,
+            SetSelected = function(_, k, v) selected[k] = v end,
+            toggle = function(self, k, v) selected[k] = v; options.onChange(self) end,
+            Destroy = function() end,
+        }
+    end }
+    prettyui.KeybindField = { new = function(_, options)
+        local field = {
+            value = options.value,
+            defaultValue = options.defaultValue,
+            disabled = options.disabled == true,
+            onChange = options.onChange,
+        }
+        function field:SetValue(v, notify)
+            self.value = v
+            if notify and self.onChange then self.onChange(self, v) end
+        end
+        function field:SetDisabled(disabled) self.disabled = disabled == true end
+        function field:Destroy() self.destroyed = true end
+        return field
+    end }
+
+    local EditorSettings = require("resources/windows/layout_editor_settings")
+    local modal = EditorSettings.new({}, {
+        settings = function() return state end,
+        onSetKeybind = function(action, names)
+            state.editorKeybinds[action] = names
+            return true
+        end,
+        onResetKeybinds = function()
+            state.editorKeybinds = Settings.defaultEditorKeybinds()
+            return true
+        end,
+        onSetArrowKeyMovement = function(enabled)
+            state.arrowKeyMovement = enabled
+            return true
+        end,
+    })
+
+    -- Directional movement keybinds start disabled until the checkbox is checked
+    assert(not modal.fields.copy.disabled)
+    assert(modal.fields.moveLeft.disabled and modal.fields.moveRight.disabled)
+    assert(modal.fields.moveUp.disabled and modal.fields.moveDown.disabled)
+
+    -- Rebinding Copy to X saves cleanly
+    modal.fields.copy:SetValue({ GameKey.X }, true)
+    assert(state.editorKeybinds.copy[1] == "X" and modal.status.hidden)
+
+    -- Rebinding Paste to X warns about duplicate with Copy
+    modal.fields.paste:SetValue({ GameKey.X }, true)
+    assert(not modal.status.hidden and string.find(modal.status.content, "Copy", 1, true))
+
+    -- Toggling directional movement enables the 4 move keybind fields, and unchecking disables them again
+    modal.moveToggle:toggle("arrowKeyMovement", true)
+    assert(state.arrowKeyMovement == true)
+    assert(not modal.fields.moveLeft.disabled and not modal.fields.moveRight.disabled)
+    assert(not modal.fields.moveUp.disabled and not modal.fields.moveDown.disabled)
+    modal.moveToggle:toggle("arrowKeyMovement", false)
+    assert(state.arrowKeyMovement == false)
+    assert(modal.fields.moveLeft.disabled and modal.fields.moveDown.disabled)
+
+    -- Reset Defaults restores Copy and Paste
+    modal.resetButton.click()
+    assert(state.editorKeybinds.copy[1] == "CONTROL" and state.editorKeybinds.copy[2] == "C")
+    assert(state.editorKeybinds.paste[1] == "CONTROL" and state.editorKeybinds.paste[2] == "V")
+    modal:Destroy()
+    assert(modal.fields.copy == nil)
+end
+
 suite.tests.layout_editor_suspends_and_releases_bank_core_keybinds = function()
     local suspendedLabel, released = nil, 0
     local hold = { Release = function() released = released + 1; return true end }
@@ -224,7 +365,7 @@ suite.tests.layout_editor_suspends_and_releases_bank_core_keybinds = function()
     package.loaded["resources/windows/windows"] = nil
     for _, dep in ipairs({
         "windows/confirm_window", "core/debug_log", "windows/import_share",
-        "windows/sprite_picker", "tags/tag_rules",
+        "windows/layout_editor_settings", "windows/sprite_picker", "tags/tag_rules",
         "windows/tag_settings_editor", "ui/text_prompt",
     }) do
         package.loaded["resources/" .. dep] = { Write = function() end }
@@ -465,6 +606,127 @@ suite.tests.classic_ui_aligns_layout_editor_to_detached_sidebar = function()
     })
     local fb = fallbackWin:BankBounds()
     assert(fb.x - border == 100 and fb.width == 998)
+end
+
+suite.tests.copy_paste_across_tags_remove_row_shortcut_and_meta_modifier = function()
+    local Parts = require("resources/windows/layout_editor_parts")
+    local Settings = require("resources/core/settings")
+    local TagStore = require("resources/tags/tag_store")
+    local Window = require("resources/windows/layout_editor_window")
+    local Clipboard = require("resources/windows/layout_editor_clipboard")
+    for k, v in pairs(Clipboard) do e[k] = v end
+    e.SelectTag = Window.SelectTag
+    e.RefreshCenter = Window.RefreshCenter
+    e.SelectedEntry = Window.SelectedEntry
+    e.ClearHistory = function() end
+    e.ClearStatus = function() end
+    e.ShowChosenTag = function() end
+    e.ShowNotice = function() end
+    e.ShowError = function() end
+    e.NotifyChanged = function() end
+    e.SaveEdit = function(self, _, fn)
+        local ok, reason = fn()
+        if ok then self:RefreshCenter() end
+        return ok, reason
+    end
+    Parts.SizeToBank(3, 1000, 650)
+
+    local savedValues = {}
+    PersistentDB = {
+        GetString = function(_, key) return savedValues[key] end,
+        SetString = function(_, key, value) savedValues[key] = value; return true end,
+    }
+    local store = TagStore.new()
+    assert(store:CreateTag("alpha"))
+    assert(store:CreateTag("beta"))
+    local alphaID, betaID = store:AllTags()[1], store:AllTags()[2]
+    assert(store:PlaceItemsAtCells(alphaID, { 10, 20 }, { 1, 2 }, 3))
+    assert(store:InsertLabel(betaID, 0, "Weapons", 3))
+    assert(store:InsertLayoutRow(betaID, 1, 3))
+
+    e.store = store
+    e.panes.sorted.view.SetContentHeight = function() end
+    e.panes.sorted.view.SetScrollPosition = function() end
+    e.panes.unsorted.view.SetContentHeight = function() end
+    e.panes.unsorted.view.SetScrollPosition = function() end
+    e.panes.unsorted.view.contentWidth = 160
+    e.panes.sorted.view.contentWidth = 160
+    e.unsortedHint = { content = "", hidden = true }
+    e.unsortedQuery, e.unsortedNames = "", {}
+    e:SelectTag(alphaID)
+
+    -- 1. Copy group from tag alpha, switch to tag beta, paste into empty row 1
+    local k1, k2 = e.layout.slots[1].layoutKey, e.layout.slots[2].layoutKey
+    e:SelectItems({ k1, k2 })
+    assert(e:CopySelected())
+    assert(e.clipboard ~= nil)
+    e:SelectTag(betaID)
+    assert(e.clipboard ~= nil, "clipboard must persist across tag switches")
+    e.pasteCell = 4 -- row 1, col 0 (row 0 is label 'Weapons')
+    assert(e:PasteClipboard())
+    assert(e.layout.slots[4].objectID == 10 and e.layout.slots[5].objectID == 20)
+
+    -- 2. Shift+Delete removes hovered label row, selected item row, or empty paste-cell row
+    ModifierKey.META = 8
+    package.loaded["resources/windows/layout_editor_keys"] = nil
+    for k, v in pairs(require("resources/windows/layout_editor_keys")) do e[k] = v end
+    GameKey.CONTROL, GameKey.SHIFT, GameKey.DELETE, GameKey.C, GameKey.V = 1, 2, 3, 4, 5
+    GameKey.FromID = function(code)
+        return ({ [1] = "CONTROL", [2] = "SHIFT", [3] = "DELETE", [4] = "C", [5] = "V" })[code]
+    end
+    Keyboard.IsShiftDown = function() return false end
+    Keyboard.IsControlDown = function() return false end
+    Keyboard.IsAltDown = function() return false end
+    Keyboard.IsMetaDown = function() return false end
+    prettyui.KeybindField = { IsCapturing = function() return false end }
+
+    local defaults = Settings.defaults()
+    assert(defaults.editorKeybinds.removeRow[1] == "SHIFT" and defaults.editorKeybinds.removeRow[2] == "DELETE")
+    e.settings = function() return defaults end
+    e.keysOnGrid = true
+
+    local confirmPrompted = nil
+    e.onConfirmRemoveRow = function(opts) confirmPrompted = opts end
+
+    -- Hover over label row 0 and press Shift+Delete -> prompts to remove label 'Weapons'
+    local sorted = e.panes.sorted
+    e.pointerSurface = sorted.surface
+    e.pointerX, e.pointerY = sorted.x + sorted.gridLeft + 10, sorted.y + 8
+    e:KeyPressed({ gameKey = GameKey.DELETE, modifiers = ModifierKey.SHIFT })
+    assert(confirmPrompted ~= nil and string.find(confirmPrompted.message, "Weapons", 1, true))
+    assert(not string.find(confirmPrompted.message, "\n", 1, true)
+        and confirmPrompted.messageLines ~= nil and #confirmPrompted.messageLines == 2)
+    confirmPrompted.onConfirm()
+    assert(#e.layout.labels == 0, "confirmed Shift+Delete should remove the label row")
+
+    -- Empty row selected via pasteCell -> Shift+Delete removes immediately without confirmation
+    assert(store:InsertLayoutRow(betaID, 0, 3))
+    e:RefreshCenter()
+    e.pointerSurface = nil
+    e:SelectOnly(nil)
+    e.pasteCell = 1
+    confirmPrompted = nil
+    local linesBefore = e.layout.lines
+    e:KeyPressed({ gameKey = GameKey.DELETE, modifiers = ModifierKey.SHIFT })
+    assert(confirmPrompted == nil and e.layout.lines == linesBefore - 1)
+
+    -- 3. macOS Meta / Command matches CONTROL-bound shortcuts (Cmd+C, Cmd+V), without matching Shift+Cmd+C
+    e.clipboard = nil
+    local copiedKey = e.layout.slots[1].layoutKey
+    e:SelectOnly(copiedKey)
+    -- Shift+Cmd+C must NOT trigger Copy
+    e:KeyPressed({ gameKey = GameKey.C, modifiers = ModifierKey.META | ModifierKey.SHIFT })
+    assert(e.clipboard == nil)
+    -- Cmd+C triggers Copy
+    e:KeyPressed({ gameKey = GameKey.C, modifiers = ModifierKey.META })
+    assert(e.clipboard ~= nil)
+    -- Cmd+V (via Keyboard.IsMetaDown) pastes into empty cell 3
+    e:SelectOnly(nil)
+    e.pasteCell = 3
+    Keyboard.IsMetaDown = function() return true end
+    e:KeyPressed({ gameKey = GameKey.V, modifiers = 0 })
+    Keyboard.IsMetaDown = function() return false end
+    assert(e.layout.slots[3].objectID == 10)
 end
 
 return suite

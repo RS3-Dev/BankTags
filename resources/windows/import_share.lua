@@ -162,7 +162,7 @@ function ImportShare.new(parent, options)
         "Click a code field.",
         38, { height = 18, maxLines = 1, font = id.Font.MUSEO_SANS_11PT_REGULAR })
     self.controls.shareCopyShortcut = text(sharePage.content,
-        "Ctrl+A, Ctrl+C to copy. Copy numbered parts in order.",
+        "Ctrl/Cmd+A, Ctrl/Cmd+C to copy. Copy numbered parts in order.",
         56, { height = 18, maxLines = 1, font = id.Font.MUSEO_SANS_11PT_REGULAR })
     self:RefreshExports()
     self:RefreshImportInputs()

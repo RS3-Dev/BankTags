@@ -163,25 +163,63 @@ function LayoutEditorView:CreateSearch()
     })
 end
 
--- Group compact actions under a shared divider
+-- Format a button tooltip with its current keybind when bound
+function LayoutEditorView:ActionTooltip(description, actionKey)
+    local key = actionKey ~= nil and self:FormatKeybind(actionKey) or nil
+    if key == nil then return description end
+    return description .. " (" .. key .. ")"
+end
+
+-- Update footer button tooltips after keybinds change
+function LayoutEditorView:RefreshActionTooltips()
+    for _, item in ipairs({
+        { "copyButton", "Copy selected items", "copy" },
+        { "pasteButton", "Paste copied items into selected empty cell", "paste" },
+        { "removeButton", "Remove selected items from tag", "remove" },
+        { "undoButton", "Undo last layout edit", "undo" },
+        { "redoButton", "Redo layout edit", "redo" },
+    }) do
+        local button = self[item[1]]
+        if button ~= nil and button.SetTooltip ~= nil then
+            button:SetTooltip(self:ActionTooltip(item[2], item[3]))
+        end
+    end
+end
+
+-- Group compact Heroicon actions under a shared divider
 function LayoutEditorView:CreateActions()
     local y = Size.PANEL_TOP + Size.ACTIONS_Y
-    rectangle(self.content, Size.UNSORTED_X, y - 5, Size.WIDTH - Size.RIGHT_MARGIN - Size.UNSORTED_X, 1, FRAME)
+    rectangle(self.content, Size.LEFT_X, y - 5, Size.WIDTH - Size.RIGHT_MARGIN - Size.LEFT_X, 1, FRAME)
     for index, action in ipairs({
-        { "copyButton", "Copy", self.CopySelected, self.actionTooltips.copyButton },
-        { "pasteButton", "Paste", self.PasteClipboard, self.actionTooltips.pasteButton },
-        { "removeButton", "Remove", self.RemoveSelected, self.actionTooltips.removeButton },
-        { "addRowButton", "Add row", function() self:InsertEmptyRow(self.layout.lines) end,
-            "Add an empty row at the end of the layout" },
-        { "newLabelButton", "New label", function() self:PromptNewLabel(self:DefaultLabelRow()) end,
-            "Add a label above the selection or paste cell, or at the end. Right-click a row to add one there" },
-        { "closeButton", "Close", function() self.window:Close() end, "Close the layout editor" },
+        { field = "settingsButton", icon = "settings", fallback = id.Sprite.RS3_ICON_SETTINGS_30PX_0,
+            run = function() if self.onOpenSettings ~= nil then self.onOpenSettings() end end,
+            tooltip = "Editor settings and keybinds" },
+        { field = "copyButton", icon = "copy", run = self.CopySelected,
+            tooltip = self:ActionTooltip("Copy selected items", "copy") },
+        { field = "pasteButton", icon = "paste", run = self.PasteClipboard,
+            tooltip = self:ActionTooltip("Paste copied items into selected empty cell", "paste") },
+        { field = "removeButton", icon = "remove", run = self.RemoveSelected,
+            tooltip = self:ActionTooltip("Remove selected items from tag", "remove") },
+        { field = "addRowButton", icon = "addrow",
+            run = function() self:InsertEmptyRow(self.layout.lines) end,
+            tooltip = "Add an empty row at the end of the layout" },
+        { field = "newLabelButton", icon = "label",
+            run = function() self:PromptNewLabel(self:DefaultLabelRow()) end,
+            tooltip = "Add a label above the selection or paste cell, or at the end" },
+        { field = "undoButton", icon = "undo", run = self.Undo,
+            tooltip = self:ActionTooltip("Undo last layout edit", "undo") },
+        { field = "redoButton", icon = "redo", run = self.Redo,
+            tooltip = self:ActionTooltip("Redo layout edit", "redo") },
+        { field = "closeButton", label = "Close",
+            run = function() self.window:Close() end,
+            tooltip = "Close the layout editor" },
     }) do
-        local run = action[3]
-        self[action[1]] = BankControls.button(self.content, action[2], function() run(self) end, {
+        local run = action.run
+        self[action.field] = BankControls.button(self.content, action.label, function() run(self) end, {
             x = Size.ACTION_X[index], y = y,
             width = Size.ACTION_WIDTH[index], height = Size.BUTTON_HEIGHT,
-            tooltip = action[4],
+            iconName = action.icon, iconSize = 18, fallbackSpriteID = action.fallback,
+            tooltip = action.tooltip,
         })
     end
     self.status = prettyui.Text.new(self.content, {

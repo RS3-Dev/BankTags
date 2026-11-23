@@ -565,6 +565,36 @@ function App:SetSetting(key, value)
     return true
 end
 
+-- Save one rebound layout editor shortcut and refresh button tooltips
+function App:SetEditorKeybind(action, names)
+    if self.shutDown then return false, "Bank Tags is not running." end
+    local nextSettings = Settings.copy(self.settings)
+    if nextSettings.editorKeybinds[action] == nil or type(names) ~= "table" then
+        return false, "The keybind is invalid."
+    end
+    nextSettings.editorKeybinds[action] = names
+    nextSettings = Settings.copy(nextSettings)
+    if not Settings.save(nextSettings) then return false, "Could not save the keybind." end
+    self.settings = nextSettings
+    if self.windows ~= nil and self.windows.RefreshEditorKeybinds ~= nil then
+        self.windows:RefreshEditorKeybinds()
+    end
+    return true
+end
+
+-- Reset all layout editor shortcuts back to their defaults
+function App:ResetEditorKeybinds()
+    if self.shutDown then return false, "Bank Tags is not running." end
+    local nextSettings = Settings.copy(self.settings)
+    nextSettings.editorKeybinds = Settings.defaultEditorKeybinds()
+    if not Settings.save(nextSettings) then return false, "Could not reset keybinds." end
+    self.settings = nextSettings
+    if self.windows ~= nil and self.windows.RefreshEditorKeybinds ~= nil then
+        self.windows:RefreshEditorKeybinds()
+    end
+    return true
+end
+
 -- Draw preferences on the Plugin Hub settings page
 function App:MountSettings(parent)
     self:DestroySettings()

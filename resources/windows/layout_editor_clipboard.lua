@@ -62,11 +62,15 @@ function LayoutEditorClipboard:CopySelected()
     return true
 end
 
--- Paste copies at the selected empty cell
+-- Paste copies at the selected empty cell (works within or across tags)
 function LayoutEditorClipboard:PasteClipboard()
     local clipboard = self.clipboard
-    if clipboard == nil or clipboard.tag ~= self.selectedTag then
-        self:ShowError("Copy an item or group first (Ctrl+C).")
+    if clipboard == nil then
+        self:ShowError("Copy an item or group first.")
+        return false
+    end
+    if self.selectedTag == nil then
+        self:ShowError("Choose a tag before pasting items.")
         return false
     end
     if self.pasteCell == nil then
