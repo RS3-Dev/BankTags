@@ -22,7 +22,7 @@ end
 
 -- Return the left-click entry's label for the session's tag
 function SelectMode:Label()
-    return "Add to " .. Text.plain(Text.titleCase(self.session.tag))
+    return "Add to " .. Text.plain(Text.titleCase(self.app.store:GetTagName(self.session.tag)))
 end
 
 -- Start or stop choosing items for a tag

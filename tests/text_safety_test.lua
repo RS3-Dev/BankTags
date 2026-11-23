@@ -54,7 +54,8 @@ end
 suite.tests.import_load_save_and_share_are_sanitized = function()
     local code=Json.encode(malicious)
     local data=assert(Data.Decode(code)); safe(data)
-    assert(data.order[1]=='safe name' and data.tags['safe name'].rows[1].text=='Heading')
+    local id=data.order[1]
+    assert(Rules.isUUID(id) and data.tags[id].name=='safe name' and data.tags[id].rows[1].text=='Heading')
     local store=Store.new()
     assert(store:ImportText(code)); safe(store.data)
     for _,value in pairs(savedValues) do safe(value) end
@@ -68,8 +69,10 @@ suite.tests.old_poisoned_storage_is_safe_before_first_display = function()
     assert(chunks.Write({manifestKey=Config.TAGS_TEXT_MANIFEST_KEY,
         chunkPrefix=Config.TAGS_TEXT_CHUNK_PREFIX},Json.encode(malicious)))
     local loaded=Store.new(); assert(loaded.loadError==nil); safe(loaded.data)
+    local id=loaded.data.order[1]
+    assert(Rules.isUUID(id) and loaded:GetTagName(id)=='safe name')
     local page=require('resources/tags/tag_page')
-    local rows=page.Rows(loaded.data.tags['safe name']); safe(rows)
+    local rows=page.Rows(loaded.data.tags[id]); safe(rows)
     assert(rows[1].label=='Heading')
     assert(loaded:Save())
     local current=assert(chunks.Read({manifestKey=Config.TAGS_TEXT_MANIFEST_KEY,
@@ -78,9 +81,10 @@ end
 
 suite.tests.manual_names_and_labels_are_clean_before_storage = function()
     local store=Store.new()
-    local ok,name=store:CreateTag('Food<img=-1>'); assert(ok and name=='food')
-    assert(store:CreateFolder('Gear<sprite=-1>',name))
-    assert(store:InsertLabel(name,0,'Supplies<img=-1>',10))
+    local ok,id=store:CreateTag('Food<img=-1>')
+    assert(ok and Rules.isUUID(id) and store:GetTagName(id)=='food')
+    assert(store:CreateFolder('Gear<sprite=-1>',id))
+    assert(store:InsertLabel(id,0,'Supplies<img=-1>',10))
     safe(store.data)
     for _,value in pairs(savedValues) do safe(value) end
 end
@@ -90,7 +94,8 @@ suite.tests.encoding_sanitizes_strings_without_crossing_json_fields = function()
         ['start<']={rows={},unsorted={}},['>end']={rows={},unsorted={}}}}
     local code=Data.Encode(data); safe(code)
     local decoded=assert(Data.Decode(code))
-    assert(#decoded.order==2 and decoded.tags.start and decoded.tags['end'])
+    assert(#decoded.order==2)
+    assert(decoded.tags[decoded.order[1]].name=='start' and decoded.tags[decoded.order[2]].name=='end')
 end
 
 suite.tests.field_cleaning_does_not_recurse_or_strip_safe_text = function()

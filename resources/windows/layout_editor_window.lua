@@ -165,7 +165,7 @@ function LayoutEditorWindow:RefreshTags()
     local entries = {}
     for _, node in ipairs(self.store:TagTree()) do
         for _, tag in ipairs(node.kind == "tag" and { node.tag } or node.tags) do
-            entries[#entries + 1] = { id = tag, label = Text.titleCase(Text.plain(tag)),
+            entries[#entries + 1] = { id = tag, label = Text.titleCase(Text.plain(self.store:GetTagName(tag))),
                 objectID = self.store:GetTagSprite(tag) }
         end
     end

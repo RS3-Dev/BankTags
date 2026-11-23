@@ -234,7 +234,7 @@ function Windows:OpenTagDeleteConfirm(tag)
     self.tagDeleteConfirm = ConfirmWindow.new(parent, {
         title = "Delete Bank Tag",
         messageLines = {
-            "You are about to delete " .. tostring(tag) .. ".",
+            "You are about to delete " .. tostring(app.store:GetTagName(tag)) .. ".",
             "Do you want to continue?",
         },
         confirmLabel = "Delete",
@@ -292,7 +292,7 @@ function Windows:OpenTagSettings(tag, isNew, onSaved)
     local editor
     editor = TagSettingsEditor.new(parent, {
         title = isNew and "Create Bank Tag" or "Rename Bank Tag",
-        tag = tag,
+        tag = isNew and tag or app.store:GetTagName(tag),
         spriteObjectID = not isNew and app.store:GetTagSprite(tag) or nil,
         -- Open a picker only for this settings editor
         onChooseSprite = function()
